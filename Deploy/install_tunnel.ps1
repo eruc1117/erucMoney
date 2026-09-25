@@ -56,9 +56,28 @@ Write-Host "[5/6] DNS：$Hostname → 隧道"
 cloudflared tunnel route dns $TunnelName $Hostname 2>&1 | ForEach-Object { Write-Host "  $_" }
 
 Write-Host '[6/6] 裝成 Windows 服務'
+# 服務以 SYSTEM 執行，讀的是 C:\Windows\System32\config\systemprofile\.cloudflared\，不是使用者目錄：
+# 把 config.yml（credentials-file 改指系統目錄）、<id>.json、cert.pem 都複製過去，否則服務會空轉、外面回 502。
+$SysDir = 'C:\Windows\System32\config\systemprofile\.cloudflared'
+New-Item -ItemType Directory -Force $SysDir | Out-Null
+$sysCfg = $cfg.Replace($Cred.Replace('\', '/'), "C:/Windows/System32/config/systemprofile/.cloudflared/$TunnelId.json")
+[IO.File]::WriteAllText((Join-Path $SysDir 'config.yml'), $sysCfg, (New-Object System.Text.UTF8Encoding $false))
+Copy-Item $Cred (Join-Path $SysDir "$TunnelId.json") -Force
+Copy-Item (Join-Path $CfDir 'cert.pem') (Join-Path $SysDir 'cert.pem') -Force
 $svc = Get-Service cloudflared -ErrorAction SilentlyContinue
-if ($svc) { Write-Host '  服務已存在，重新啟動'; Restart-Service cloudflared }
-else { cloudflared service install; Start-Service cloudflared }
+if (-not $svc) { cloudflared service install }
+# 實測：service install 不會把 --config 記進服務指令列，服務啟動後沒有隧道可跑、立刻結束、外面回 502／530。
+# 直接把服務指令列設成「--config <使用者 config> --logfile <日誌> tunnel run」，並設失敗自動重啟。
+$exe = (Get-Command cloudflared).Source
+$logf = Join-Path (Split-Path -Parent $Here) 'Server\logs\cloudflared.log'
+New-Item -ItemType Directory -Force (Split-Path -Parent $logf) | Out-Null
+$bin = '"' + $exe + '" --config "' + (Join-Path $CfDir 'config.yml') + '" --logfile "' + $logf + '" tunnel run'
+Stop-Process -Name cloudflared -Force -ErrorAction SilentlyContinue
+# sc.exe config binPath= 會把引號吃掉只剩 exe；直接寫登錄的 ImagePath 最可靠
+Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\cloudflared' -Name ImagePath -Value $bin
+Set-Service cloudflared -StartupType Automatic
+sc.exe failure cloudflared reset= 60 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+sc.exe start cloudflared | Out-Null
 Start-Sleep -Seconds 5
 Write-Host ("服務狀態：" + (Get-Service cloudflared).Status)
 Write-Host "測試：curl https://$Hostname/health   （Node :3001 要先啟動）"

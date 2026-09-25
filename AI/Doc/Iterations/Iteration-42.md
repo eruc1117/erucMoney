@@ -58,8 +58,11 @@ GitHub repo 改為 `https://github.com/eruc1117/erucMoney.git`（原 `eruc1117/m
 - `Deploy/*.ps1` 是 UTF-8 無 BOM，Windows PowerShell 5.1 當 ANSI 讀，中文字串把引號吃掉 → parse error。存成 UTF-8 BOM。
 - `cloudflared-config.yml` 的中文註解經 PowerShell 讀寫變成亂碼加 BOM，cloudflared 回 `control characters are not allowed`。
   範本改成純 ASCII，腳本改用 `[IO.File]::WriteAllText` 不帶 BOM 寫檔。
-- `cloudflared service install` 需要系統管理員，UAC 提示被取消；先用 `cloudflared tunnel run money` 前景跑通全鏈路。
-  服務安裝要在系統管理員 PowerShell 跑：`cloudflared --config "$env:USERPROFILE\.cloudflared\config.yml" service install; Start-Service cloudflared`。
+- `cloudflared service install` 需要系統管理員（UAC 提示）。裝好後服務的指令列**沒有帶 `--config`**（事件檢視器：
+  `service arguments: [cloudflared.exe]`），以 SYSTEM 啟動後找不到隧道設定就結束，外面回 502／530；第一次還卡在 StopPending 要強制結束程序。
+  `sc.exe config binPath=` 又會把引號吃掉只剩 exe。最後可行的做法：直接寫登錄
+  `HKLM:\SYSTEM\CurrentControlSet\Services\cloudflared\ImagePath` = `"cloudflared.exe" --config "<使用者>\.cloudflared\config.yml" --logfile "Server\logs\cloudflared.log" tunnel run`，
+  再 `sc start`。服務 Running、`https://api.erucmoney.com/health` 200，日誌在 `Server/logs/cloudflared.log`。`install_tunnel.ps1` 已改成這個做法。
 
 ### 還可以調整的
 
