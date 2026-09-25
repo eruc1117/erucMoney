@@ -3,7 +3,7 @@
 # 觸發：push 到 master／main 且 Screen/ 有變動，或手動 workflow_dispatch。
 # 產物：Screen/dist（含 public/CNAME = erucmoney.com，GitHub Pages 會據此設定自訂網域）。
 #
-# 第一次要在 repo Settings → Pages → Source 選「GitHub Actions」；
+# 第一次要在 repo Settings → Pages → Source 選「GitHub Actions」，否則 deploy-pages 會失敗（build 會過）；
 # 自訂網域的 DNS 在 Cloudflare 設（見 Deploy/README.md）。
 name: Deploy frontend to GitHub Pages
 

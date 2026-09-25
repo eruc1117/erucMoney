@@ -1,4 +1,4 @@
-# 把 Node.js API（Server/ :3001）註冊成 Windows 工作排程器的常駐工作（與 MoneyScheduler 同一種做法）
+﻿# 把 Node.js API（Server/ :3001）註冊成 Windows 工作排程器的常駐工作（與 MoneyScheduler 同一種做法）
 #
 #   powershell -ExecutionPolicy Bypass -File Deploy\install_api_task.ps1
 # 移除：Unregister-ScheduledTask MoneyApi -Confirm:$false

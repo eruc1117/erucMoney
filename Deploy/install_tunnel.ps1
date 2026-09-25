@@ -1,4 +1,4 @@
-# 把 api.erucmoney.com 用 Cloudflare Tunnel 接到本機 Node.js :3001，並裝成 Windows 服務（階段 3）
+﻿# 把 api.erucmoney.com 用 Cloudflare Tunnel 接到本機 Node.js :3001，並裝成 Windows 服務（階段 3）
 #
 # 前提：erucmoney.com 的 DNS 已經在 Cloudflare（網域在 Cloudflare 買的就是）。
 # 需要系統管理員 PowerShell（cloudflared service install 要寫服務）。
