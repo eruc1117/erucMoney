@@ -34,3 +34,22 @@ export function onAuthChange(fn) {
   listeners.add(fn)
   return () => listeners.delete(fn)
 }
+
+/**
+ * 單一登入交接：行事曆平台開啟本站時把它的 JWT 放在網址片段（#token=…；片段不會送到伺服器）。
+ * 這裡取出來、清掉網址、先存成 session；App 隨後用 /auth/me 驗證，失敗就登出。
+ * 回傳 true 表示有取到 token。
+ */
+export function takeTokenFromHash() {
+  try {
+    const m = /(?:^#|[#&])token=([^&]+)/.exec(window.location.hash || '')
+    if (!m) return false
+    const token = decodeURIComponent(m[1])
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+    safeSet(TOKEN_KEY, token)
+    safeSet(USER_KEY, JSON.stringify({ username: '…', role: 'user', pending: true }))
+    return true
+  } catch {
+    return false
+  }
+}

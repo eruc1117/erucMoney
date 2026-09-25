@@ -23,10 +23,42 @@ const loginLimiter = rateLimit({ windowMs: 60 * 1000, limit: 10, standardHeaders
 
 const PUBLIC = 'id, username, role, display_name, is_active, created_at, last_login_at'
 
+// SSO：AUTH_API_URL 有設時，先拿帳密去行事曆平台（meeting_API_Server）登入；成功就回它簽的 token
+// （本系統用同一把密鑰驗證，requireAuth 會自動建立對應使用者）。行事曆說帳號不存在／密碼錯，才退回本地帳號（admin）。
+async function loginViaCalendar(account, password) {
+  const base = (process.env.AUTH_API_URL || '').replace(/\/+$/, '')
+  if (!base) return null
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 10000)
+  try {
+    const r = await fetch(`${base}/api/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account, password }), signal: ctrl.signal,
+    })
+    const body = await r.json().catch(() => ({}))
+    if (!r.ok || !body?.data?.token) return { ok: false, status: r.status }
+    return { ok: true, token: body.data.token, user: body.data.user }
+  } catch (e) {
+    console.warn('[auth] 行事曆登入服務連不到，改用本地帳號：', e.message)
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body ?? {}
   if (!username || !password) return res.status(400).json({ detail: '請輸入帳號與密碼' })
   try {
+    const cal = await loginViaCalendar(String(username).trim(), String(password))
+    if (cal && cal.ok) {
+      const { resolveExternalUser } = require('../lib/auth')
+      const u = await resolveExternalUser(Number(cal.user.id), cal.user.username)
+      if (!u) return res.status(401).json({ detail: '帳號已停用' })
+      await db.query('UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = $1', [u.id])
+      return res.json({ token: cal.token, sso: 'calendar',
+                        user: { id: u.id, username: u.name, role: u.role, display_name: cal.user.username, external: true } })
+    }
     const { rows } = await db.query('SELECT * FROM users WHERE username = $1', [String(username).trim()])
     const u = rows[0]
     const ok = u && u.is_active && u.password_hash && await bcrypt.compare(String(password), u.password_hash)

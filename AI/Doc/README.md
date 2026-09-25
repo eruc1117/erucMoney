@@ -59,6 +59,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-43.md](./Iterations/Iteration-43.md) | 併入行事曆平台（Node.js 版 meeting_front_end／meeting_API_Server）：股票分頁、`/api/stock/*` 唯讀代理、**單一登入**（共用 JWT 密鑰、`users.external_id` 自動對應、登入先問行事曆、`#token=` 交接） |
 | [Iteration-42.md](./Iterations/Iteration-42.md) | 部署準備 erucmoney.com：GitHub Pages 工作流程與 CNAME、前端依網域選 API、Server dotenv／helmet／rate-limit／CORS 白名單、Cloudflare Tunnel 與 Node API 常駐腳本、`Deploy/README.md` 八步驟清單 |
 | [Iteration-41.md](./Iterations/Iteration-41.md) | 多使用者階段 1：`users` 表 + JWT 登入 + 持股／交易／台帳按 `user_id` 隔離；所有 API 要登入、管理端點要 admin；前端登入頁與帳號管理頁；本機驗證通過 |
 | [Iteration-40.md](./Iterations/Iteration-40.md) | 新聞 + 股價 → 走勢：28 個論文模型（Ding CNN、HAN、StockNet、Transformer、FinBERT 路線、AZFinText、樹融合、消融）× 4 標籤（y1/y3/y5/波動）季度走查；**隔日方向 AUC 全部 0.50～0.53、純價格 0.524、新聞內容單獨 0.50**；波動 AUC 0.65 來自價格叢聚。結果 `NewsModels*.md`，程式 `NewsModels/` |

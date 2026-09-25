@@ -1,7 +1,11 @@
 import { useState, useEffect } from 'react'
 import Login          from './pages/Login'
 import Account        from './pages/Account'
-import { getUser, onAuthChange } from './services/auth'
+import { getUser, onAuthChange, takeTokenFromHash, setSession, clearSession, getToken } from './services/auth'
+import { getMe } from './services/api'
+
+// 行事曆平台交接過來的 token（#token=…）：先收下，再向後端確認身分
+const HANDOFF = takeTokenFromHash()
 import Sidebar        from './components/Sidebar'
 import Topbar         from './components/Topbar'
 import Overview       from './pages/Overview'
@@ -46,6 +50,14 @@ export default function App() {
 
   // 登入／登出（含 401 自動登出）都經 auth.js 廣播；沒登入就只顯示登入頁
   useEffect(() => onAuthChange(setUser), [])
+  // 單一登入交接：用交接來的 token 問 /auth/me，成功就把真正的使用者資料存起來
+  useEffect(() => {
+    if (!HANDOFF) return
+    getMe().then(({ data, error }) => {
+      if (error || !data) { clearSession(); return }
+      setSession(getToken(), { id: data.id, username: data.username, role: data.role, display_name: data.display_name })
+    })
+  }, [])
   if (!user) return <Login />
 
   // 從其他頁面跳轉到個股分析
