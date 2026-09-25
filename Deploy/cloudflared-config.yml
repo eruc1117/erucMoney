@@ -1,0 +1,13 @@
+# Cloudflare Tunnel 設定（install_tunnel.ps1 會把 <TUNNEL_ID> 換掉並複製到 %USERPROFILE%\.cloudflared\config.yml）
+#
+# 只開 Node.js 的 3001。FastAPI :8000、LSTM :8001、PostgreSQL :5432 不在 ingress 裡，外面碰不到。
+tunnel: <TUNNEL_ID>
+credentials-file: <CREDENTIALS_FILE>
+
+ingress:
+  - hostname: api.erucmoney.com
+    service: http://localhost:3001
+    originRequest:
+      connectTimeout: 30s
+      noTLSVerify: true
+  - service: http_status:404

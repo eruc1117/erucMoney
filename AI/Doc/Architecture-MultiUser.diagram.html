@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>多使用者與前後端分離架構</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #F3F5F7; --surface: #FFFFFF; --surface-2: #E9EDF1;
+    --ink: #17212B; --ink-2: #4F5D6B; --ink-3: #7B8794; --rule: #CBD3DB;
+    --pub: #B7791F; --pub-soft: #FBF1DC;
+    --edge: #7C3AED; --edge-soft: #EEE6FB;
+    --api: #2F7D4F; --api-soft: #E3F1E7;
+    --db: #1B5E8F; --db-soft: #E0EAF4;
+    --user: #B7352B; --user-soft: #F8E4E1;
+    --new: #0E6E5E; --new-soft: #DCEFEA;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0F161D; --surface: #17212B; --surface-2: #1F2B37;
+      --ink: #E3E9EF; --ink-2: #A3B0BC; --ink-3: #74828F; --rule: #2E3B48;
+      --pub: #E0A94A; --pub-soft: #2E2616; --edge: #B693F5; --edge-soft: #241B38;
+      --api: #5FC08A; --api-soft: #15291D; --db: #6FA8E8; --db-soft: #16273A;
+      --user: #EF7F73; --user-soft: #2F1B18; --new: #59C2AC; --new-soft: #14302B;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0F161D; --surface: #17212B; --surface-2: #1F2B37;
+    --ink: #E3E9EF; --ink-2: #A3B0BC; --ink-3: #74828F; --rule: #2E3B48;
+    --pub: #E0A94A; --pub-soft: #2E2616; --edge: #B693F5; --edge-soft: #241B38;
+    --api: #5FC08A; --api-soft: #15291D; --db: #6FA8E8; --db-soft: #16273A;
+    --user: #EF7F73; --user-soft: #2F1B18; --new: #59C2AC; --new-soft: #14302B;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.7; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--db); margin: 0 0 10px; }
+  h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.25; margin: 0 0 10px; text-wrap: balance; font-weight: 700; }
+  .lede { color: var(--ink-2); max-width: 70ch; margin: 0 0 28px; }
+  h2 { font-size: 20px; margin: 44px 0 8px; }
+  p { max-width: 72ch; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--surface-2); border-radius: 3px; padding: 1px 5px; }
+  figure { margin: 0; border: 1px solid var(--rule); background: var(--surface); }
+  .fig-body { overflow-x: auto; padding: 14px 12px 4px; }
+  figure svg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+  figure svg text { font-size: 12px; fill: var(--ink); }
+  figure svg text.m { font-family: var(--mono); font-size: 11px; }
+  figure svg text.lbl { font-size: 11px; fill: var(--ink-2); }
+  figure svg text.h { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; fill: var(--ink-3); }
+  figure svg .node { stroke-width: 1.4; }
+  figure svg .zone { fill: none; stroke: var(--rule); stroke-dasharray: 6 4; stroke-width: 1.2; }
+  figure svg .edge { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  figure svg .edge.new { stroke: var(--new); }
+  figure svg .edge.https { stroke: var(--edge); stroke-width: 2; }
+  figcaption { border-top: 1px solid var(--rule); background: var(--surface-2); padding: 10px 16px; font-size: 13px; color: var(--ink-2); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1.4px solid; }
+  .tscroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .note { border-left: 3px solid var(--user); background: var(--user-soft); padding: 12px 16px; margin: 18px 0 0; max-width: 72ch; font-size: 14px; }
+  .note.ok { border-left-color: var(--new); background: var(--new-soft); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+  @media (max-width: 680px) { .wrap { padding-block: 28px 48px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Target Architecture · 2026-09-25 · 提案</p>
+  <h1>多使用者與前後端分離架構</h1>
+  <p class="lede">兩個改動：持股／交易台帳按使用者隔離；前端獨立成靜態網站放 GitHub Pages（免費），
+  透過 RESTful API 連回家裡的後端。後端不搬家——PostgreSQL、排程器、模型全部留在本機，只把 Node.js 的 3001 埠
+  用免費隧道對外開一個 HTTPS 入口。綠色是要新增的部分。</p>
+
+  <!-- ══════════ 圖一：目標架構 ══════════ -->
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 1180 640" role="img" aria-label="目標架構：瀏覽器從 GitHub Pages 載入靜態前端，經 Cloudflare Tunnel 的 HTTPS 入口呼叫本機 Node.js API，Node.js 驗證 JWT 後依 user_id 讀寫 PostgreSQL，並代理內部的 FastAPI 與 LSTM 服務">
+        <defs>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker>
+          <marker id="arh" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="var(--edge)"></path></marker>
+          <marker id="arn" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="var(--new)"></path></marker>
+        </defs>
+
+        <!-- 區域 -->
+        <rect class="zone" x="14" y="36" width="380" height="250" rx="6"></rect>
+        <text class="h" x="24" y="56">網際網路（任何裝置）</text>
+        <rect class="zone" x="424" y="36" width="230" height="250" rx="6"></rect>
+        <text class="h" x="434" y="56">Cloudflare（免費）</text>
+        <rect class="zone" x="14" y="316" width="1150" height="310" rx="6"></rect>
+        <text class="h" x="24" y="336">本機 Windows PC（現有，不對外開任何埠）</text>
+
+        <!-- 瀏覽器 -->
+        <g fill="var(--user-soft)" stroke="var(--user)">
+          <rect class="node" x="30" y="80" width="150" height="60" rx="4"></rect>
+        </g>
+        <text x="105" y="104" text-anchor="middle" font-weight="700">瀏覽器</text>
+        <text class="lbl" x="105" y="122" text-anchor="middle">手機／筆電，登入後持 JWT</text>
+
+        <!-- GitHub Pages -->
+        <g fill="var(--pub-soft)" stroke="var(--pub)">
+          <rect class="node" x="30" y="170" width="350" height="100" rx="4"></rect>
+        </g>
+        <text x="205" y="192" text-anchor="middle" font-weight="700">GitHub Pages（靜態，免費）</text>
+        <text class="lbl" x="44" y="212">https://&lt;user&gt;.github.io/money/</text>
+        <text class="lbl" x="44" y="230">React + Vite 建置產物；HashRouter；`base: '/money/'`</text>
+        <text class="lbl" x="44" y="248">API 位址在「設定」頁填、存 localStorage（不寫死在建置裡）</text>
+        <text class="lbl" x="44" y="264">GitHub Actions：push 到 main 自動 build → gh-pages</text>
+
+        <!-- Cloudflare -->
+        <g fill="var(--edge-soft)" stroke="var(--edge)">
+          <rect class="node" x="440" y="80" width="200" height="120" rx="4"></rect>
+        </g>
+        <text x="540" y="102" text-anchor="middle" font-weight="700">Cloudflare Tunnel</text>
+        <text class="lbl" x="452" y="122">https://api.&lt;你的網域&gt;</text>
+        <text class="lbl" x="452" y="140">TLS 終結、DDoS 擋、免固定 IP</text>
+        <text class="lbl" x="452" y="158">可加 Cloudflare Access：</text>
+        <text class="lbl" x="452" y="176">Email OTP 才能碰到 API</text>
+        <text class="lbl" x="440" y="232">替代：ngrok 免費靜態網域、</text>
+        <text class="lbl" x="440" y="250">Tailscale Funnel（只給自己人）</text>
+
+        <!-- cloudflared -->
+        <g fill="var(--edge-soft)" stroke="var(--edge)">
+          <rect class="node" x="440" y="360" width="200" height="60" rx="4"></rect>
+        </g>
+        <text class="m" x="540" y="384" text-anchor="middle">cloudflared（常駐服務）</text>
+        <text class="lbl" x="540" y="402" text-anchor="middle">對外連線 → 轉到 localhost:3001</text>
+
+        <!-- Node -->
+        <g fill="var(--api-soft)" stroke="var(--api)">
+          <rect class="node" x="680" y="350" width="240" height="180" rx="4"></rect>
+        </g>
+        <text x="800" y="372" text-anchor="middle" font-weight="700">Node.js / Express :3001</text>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="692" y="382" width="216" height="22" rx="3"></rect>
+          <rect class="node" x="692" y="408" width="216" height="22" rx="3"></rect>
+        </g>
+        <text class="m" x="700" y="397">auth：/auth/login → JWT，Bearer 驗證</text>
+        <text class="m" x="700" y="423">cors 白名單：github.io 網域 + localhost</text>
+        <text class="lbl" x="700" y="446">/holdings /cash /news 加 WHERE user_id = 我</text>
+        <text class="lbl" x="700" y="464">/stocks /predictions /voting … 共用，只需登入</text>
+        <text class="lbl" x="700" y="482">/crawler /models 管理端點：admin 角色</text>
+        <text class="lbl" x="700" y="500">rate-limit（/auth 5 次/分）、helmet</text>
+        <text class="lbl" x="700" y="518">migrate.js 啟動自動跑 017</text>
+
+        <!-- PostgreSQL -->
+        <g fill="var(--db-soft)" stroke="var(--db)">
+          <rect class="node" x="950" y="350" width="200" height="180" rx="4"></rect>
+        </g>
+        <text x="1050" y="372" text-anchor="middle" font-weight="700">PostgreSQL :5432</text>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="962" y="382" width="176" height="22" rx="3"></rect>
+        </g>
+        <text class="m" x="970" y="397">users（id, name, hash, role）</text>
+        <text class="lbl" x="962" y="424">每人一份：user_holdings、user_trades</text>
+        <text class="lbl" x="962" y="442">user_news（手動貼）加 user_id</text>
+        <text class="lbl" x="962" y="466">共用：stock_*、us_*、futures、</text>
+        <text class="lbl" x="962" y="484">news_*、model_*、voting_results、</text>
+        <text class="lbl" x="962" y="502">weekly_forecasts、saved_predictions</text>
+
+        <!-- 內部服務 -->
+        <g fill="var(--api-soft)" stroke="var(--api)">
+          <rect class="node" x="30" y="360" width="180" height="60" rx="4"></rect>
+          <rect class="node" x="30" y="440" width="180" height="60" rx="4"></rect>
+          <rect class="node" x="30" y="520" width="180" height="60" rx="4"></rect>
+          <rect class="node" x="240" y="360" width="170" height="60" rx="4"></rect>
+        </g>
+        <text class="m" x="120" y="384" text-anchor="middle">FastAPI :8000</text>
+        <text class="lbl" x="120" y="402" text-anchor="middle">爬蟲、投票、模型目錄</text>
+        <text class="m" x="120" y="464" text-anchor="middle">LSTM serve.py :8001</text>
+        <text class="lbl" x="120" y="482" text-anchor="middle">趨勢推論</text>
+        <text class="m" x="120" y="544" text-anchor="middle">scheduler.py</text>
+        <text class="lbl" x="120" y="562" text-anchor="middle">排程、回填、週預測</text>
+        <text class="m" x="325" y="384" text-anchor="middle">Vite dev :5173（可留）</text>
+        <text class="lbl" x="325" y="402" text-anchor="middle">本機開發用，API 指 localhost</text>
+
+        <!-- 邊 -->
+        <path class="edge" d="M105,140 L105,170" marker-end="url(#ar)"></path>
+        <text class="lbl" x="112" y="160">載入靜態頁</text>
+        <path class="edge https" d="M180,110 L440,110" marker-end="url(#arh)"></path>
+        <text class="lbl" x="310" y="100" text-anchor="middle">HTTPS · fetch + Authorization: Bearer</text>
+        <path class="edge https" d="M540,200 L540,360" marker-end="url(#arh)"></path>
+        <text class="lbl" x="548" y="284">隧道（出站連線，</text>
+        <text class="lbl" x="548" y="300">防火牆不用開埠）</text>
+        <path class="edge" d="M640,390 L680,390" marker-end="url(#ar)"></path>
+        <path class="edge" d="M920,440 L950,440" marker-end="url(#ar)"></path>
+        <text class="lbl" x="935" y="432" text-anchor="middle">pg</text>
+        <path class="edge" d="M680,470 C 500,470 300,470 210,390" marker-end="url(#ar)"></path>
+        <text class="lbl" x="420" y="462" text-anchor="middle">proxy /crawler /voting /catalog /models /data</text>
+        <path class="edge" d="M680,490 C 500,490 300,490 210,470" marker-end="url(#ar)"></path>
+        <text class="lbl" x="420" y="510" text-anchor="middle">proxy /model/lstm</text>
+        <path class="edge" d="M210,550 C 600,550 900,560 990,530" marker-end="url(#ar)"></path>
+        <text class="lbl" x="640" y="572" text-anchor="middle">排程寫入共用表（不經 API）</text>
+        <path class="edge" d="M325,360 C 325,320 700,330 800,350" marker-end="url(#ar)"></path>
+      </svg>
+    </div>
+    <figcaption>圖一：前端變成純靜態檔，後端與資料都留在本機；對外只有一條 HTTPS 隧道到 3001。
+    FastAPI、LSTM、PostgreSQL 仍只在 localhost，外面碰不到。</figcaption>
+  </figure>
+  <div class="legend">
+    <span><i style="background:var(--user-soft);border-color:var(--user)"></i>使用者端</span>
+    <span><i style="background:var(--pub-soft);border-color:var(--pub)"></i>公開靜態</span>
+    <span><i style="background:var(--edge-soft);border-color:var(--edge)"></i>隧道／邊緣</span>
+    <span><i style="background:var(--api-soft);border-color:var(--api)"></i>本機服務</span>
+    <span><i style="background:var(--db-soft);border-color:var(--db)"></i>資料庫</span>
+    <span><i style="background:var(--new-soft);border-color:var(--new)"></i>新增</span>
+  </div>
+
+  <div class="note">
+    <strong>為什麼一定要隧道。</strong>GitHub Pages 是 HTTPS，瀏覽器不准 HTTPS 頁面呼叫 http://家裡IP:3001（mixed content）。
+    Cloudflare Tunnel 免費提供 HTTPS 憑證、不需固定 IP、不用在路由器開埠；家裡的 PC 只做出站連線。
+    沒有自己網域時用 <code>cloudflared tunnel --url localhost:3001</code> 的快速隧道（網址隨機、每次重啟會變）或 ngrok 免費靜態網域。
+  </div>
+
+  <!-- ══════════ 圖二：一次請求 ══════════ -->
+  <h2>一次「看我的持股」請求怎麼走</h2>
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 1180 300" role="img" aria-label="請求序列：登入取得 JWT，之後每次請求帶 Bearer，Node.js 驗證後以 user_id 過濾持股，回傳 JSON">
+        <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker></defs>
+        <g fill="var(--surface-2)" stroke="var(--ink-3)">
+          <rect class="node" x="20" y="30" width="200" height="34" rx="4"></rect>
+          <rect class="node" x="330" y="30" width="200" height="34" rx="4"></rect>
+          <rect class="node" x="640" y="30" width="200" height="34" rx="4"></rect>
+          <rect class="node" x="950" y="30" width="200" height="34" rx="4"></rect>
+        </g>
+        <text x="120" y="52" text-anchor="middle" font-weight="700">瀏覽器（GitHub Pages）</text>
+        <text x="430" y="52" text-anchor="middle" font-weight="700">Cloudflare 邊緣</text>
+        <text x="740" y="52" text-anchor="middle" font-weight="700">Express :3001</text>
+        <text x="1050" y="52" text-anchor="middle" font-weight="700">PostgreSQL</text>
+        <g stroke="var(--rule)" stroke-dasharray="4 4">
+          <line x1="120" y1="64" x2="120" y2="290"></line><line x1="430" y1="64" x2="430" y2="290"></line>
+          <line x1="740" y1="64" x2="740" y2="290"></line><line x1="1050" y1="64" x2="1050" y2="290"></line>
+        </g>
+        <path class="edge" d="M120,95 L740,95" marker-end="url(#ar2)"></path>
+        <text class="m" x="430" y="88" text-anchor="middle">POST /auth/login {name, password}</text>
+        <path class="edge" d="M740,115 L1050,115" marker-end="url(#ar2)"></path>
+        <text class="lbl" x="895" y="108" text-anchor="middle">SELECT users WHERE name；bcrypt 比對</text>
+        <path class="edge" d="M740,140 L120,140" marker-end="url(#ar2)"></path>
+        <text class="m" x="430" y="133" text-anchor="middle">200 {token: JWT(sub=user_id, role, exp 7d)}</text>
+        <text class="lbl" x="130" y="165">存 localStorage；之後每次 fetch 帶 header</text>
+        <path class="edge" d="M120,195 L740,195" marker-end="url(#ar2)"></path>
+        <text class="m" x="430" y="188" text-anchor="middle">GET /holdings   Authorization: Bearer &lt;JWT&gt;</text>
+        <text class="lbl" x="750" y="215">auth 中介層：驗簽、過期 → req.user = {id, role}</text>
+        <path class="edge" d="M740,240 L1050,240" marker-end="url(#ar2)"></path>
+        <text class="m" x="895" y="233" text-anchor="middle">SELECT … FROM user_holdings WHERE user_id = $1</text>
+        <path class="edge" d="M740,270 L120,270" marker-end="url(#ar2)"></path>
+        <text class="m" x="430" y="263" text-anchor="middle">200 [{stock_id, shares, avg_cost, …}]   （401 → 前端跳回登入頁）</text>
+      </svg>
+    </div>
+    <figcaption>圖二：隔離發生在 SQL 的 WHERE，不在前端。前端只是拿著 token 呼叫同一組 API；換一個人登入就看到另一份持股。</figcaption>
+  </figure>
+
+  <!-- ══════════ 資料隔離 ══════════ -->
+  <h2>哪些資料要分人、哪些共用</h2>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>資料</th><th>現況</th><th>目標</th><th>改法</th></tr></thead>
+      <tbody>
+        <tr><td><code>user_holdings</code></td><td>全站一份，<code>UNIQUE(stock_id)</code></td><td>每人一份</td><td>加 <code>user_id</code>，唯一鍵改 <code>(user_id, stock_id)</code>；既有列歸第一個 admin</td></tr>
+        <tr><td><code>user_trades</code></td><td>全站一份；回放推導持倉</td><td>每人一份</td><td>加 <code>user_id</code>；回放（<code>ledger_audit</code>、<code>/holdings/review</code>）按人跑</td></tr>
+        <tr><td><code>/cash</code> 閒置資金配置</td><td>吃全站持股</td><td>按登入者</td><td>Node 把 <code>user_id</code> 的持股傳給 FastAPI <code>/cash</code>（FastAPI 不碰 users 表）</td></tr>
+        <tr><td><code>user_news</code> 手動貼新聞</td><td>混在爬蟲新聞裡</td><td>記錄是誰貼的</td><td>加可為空的 <code>user_id</code>；模型仍全部使用</td></tr>
+        <tr><td>查詢紀錄、主題、字級</td><td>localStorage</td><td>不變</td><td>跟著瀏覽器走即可</td></tr>
+        <tr><td>行情、新聞、模型、預測、投票、週預測</td><td>共用</td><td>共用，需登入</td><td>只加 auth 中介層</td></tr>
+        <tr><td>爬蟲觸發、模型凍結／服役、資料回補</td><td>任何人可按</td><td>admin 才能</td><td><code>requireRole('admin')</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══════════ 變更清單 ══════════ -->
+  <h2>要改的東西</h2>
+  <div class="grid2">
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>後端（Server/）</th><th>內容</th></tr></thead>
+        <tbody>
+          <tr><td><code>migrations/017_users.sql</code></td><td><code>users</code> 表；三張表加 <code>user_id</code>；種子 admin（密碼從環境變數）</td></tr>
+          <tr><td><code>routes/auth.js</code></td><td>login、me、change-password；admin 建帳號（不開放自助註冊）</td></tr>
+          <tr><td><code>lib/auth.js</code></td><td>JWT 簽發／驗證中介層、<code>requireRole</code></td></tr>
+          <tr><td><code>index.js</code></td><td>cors 白名單（環境變數 <code>ALLOWED_ORIGINS</code>）、helmet、rate-limit、所有路由掛 auth</td></tr>
+          <tr><td><code>routes/holdings.js</code>、<code>cash.js</code>、<code>news.js</code></td><td>每個 SQL 加 <code>user_id</code></td></tr>
+          <tr><td>新依賴</td><td><code>jsonwebtoken</code>、<code>bcryptjs</code>、<code>helmet</code>、<code>express-rate-limit</code>、<code>dotenv</code></td></tr>
+          <tr><td><code>Crawler/</code></td><td><code>ledger_audit</code>、<code>cash_allocator</code>、<code>weekly_plan</code> 接受 <code>user_id</code> 參數</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead><tr><th>前端（Screen/）與部署</th><th>內容</th></tr></thead>
+        <tbody>
+          <tr><td><code>vite.config.js</code></td><td><code>base: '/money/'</code>；路由改 HashRouter（Pages 沒有 SPA fallback）</td></tr>
+          <tr><td><code>services/api.js</code></td><td>API 位址讀 localStorage → 環境變數 → localhost；自動帶 Bearer；401 導向登入</td></tr>
+          <tr><td>新頁</td><td>登入頁、設定頁（填 API 位址、測連線）、admin 的使用者管理</td></tr>
+          <tr><td><code>.github/workflows/pages.yml</code></td><td>push main → <code>npm ci && npm run build</code> → 部署 <code>Screen/dist</code> 到 GitHub Pages</td></tr>
+          <tr><td>本機</td><td><code>cloudflared</code> 裝成 Windows 服務，跟 MoneyScheduler 一樣登入即啟動</td></tr>
+          <tr><td>repo</td><td>前端可留在同一個 repo（Pages 從 Actions 部署），不必拆 repo</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>順序</h2>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>階段</th><th>做什麼</th><th>做完的樣子</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>users 表 + auth + 持股／交易加 user_id（本機先跑）</td><td>localhost 上兩個帳號看到不同持股；舊資料歸 admin</td></tr>
+        <tr><td>2</td><td>前端登入頁、API 位址設定、Bearer、HashRouter、base 路徑</td><td>本機 <code>vite preview</code> 用 <code>/money/</code> 路徑能跑</td></tr>
+        <tr><td>3</td><td>GitHub Actions 部署 Pages</td><td>github.io 打得開，API 指 localhost 時在自己電腦上可用</td></tr>
+        <tr><td>4</td><td>cloudflared 隧道 + cors 白名單 + rate-limit</td><td>手機在外面登入看得到自己的持股</td></tr>
+        <tr><td>5</td><td>admin 端點加角色、Cloudflare Access（選配）</td><td>外人拿不到爬蟲與模型管理</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note ok">
+    <strong>安全底線。</strong>後端一旦對外，所有端點都要驗 token（包括現在沒有驗的 /stocks）；密碼用 bcrypt；JWT 密鑰放環境變數不進 git；
+    只開 3001，FastAPI 與 LSTM 不進隧道；帳號由 admin 建，不開自助註冊。這些都在階段 1、4 內，不是之後再補。
+  </div>
+</div>
+</body>
+</html>

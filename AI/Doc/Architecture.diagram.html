@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>台股預測系統架構</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #F3F5F7; --surface: #FFFFFF; --surface-2: #E9EDF1;
+    --ink: #17212B; --ink-2: #4F5D6B; --ink-3: #7B8794; --rule: #CBD3DB;
+    --src: #B7791F; --src-soft: #FBF1DC;
+    --crawl: #2F7D4F; --crawl-soft: #E3F1E7;
+    --db: #1B5E8F; --db-soft: #E0EAF4;
+    --model: #B7352B; --model-soft: #F8E4E1;
+    --svc: #0F7C8C; --svc-soft: #DDF1F4;
+    --ui: #8A6A12; --ui-soft: #F7EEDA;
+    --sched: #7C3AED; --sched-soft: #EEE6FB;
+    --new: #0E6E5E; --new-soft: #DCEFEA;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0F161D; --surface: #17212B; --surface-2: #1F2B37;
+      --ink: #E3E9EF; --ink-2: #A3B0BC; --ink-3: #74828F; --rule: #2E3B48;
+      --src: #E0A94A; --src-soft: #2E2616; --crawl: #5FC08A; --crawl-soft: #15291D;
+      --db: #6FA8E8; --db-soft: #16273A; --model: #EF7F73; --model-soft: #2F1B18;
+      --svc: #5FC4D3; --svc-soft: #12303A; --ui: #D8B45A; --ui-soft: #2E2716;
+      --sched: #B693F5; --sched-soft: #241B38; --new: #59C2AC; --new-soft: #14302B;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0F161D; --surface: #17212B; --surface-2: #1F2B37;
+    --ink: #E3E9EF; --ink-2: #A3B0BC; --ink-3: #74828F; --rule: #2E3B48;
+    --src: #E0A94A; --src-soft: #2E2616; --crawl: #5FC08A; --crawl-soft: #15291D;
+    --db: #6FA8E8; --db-soft: #16273A; --model: #EF7F73; --model-soft: #2F1B18;
+    --svc: #5FC4D3; --svc-soft: #12303A; --ui: #D8B45A; --ui-soft: #2E2716;
+    --sched: #B693F5; --sched-soft: #241B38; --new: #59C2AC; --new-soft: #14302B;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.7; }
+  .wrap { max-width: 1280px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--db); margin: 0 0 10px; }
+  h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.25; margin: 0 0 10px; text-wrap: balance; font-weight: 700; }
+  .lede { color: var(--ink-2); max-width: 72ch; margin: 0 0 28px; }
+  h2 { font-size: 20px; margin: 44px 0 8px; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--surface-2); border-radius: 3px; padding: 1px 5px; }
+  figure { margin: 0; border: 1px solid var(--rule); background: var(--surface); }
+  .fig-body { overflow-x: auto; padding: 14px 12px 4px; }
+  figure svg { display: block; width: 100%; height: auto; font-family: var(--sans); min-width: 900px; }
+  figure svg text { font-size: 12px; fill: var(--ink); }
+  figure svg text.m { font-family: var(--mono); font-size: 11px; }
+  figure svg text.lbl { font-size: 11px; fill: var(--ink-2); }
+  figure svg text.h { font-family: var(--mono); font-size: 11.5px; letter-spacing: .1em; fill: var(--ink-3); font-weight: 600; }
+  figure svg text.t { font-size: 13px; font-weight: 700; }
+  figure svg .node { stroke-width: 1.4; }
+  figure svg .layer { fill: none; stroke: var(--rule); stroke-width: 1.2; }
+  figure svg .plan { fill: none; stroke: var(--new); stroke-dasharray: 6 4; stroke-width: 1.4; }
+  figure svg .edge { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  figure svg .edge.sched { stroke: var(--sched); stroke-dasharray: 5 4; }
+  figure svg .edge.http { stroke: var(--svc); stroke-width: 1.8; }
+  figure svg .edge.new { stroke: var(--new); }
+  figcaption { border-top: 1px solid var(--rule); background: var(--surface-2); padding: 10px 16px; font-size: 13px; color: var(--ink-2); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1.4px solid; }
+  .legend s { text-decoration: none; display: inline-block; width: 26px; border-top: 2px dashed var(--sched); vertical-align: middle; margin-right: 6px; }
+  .tscroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.m { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  @media (max-width: 680px) { .wrap { padding-block: 28px 48px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">System Architecture · v2 · 2026-09-25 · Iteration 41</p>
+  <h1>台股預測系統架構</h1>
+  <p class="lede">由上而下：外部來源 → 採集與處理 → PostgreSQL → 模型與研究 → 服務層 → 前端；右欄是排程器，虛線指向它觸發的層。
+  相對 9/23 的版本，新增的是綠色：帳號與 JWT（所有 API 要登入）、持股按人隔離、月營收公布時點、研究股池、MOPS 規則分類、
+  NewsModels 多模型實驗。最下方虛線框是還沒做的階段 2～5（前端上 GitHub Pages、隧道對外）。</p>
+
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 1400 1180" role="img" aria-label="系統架構六層加排程器：外部來源、採集與處理、PostgreSQL、模型與研究、服務層（含 JWT 認證）、前端（含登入），以及尚未實作的 GitHub Pages 與隧道部署">
+        <defs>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path></marker>
+          <marker id="ars" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="var(--sched)"></path></marker>
+          <marker id="arh" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="var(--svc)"></path></marker>
+          <marker id="arn" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="var(--new)"></path></marker>
+        </defs>
+
+        <!-- ═══ ① 外部來源 ═══ -->
+        <rect class="layer" x="14" y="14" width="1100" height="120" rx="6"></rect>
+        <text class="h" x="24" y="34">① 外部資料來源</text>
+        <g fill="var(--src-soft)" stroke="var(--src)">
+          <rect class="node" x="24" y="44" width="200" height="78" rx="4"></rect>
+          <rect class="node" x="236" y="44" width="150" height="78" rx="4"></rect>
+          <rect class="node" x="398" y="44" width="220" height="78" rx="4"></rect>
+          <rect class="node" x="630" y="44" width="200" height="78" rx="4"></rect>
+          <rect class="node" x="842" y="44" width="150" height="78" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)"><rect class="node" x="1004" y="44" width="100" height="78" rx="4"></rect></g>
+        <text class="t" x="34" y="63">FinMind API</text>
+        <text class="lbl" x="34" y="81">台股行情、籌碼、外資持股、基本資訊</text>
+        <text class="lbl" x="34" y="97">除權息、減資、月營收（2013 起）</text>
+        <text class="lbl" x="34" y="113">台指期、美股 12 檔</text>
+        <text class="t" x="246" y="63">yfinance</text>
+        <text class="lbl" x="246" y="81">KOSPI、Nikkei</text>
+        <text class="lbl" x="246" y="97">美股追蹤股 23 檔</text>
+        <text class="t" x="408" y="63">鉅亨網 JSON API</text>
+        <text class="lbl" x="408" y="81">tw_stock／us_stock／headline（12 萬則）</text>
+        <text class="lbl" x="408" y="97">tw_revenue 營收速報（2024-04 起）</text>
+        <text class="lbl" x="408" y="113">內文、個股標記隨 API 附帶</text>
+        <text class="t" x="640" y="63">公開 RSS</text>
+        <text class="lbl" x="640" y="81">中央社、經濟日報、自由財經</text>
+        <text class="lbl" x="640" y="97">BBC Business／World（英文）</text>
+        <text class="lbl" x="640" y="113">Yahoo 個股 RSS</text>
+        <text class="t" x="852" y="63">MOPS 觀測站</text>
+        <text class="lbl" x="852" y="81">重大訊息 6,574 則</text>
+        <text class="lbl" x="852" y="97">舊版 mopsov 端點</text>
+        <text class="t" x="1014" y="63">使用者</text>
+        <text class="lbl" x="1014" y="81">登入帳號</text>
+        <text class="lbl" x="1014" y="97">持股、交易</text>
+        <text class="lbl" x="1014" y="113">手動貼新聞</text>
+
+        <!-- ═══ ② 採集與處理 ═══ -->
+        <rect class="layer" x="14" y="150" width="1100" height="170" rx="6"></rect>
+        <text class="h" x="24" y="170">② 採集與處理　Crawler/（Python）</text>
+        <g fill="var(--crawl-soft)" stroke="var(--crawl)">
+          <rect class="node" x="24" y="182" width="270" height="126" rx="4"></rect>
+          <rect class="node" x="306" y="182" width="220" height="126" rx="4"></rect>
+          <rect class="node" x="538" y="182" width="330" height="126" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)"><rect class="node" x="880" y="182" width="224" height="126" rx="4"></rect></g>
+        <text class="t" x="34" y="201">行情、籌碼、事件</text>
+        <text class="m" x="34" y="219">finmind_scraper · backfill_prices</text>
+        <text class="lbl" x="34" y="236">近 7 天增量；1992 起全史 16.7 萬筆</text>
+        <text class="lbl" x="34" y="252">rebuild_adj_close：除權息＋減資還原</text>
+        <text class="lbl" x="34" y="268">data_freshness：缺口自動補齊</text>
+        <text class="lbl" x="34" y="284">backfill_revenue：月營收數字（改存全部月份）</text>
+        <text class="t" x="316" y="201">外生資料</text>
+        <text class="m" x="316" y="219">backfill_us · futures · index</text>
+        <text class="lbl" x="316" y="236">美股、台指期夜盤與未平倉、韓日指數</text>
+        <text class="lbl" x="316" y="252">night／intl／futures_extra 特徵</text>
+        <text class="lbl" x="316" y="268">每日 06:10、19:10</text>
+        <text class="t" x="548" y="201">新聞管線</text>
+        <text class="m" x="548" y="219">rss_news_scraper · backfill_news · backfill_mops</text>
+        <text class="lbl" x="548" y="236">每小時即時 + 啟動補洞；3 年回填 117,891 則</text>
+        <text class="lbl" x="548" y="252">news_sources（tier／scope）→ dedup（SimHash）→ alias</text>
+        <text class="lbl" x="548" y="268">news_align：13:30 規則 → 每檔每日情緒特徵</text>
+        <text class="lbl" x="548" y="284">news_pilot：claude -p LLM 抽取（試跑 297 則）</text>
+        <text class="t" x="890" y="201">排程型事件（Iteration 39）</text>
+        <text class="m" x="890" y="219">backfill_revenue_dates</text>
+        <text class="lbl" x="890" y="236">月營收公布時點六來源合成</text>
+        <text class="m" x="890" y="254">research_universe</text>
+        <text class="lbl" x="890" y="271">159 檔研究股價格＋營收</text>
+        <text class="m" x="890" y="289">mops_event_study 規則分類</text>
+        <text class="lbl" x="890" y="304">MOPS 主旨 22 類 → news_llm_feature</text>
+
+        <!-- ═══ ③ PostgreSQL ═══ -->
+        <rect class="layer" x="14" y="336" width="1100" height="150" rx="6"></rect>
+        <text class="h" x="24" y="356">③ PostgreSQL　資料庫 Stock，localhost:5432，30 張表</text>
+        <g fill="var(--db-soft)" stroke="var(--db)">
+          <rect class="node" x="24" y="368" width="230" height="106" rx="4"></rect>
+          <rect class="node" x="266" y="368" width="190" height="106" rx="4"></rect>
+          <rect class="node" x="468" y="368" width="250" height="106" rx="4"></rect>
+          <rect class="node" x="730" y="368" width="200" height="106" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)"><rect class="node" x="942" y="368" width="162" height="106" rx="4"></rect></g>
+        <text class="t" x="34" y="387">台股行情與事件</text>
+        <text class="m" x="34" y="405">stock_info · stock_daily_prices</text>
+        <text class="m" x="34" y="421">stock_chip_analysis · foreign_holding</text>
+        <text class="m" x="34" y="437">dividend_result · capital_reduction</text>
+        <text class="m" x="34" y="453">stock_revenue_announce（+ts/source）</text>
+        <text class="m" x="34" y="469">research_daily_prices（研究股）</text>
+        <text class="t" x="276" y="387">外生市場</text>
+        <text class="m" x="276" y="405">us_daily_prices · us_tickers</text>
+        <text class="m" x="276" y="421">futures_daily（日／夜盤／OI）</text>
+        <text class="m" x="276" y="437">index_daily_prices</text>
+        <text class="t" x="478" y="387">新聞</text>
+        <text class="m" x="478" y="405">news_crawl_raw → user_news（tier／scope／去重）</text>
+        <text class="m" x="478" y="421">news_price_link · news_daily_features</text>
+        <text class="m" x="478" y="437">instrument_alias · trading_calendar</text>
+        <text class="m" x="478" y="453">news_llm_feature（LLM + rule_mops_v1）</text>
+        <text class="m" x="478" y="469">news_features（舊）</text>
+        <text class="t" x="740" y="387">模型台帳</text>
+        <text class="m" x="740" y="405">model_versions（凍結／服役／影子）</text>
+        <text class="m" x="740" y="421">model_predictions · saved_predictions</text>
+        <text class="m" x="740" y="437">voting_results · weekly_plans</text>
+        <text class="m" x="740" y="453">weekly_forecast_runs · weekly_forecasts</text>
+        <text class="t" x="952" y="387">使用者（按人）</text>
+        <text class="m" x="952" y="405">users（bcrypt、role）</text>
+        <text class="m" x="952" y="421">user_holdings + user_id</text>
+        <text class="m" x="952" y="437">user_trades + user_id</text>
+        <text class="m" x="952" y="453">user_news.user_id</text>
+        <text class="lbl" x="952" y="469">唯一鍵 (user_id, stock_id)</text>
+
+        <!-- ═══ ④ 模型與研究 ═══ -->
+        <rect class="layer" x="14" y="502" width="1100" height="200" rx="6"></rect>
+        <text class="h" x="24" y="522">④ 模型與研究　UnifiedModel/、Crawler/*_model.py、LSTM/、RandomForest/、XGBoost/、NewsModels/</text>
+        <g fill="var(--model-soft)" stroke="var(--model)">
+          <rect class="node" x="24" y="534" width="250" height="156" rx="4"></rect>
+          <rect class="node" x="286" y="534" width="240" height="72" rx="4"></rect>
+          <rect class="node" x="286" y="618" width="240" height="72" rx="4"></rect>
+          <rect class="node" x="538" y="534" width="280" height="156" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)"><rect class="node" x="830" y="534" width="274" height="156" rx="4"></rect></g>
+        <text class="t" x="34" y="553">統一資料層</text>
+        <text class="m" x="34" y="571">UnifiedModel/panel.py · features.py</text>
+        <text class="lbl" x="34" y="588">宣告式區塊：price／chip／cs／market／us</text>
+        <text class="lbl" x="34" y="604">／night／futures／intl／news</text>
+        <text class="lbl" x="34" y="620">align() 依區塊起始日砍樣本，杜絕捏造特徵</text>
+        <text class="lbl" x="34" y="636">panel_cache 快取；54 特徵</text>
+        <text class="lbl" x="34" y="660">巢狀走查是部署門檻（Iteration 30）</text>
+        <text class="t" x="296" y="553">閘門模型</text>
+        <text class="lbl" x="296" y="571">台股開盤跳空 72%、週振幅 lift 1.99</text>
+        <text class="lbl" x="296" y="587">波動率風險、成交量流動性、美股跳空</text>
+        <text class="t" x="296" y="637">方向模型</text>
+        <text class="lbl" x="296" y="655">M3 籌碼 Random Forest（未來 3 日 alpha）</text>
+        <text class="lbl" x="296" y="671">M2 新聞（走查 F1 +0.014，未部署）</text>
+        <text class="t" x="548" y="553">目錄、版本、決策</text>
+        <text class="m" x="548" y="571">model_catalog（27 個模型）</text>
+        <text class="m" x="548" y="587">model_registry · model_lifecycle</text>
+        <text class="lbl" x="548" y="604">凍結快照、影子評估、預測台帳、實測回填</text>
+        <text class="m" x="548" y="622">voting_engine + roles（六角色加權）</text>
+        <text class="lbl" x="548" y="639">持倉管家角色讀 admin（id 1）的持股</text>
+        <text class="m" x="548" y="657">weekly_forecast · cash_allocator(user_id)</text>
+        <text class="m" x="548" y="675">LSTM/ M01～M10 台股／美股（≈天真基準）</text>
+        <text class="t" x="840" y="553">新聞訊號研究（Iteration 38～40）</text>
+        <text class="m" x="840" y="571">news／revenue／mops_event_study</text>
+        <text class="lbl" x="840" y="588">等權基準、日曆時間 t、漲跌停、不重疊</text>
+        <text class="lbl" x="840" y="604">月營收：surprise 無漂移；反應日 β +0.41</text>
+        <text class="lbl" x="840" y="620">MOPS：波動訊號、無漂移</text>
+        <text class="m" x="840" y="638">NewsModels/（torch CUDA venv）</text>
+        <text class="lbl" x="840" y="655">28 模型 × 4 標籤：隔日 AUC 0.50～0.53</text>
+        <text class="lbl" x="840" y="671">純價格 0.524；新聞內容單獨 0.50</text>
+        <text class="lbl" x="840" y="687">→ AI/Doc/NewsModels*.md</text>
+
+        <!-- ═══ ⑤ 服務層 ═══ -->
+        <rect class="layer" x="14" y="718" width="1100" height="170" rx="6"></rect>
+        <text class="h" x="24" y="738">⑤ 服務層</text>
+        <g fill="var(--svc-soft)" stroke="var(--svc)">
+          <rect class="node" x="24" y="750" width="280" height="126" rx="4"></rect>
+          <rect class="node" x="316" y="750" width="500" height="126" rx="4"></rect>
+          <rect class="node" x="828" y="750" width="276" height="126" rx="4"></rect>
+        </g>
+        <text class="t" x="34" y="769">FastAPI　Crawler/api.py :8000</text>
+        <text class="lbl" x="34" y="787">/crawler 觸發與狀態（冷卻、並發鎖）</text>
+        <text class="lbl" x="34" y="803">/voting /gap /us /range /cash?user_id /forecast</text>
+        <text class="lbl" x="34" y="819">/catalog /models /data/freshness /data/backfill</text>
+        <text class="lbl" x="34" y="843">只在 localhost，不對外</text>
+        <text class="t" x="326" y="769">Node.js / Express　Server/ :3001</text>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="326" y="777" width="480" height="22" rx="3"></rect>
+        </g>
+        <text class="m" x="334" y="792">/auth login·me·change-password·users(admin) · requireAuth 全站 · requireRole(admin)</text>
+        <text class="lbl" x="326" y="817">pg 連線池直連：stocks、news、holdings（WHERE user_id）、predictions</text>
+        <text class="lbl" x="326" y="833">Proxy → FastAPI（crawler、voting、gap、us、cash、forecast、catalog、models、data）</text>
+        <text class="lbl" x="326" y="849">Proxy → LSTM :8001（趨勢預測）；migrate.js 啟動自動跑 001～017</text>
+        <text class="lbl" x="326" y="865">CORS 白名單 ALLOWED_ORIGINS；密鑰 .jwt_secret；admin 密碼 ADMIN_PASSWORD</text>
+        <text class="t" x="838" y="769">LSTM 推論　LSTM/serve.py :8001</text>
+        <text class="lbl" x="838" y="787">載入 saved_models，逐檔逐模型推論</text>
+        <text class="lbl" x="838" y="803">/health 供週預測判斷是否在線</text>
+        <text class="lbl" x="838" y="827">TensorFlow（Windows 無 GPU）</text>
+        <text class="lbl" x="838" y="843">只在 localhost，不對外</text>
+
+        <!-- ═══ ⑥ 前端 ═══ -->
+        <rect class="layer" x="14" y="904" width="1100" height="130" rx="6"></rect>
+        <text class="h" x="24" y="924">⑥ 前端　Screen/（React 18 + Vite :5173，ApexCharts，雙主題）</text>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="24" y="936" width="200" height="86" rx="4"></rect>
+        </g>
+        <text class="t" x="34" y="955">登入 / 帳號</text>
+        <text class="lbl" x="34" y="973">Login.jsx：帳密、後端位址可改</text>
+        <text class="lbl" x="34" y="989">Account.jsx：改密碼、admin 管使用者</text>
+        <text class="lbl" x="34" y="1005">api.js 自動帶 Bearer，401 登出</text>
+        <g fill="var(--ui-soft)" stroke="var(--ui)">
+          <rect class="node" x="236" y="936" width="868" height="86" rx="4"></rect>
+        </g>
+        <text class="lbl" x="246" y="955">市場總覽 · 預算查詢 · 個股分析 · 法人持股 · 新聞輸入 · 新聞情緒 · 趨勢預測 · 預測比對 · 週預測 · 查詢紀錄（localStorage）</text>
+        <text class="lbl" x="246" y="973">我的持股（按人）· 閒置資金（按人排除持股）· 美股跳空 · 投票決策 · 模型版本（admin）· 帳號</text>
+        <text class="lbl" x="246" y="997">切頁用 state（沒有 router）；主題與字級存 localStorage；API 位址 localStorage → VITE_API_URL → localhost</text>
+
+        <!-- ═══ ⑦ 排程器（右欄） ═══ -->
+        <rect class="layer" x="1130" y="150" width="256" height="552" rx="6"></rect>
+        <text class="h" x="1140" y="170">⑦ 排程器　scheduler.py</text>
+        <g fill="var(--sched-soft)" stroke="var(--sched)"><rect class="node" x="1140" y="182" width="236" height="508" rx="4"></rect></g>
+        <text class="lbl" x="1150" y="200">APScheduler，Windows 工作排程器</text>
+        <text class="lbl" x="1150" y="216">「MoneyScheduler」常駐；登入即啟動</text>
+        <text class="lbl" x="1150" y="232">啟動時 _catch_up() 補跑錯過的</text>
+        <text class="m" x="1150" y="258">每小時 :05</text><text class="lbl" x="1150" y="274">新聞抓取 + 近 7 天特徵重算 →②</text>
+        <text class="m" x="1150" y="298">06:10 / 19:10</text><text class="lbl" x="1150" y="314">美股、台指期、韓日 →②</text>
+        <text class="m" x="1150" y="338">17:30</text><text class="lbl" x="1150" y="354">行情新鮮度檢查 + 補齊 →②</text>
+        <text class="m" x="1150" y="378">18:00</text><text class="lbl" x="1150" y="394">股價 + 籌碼 + 外資持股 →②</text>
+        <text class="m" x="1150" y="418">20:00</text><text class="lbl" x="1150" y="434">多角色投票 → voting_results →④</text>
+        <text class="lbl" x="1150" y="450">美股開盤跳空預測 →④</text>
+        <text class="m" x="1150" y="474">21:00</text><text class="lbl" x="1150" y="490">預測回填 + 線上實測評估 →④</text>
+        <text class="m" x="1150" y="514">週日 08:00</text><text class="lbl" x="1150" y="530">27 模型 × 49 檔 下一週與下下週 →④</text>
+        <text class="m" x="1150" y="554">手動</text><text class="lbl" x="1150" y="570">backfill_*、research_universe、</text>
+        <text class="lbl" x="1150" y="586">*_event_study、NewsModels/run_all</text>
+        <text class="lbl" x="1150" y="612">時區 Asia/Taipei；misfire 寬限</text>
+        <text class="lbl" x="1150" y="628">10 分鐘～6 小時</text>
+        <text class="lbl" x="1150" y="644">日誌 Crawler/logs/scheduler.log</text>
+        <text class="lbl" x="1150" y="672">投票的持倉角色沒有登入者，</text>
+        <text class="lbl" x="1150" y="688">讀 admin 的持股（階段 1 限制）</text>
+
+        <!-- 排程觸發虛線 -->
+        <path class="edge sched" d="M1140,266 C 1120,266 1120,240 1104,240" marker-end="url(#ars)"></path>
+        <path class="edge sched" d="M1140,386 C 1120,386 1120,250 1104,250" marker-end="url(#ars)"></path>
+        <path class="edge sched" d="M1140,426 C 1120,426 1120,600 1104,600" marker-end="url(#ars)"></path>
+        <path class="edge sched" d="M1140,522 C 1120,522 1120,620 1104,620" marker-end="url(#ars)"></path>
+
+        <!-- 主要資料流箭頭（層與層之間） -->
+        <path class="edge" d="M124,122 L124,182" marker-end="url(#ar)"></path>
+        <path class="edge" d="M311,122 L400,182" marker-end="url(#ar)"></path>
+        <path class="edge" d="M508,122 L640,182" marker-end="url(#ar)"></path>
+        <path class="edge" d="M730,122 L700,182" marker-end="url(#ar)"></path>
+        <path class="edge" d="M917,122 L780,182" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M508,132 C 508,160 900,150 940,182" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M1054,122 C 1054,300 1054,320 1023,368" marker-end="url(#arn)"></path>
+        <text class="lbl" x="1062" y="250">經 Node API</text>
+        <path class="edge" d="M159,308 L139,368" marker-end="url(#ar)"></path>
+        <path class="edge" d="M416,308 L361,368" marker-end="url(#ar)"></path>
+        <path class="edge" d="M703,308 L593,368" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M992,308 C 992,340 200,330 140,368" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M1000,308 C 1000,340 700,340 640,368" marker-end="url(#arn)"></path>
+        <path class="edge" d="M139,474 L139,534" marker-end="url(#ar)"></path>
+        <path class="edge" d="M361,474 L200,534" marker-end="url(#ar)"></path>
+        <path class="edge" d="M593,474 L240,534" marker-end="url(#ar)"></path>
+        <path class="edge" d="M830,474 L700,534" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M600,474 C 700,500 900,500 960,534" marker-end="url(#arn)"></path>
+        <path class="edge" d="M678,690 C 678,700 840,700 830,474" marker-end="url(#ar)"></path>
+        <text class="lbl" x="720" y="708">預測、投票寫回台帳</text>
+        <path class="edge" d="M164,690 L164,750" marker-end="url(#ar)"></path>
+        <path class="edge http" d="M316,813 C 310,813 305,813 304,813" marker-end="url(#arh)"></path>
+        <path class="edge http" d="M816,813 L828,813" marker-end="url(#arh)"></path>
+        <path class="edge" d="M566,750 C 566,730 566,720 566,700" marker-end="url(#ar)"></path>
+        <text class="lbl" x="574" y="712">pg 直連 ③④ 的表</text>
+        <path class="edge http" d="M566,936 L566,876" marker-end="url(#arh)"></path>
+        <text class="lbl" x="574" y="900">fetch + Bearer（唯一出口）</text>
+        <path class="edge new" d="M124,936 L124,876" marker-end="url(#arn)"></path>
+        <text class="lbl" x="132" y="900">/auth/login</text>
+
+        <!-- ═══ 尚未做：階段 2～5 ═══ -->
+        <rect class="plan" x="14" y="1050" width="1372" height="116" rx="6"></rect>
+        <text class="h" x="24" y="1070" style="fill: var(--new)">尚未實作：階段 2～5（提案見 Architecture-MultiUser.diagram.html）</text>
+        <text class="lbl" x="24" y="1092">階段 2　前端 base '/money/'、GitHub Actions 部署到 GitHub Pages（靜態、免費）；API 位址由登入頁設定（已做好）</text>
+        <text class="lbl" x="24" y="1110">階段 3　cloudflared 常駐服務：https://api.你的網域 → localhost:3001；只開 3001，FastAPI 與 LSTM 不進隧道</text>
+        <text class="lbl" x="24" y="1128">階段 4　ALLOWED_ORIGINS 設 github.io、JWT_SECRET／ADMIN_PASSWORD 進 .env、rate-limit、helmet</text>
+        <text class="lbl" x="24" y="1146">階段 5　Cloudflare Access（Email OTP）當第二道門；投票的持倉角色改成按請求者算</text>
+      </svg>
+    </div>
+    <figcaption>圖：現況架構。前端只跟 Node.js :3001 講話，Node 驗 JWT 後直連 PostgreSQL 或代理到內部的 FastAPI 與 LSTM；
+    排程器直接寫共用表，不經 API。使用者資料（持股、交易）每張表都有 user_id，隔離發生在 SQL。</figcaption>
+  </figure>
+  <div class="legend">
+    <span><i style="background:var(--src-soft);border-color:var(--src)"></i>外部來源</span>
+    <span><i style="background:var(--crawl-soft);border-color:var(--crawl)"></i>採集</span>
+    <span><i style="background:var(--db-soft);border-color:var(--db)"></i>資料庫</span>
+    <span><i style="background:var(--model-soft);border-color:var(--model)"></i>模型</span>
+    <span><i style="background:var(--svc-soft);border-color:var(--svc)"></i>服務</span>
+    <span><i style="background:var(--ui-soft);border-color:var(--ui)"></i>前端</span>
+    <span><i style="background:var(--sched-soft);border-color:var(--sched)"></i>排程器</span>
+    <span><i style="background:var(--new-soft);border-color:var(--new)"></i>9/23 之後新增</span>
+    <span><s></s>排程觸發</span>
+  </div>
+
+  <h2>與 9/23 版的差異</h2>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>層</th><th>新增／變更</th><th>迭代</th></tr></thead>
+      <tbody>
+        <tr><td>① 來源</td><td>鉅亨 <code>tw_revenue</code> 營收速報；FinMind 月營收改存 2013 起全部月份；「使用者」成為來源（帳號、持股、交易）</td><td>39、41</td></tr>
+        <tr><td>② 採集</td><td><code>backfill_revenue_dates</code>（公布時點六來源）、<code>research_universe</code>（159 檔研究股）、<code>mops_event_study</code> 規則分類</td><td>39</td></tr>
+        <tr><td>③ 資料庫</td><td><code>users</code>；<code>user_holdings</code>／<code>user_trades</code>／<code>user_news</code> 加 <code>user_id</code>；<code>stock_revenue_announce</code> 加 <code>announce_ts/source</code>；<code>research_daily_prices</code>；migration 016、017</td><td>39、41</td></tr>
+        <tr><td>④ 模型與研究</td><td>三份事件研究、NewsModels 28 模型 × 4 標籤；結論：新聞內容對隔日方向沒有可用訊號，價格短期反轉與波動叢聚才是可交易的部分</td><td>39、40</td></tr>
+        <tr><td>⑤ 服務</td><td>Node 全站 JWT、<code>/auth</code>、admin 角色、CORS 白名單；FastAPI <code>/cash/plan?user_id</code></td><td>41</td></tr>
+        <tr><td>⑥ 前端</td><td>登入頁、帳號頁、Bearer 自動帶、401 登出、後端位址可設定</td><td>41</td></tr>
+        <tr><td>⑦ 排程</td><td>不變；投票的持倉角色讀 admin 持股是已知限制</td><td>41</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
+</html>

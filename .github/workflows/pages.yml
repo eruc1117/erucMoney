@@ -1,0 +1,55 @@
+# 前端獨立部署到 GitHub Pages（階段 2）
+#
+# 觸發：push 到 master／main 且 Screen/ 有變動，或手動 workflow_dispatch。
+# 產物：Screen/dist（含 public/CNAME = erucmoney.com，GitHub Pages 會據此設定自訂網域）。
+#
+# 第一次要在 repo Settings → Pages → Source 選「GitHub Actions」；
+# 自訂網域的 DNS 在 Cloudflare 設（見 Deploy/README.md）。
+name: Deploy frontend to GitHub Pages
+
+on:
+  push:
+    branches: [master, main]
+    paths: ['Screen/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Screen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: Screen/package-lock.json
+      - run: npm ci
+      - run: npm run build
+        env:
+          # 建置時不寫死 API 位址：前端依網域自動選（erucmoney.com → api.erucmoney.com），登入頁也能改
+          VITE_API_URL: ''
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: Screen/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

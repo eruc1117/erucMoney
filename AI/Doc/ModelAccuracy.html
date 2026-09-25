@@ -1,0 +1,302 @@
+<title>模型準確度體檢</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f6f6f4; --surface:#fcfcfb; --line:#e2e1dc; --grid:#ececе8;
+  --ink:#141412; --ink-2:#52514e; --ink-3:#8a8985;
+  --model:#2a78d6; --model-soft:#cde2fb; --base:#9a9994;
+  --good:#0ca30c; --crit:#d03b3b; --warn:#c98500;
+  --crit-bg:#fbeaea; --good-bg:#e7f5e7;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#131312; --surface:#1a1a19; --line:#2e2e2b; --grid:#262624;
+    --ink:#f2f1ec; --ink-2:#c3c2b7; --ink-3:#8c8b85;
+    --model:#3987e5; --model-soft:#1c3a5f; --base:#7a7974;
+    --good:#3fbf3f; --crit:#e66767; --warn:#e0a53a;
+    --crit-bg:#3a1f1f; --good-bg:#1d3320;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#131312; --surface:#1a1a19; --line:#2e2e2b; --grid:#262624;
+  --ink:#f2f1ec; --ink-2:#c3c2b7; --ink-3:#8c8b85;
+  --model:#3987e5; --model-soft:#1c3a5f; --base:#7a7974;
+  --good:#3fbf3f; --crit:#e66767; --warn:#e0a53a;
+  --crit-bg:#3a1f1f; --good-bg:#1d3320;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans","Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;font-size:16px;line-height:1.65;padding-inline:16px;padding-block:32px 64px}
+.wrap{max-width:920px;margin:0 auto}
+h1,h2,h3{text-wrap:balance;line-height:1.25;margin:0}
+h1{font-size:2rem;font-weight:700;letter-spacing:-.01em}
+h2{font-size:1.35rem;font-weight:600;margin-top:56px;padding-top:20px;border-top:1px solid var(--line)}
+h3{font-size:1.05rem;font-weight:600;margin-top:28px}
+p{max-width:68ch;margin:12px 0}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:.75rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+.lede{font-size:1.1rem;color:var(--ink-2);max-width:62ch}
+.meta{font-family:"IBM Plex Mono",monospace;font-size:.78rem;color:var(--ink-3);margin-top:16px}
+.callout{background:var(--crit-bg);border-left:3px solid var(--crit);padding:14px 18px;margin:24px 0;border-radius:0 6px 6px 0}
+.callout.good{background:var(--good-bg);border-left-color:var(--good)}
+.callout p{margin:6px 0}
+figure{margin:24px 0;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:18px 18px 12px}
+figure header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:8px}
+figure h3{margin:0;font-size:1rem}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:var(--ink-2)}
+.legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--sw)}
+figcaption{font-size:.85rem;color:var(--ink-2);margin-top:8px;max-width:72ch}
+svg{width:100%;height:auto;display:block;font-family:"IBM Plex Sans","Noto Sans TC",sans-serif}
+svg text{fill:var(--ink-2);font-size:12px}
+svg .num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+svg .axis{stroke:var(--line)}
+svg .grid{stroke:var(--grid)}
+svg .lab{fill:var(--ink)}
+.charts-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.charts-1{display:grid;grid-template-columns:1fr;gap:16px}
+.charts-1 svg{max-width:640px}
+@media (max-width:640px){.charts-2{grid-template-columns:1fr}}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:20px 0}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.tile .k{font-size:.78rem;color:var(--ink-3)}
+.tile .v{font-size:1.7rem;font-weight:600;line-height:1.2;margin-top:2px}
+.tile .s{font-size:.8rem;color:var(--ink-2)}
+.v.crit{color:var(--crit)} .v.good{color:var(--good)}
+table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font-weight:500;color:var(--ink-3);font-size:.78rem;letter-spacing:.04em}
+td.n,th.n{text-align:right;font-family:"IBM Plex Mono",monospace}
+.scroll{overflow-x:auto}
+.pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.75rem;font-weight:500;white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.crit{background:var(--crit-bg);color:var(--crit)}
+.pill.na{background:var(--grid);color:var(--ink-2)}
+details{margin:8px 0 0;font-size:.85rem}
+summary{cursor:pointer;color:var(--ink-3)}
+ol.plan{padding-left:1.4em;max-width:72ch}
+ol.plan li{margin:10px 0}
+ol.plan b{font-weight:600}
+.tip{position:fixed;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.78rem;padding:6px 9px;border-radius:5px;font-family:"IBM Plex Mono",monospace;white-space:nowrap;opacity:0;transform:translate(-50%,-130%);transition:opacity .08s;z-index:9}
+.tip.on{opacity:1}
+@media (prefers-reduced-motion:reduce){.tip{transition:none}}
+</style>
+
+<div class="wrap">
+  <div class="eyebrow">Money · 模型準確度體檢 · 2026-09-20</div>
+  <h1>八個模型，三個站得住，一個線上出錯，四個沒有證據</h1>
+  <p class="lede">把線上台帳（<code>model_lifecycle</code>，8/7 起累積）與離線走查放在同一張表上。閘門模型裡振幅、波動率、成交量在線上贏過各自的天真基準；跳空模型離線 72% 的方向準確率在線上變成 44%，查下去是餵錯天的特徵；三個方向模型沒有一個有站得住的線上證據。</p>
+  <div class="meta">行情截至 2026-09-18 · 到期樣本至 2026-09-14 · 來源：model_predictions、saved_predictions、results/*.md</div>
+
+  <h2>一、一頁總覽</h2>
+  <div class="scroll">
+  <table>
+    <thead><tr><th>模型</th><th>用途</th><th>離線走查</th><th>線上實測（到期樣本）</th><th>判定</th></tr></thead>
+    <tbody>
+      <tr><td>開盤跳空 gap v2</td><td>盤前定價（閘門）</td><td>相關 0.694、方向 72.2%</td><td>204 筆：方向 43.9%，多數類別 53.3%；MAE 1.51% 對猜 0 的 1.06%</td><td><span class="pill crit">線上對齊錯誤</span></td></tr>
+      <tr><td>週振幅 range v2</td><td>有沒有價差可做</td><td>排序相關 0.649、lift 2.1</td><td>204 筆：排序相關 0.700 對歷史中位數 0.668</td><td><span class="pill good">通過</span></td></tr>
+      <tr><td>波動率 volatility v2</td><td>停損與部位</td><td>相關 0.606、R² 0.483</td><td>101 筆：排序相關 0.708 對 EWMA 0.676</td><td><span class="pill good">通過</span></td></tr>
+      <tr><td>成交量 volume v1</td><td>流動性</td><td>排序相關 0.482 對 0.359</td><td>153 筆：排序相關 0.417 對持續性 0.238</td><td><span class="pill good">通過</span></td></tr>
+      <tr><td>美股跳空 us_gap v2</td><td>美股盤前參考</td><td>相關 0.304、方向 61.3% 對 55.3%</td><td>23 筆（一天）：排序相關 0.51</td><td><span class="pill na">樣本不足</span></td></tr>
+      <tr><td>M3 籌碼 RF</td><td>方向訊號，權重 0.55</td><td>買進 56.9%（2012 起）、51.5%（2018 起）</td><td>177 筆只出手 7 次；到期 6 次對 3 次</td><td><span class="pill na">無法判定</span></td></tr>
+      <tr><td>M2 新聞規則引擎</td><td>方向訊號，權重 0.30</td><td>從未驗證</td><td>不記台帳</td><td><span class="pill na">未驗證</span></td></tr>
+      <tr><td>LSTM 十模型</td><td>趨勢預測頁</td><td>方向 46.9~50.6%，MAE 等同天真基準</td><td>使用者存的 63 筆：MAPE 4.5% 對天真 3.7%</td><td><span class="pill crit">無 edge</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h2>二、最重要的發現：跳空模型線上預測晚了一天</h2>
+  <p>台帳把跳空 v2 評成「輸給多數類別」，與走查的 72% 差太多，不像樣本雜訊。把同一批 204 筆預測值分別對上兩個東西：台帳寫的目標日（隔一個交易日）的真實跳空，以及預測當天<b>已經發生</b>的跳空。</p>
+
+  <div class="charts-2">
+    <figure>
+      <header><h3>對目標日（隔天）的跳空</h3><span class="legend"><span style="--sw:var(--crit)">相關 −0.115</span></span></header>
+      <div id="sc1"></div>
+      <figcaption>台帳的評分口徑。點雲沒有方向，跟擲銅板一樣。</figcaption>
+    </figure>
+    <figure>
+      <header><h3>對預測當天已發生的跳空</h3><span class="legend"><span style="--sw:var(--model)">相關 +0.727</span></span></header>
+      <div id="sc2"></div>
+      <figcaption>幾乎就是走查的 0.69。模型沒壞，它算的是今天，台帳標成明天。</figcaption>
+    </figure>
+  </div>
+
+  <div class="callout">
+    <p><b>原因。</b><code>gap_model._build_latest_features()</code> 取每檔最新一列，只把美股特徵換成最新收盤；Iteration 28 加進來的台指期夜盤特徵沒有跟著換，那一列的 <code>night_*</code> 是今天早上 05:00 收的夜盤，描述的是今天的開盤。夜盤是跳空模型最強的特徵（單獨 R² 0.32），於是模型忠實算出今天已經發生的跳空。</p>
+    <p><b>影響。</b>投票決策與閒置資金頁的「盤前定價」角色、個股分析的跳空欄位，從 8/7 上線至今看到的都是昨天的數字。沒被抓到，是因為模型版本頁只顯示 gate 判定，「未通過」看起來像樣本還不夠。</p>
+    <p><b>修法。</b>夜盤特徵換成最新一場，而明天的夜盤 05:00 才收完，所以跳空預測應改到早上 06:10 外生資料更新後跑（現在是 20:00）；現有 204 筆標記重評；每次寫台帳順便算「預測 vs 當日已實現」的相關，超過 0.5 直接告警。美股跳空用同一種寫法，一併檢查。</p>
+  </div>
+
+  <h2>三、閘門模型：線上與離線一致</h2>
+  <p>三個量級模型線上的排序相關都高於離線走查，且都贏過各自同時記下的天真基準。差距 +0.03、+0.03、+0.18，對照 Iteration 30 的部署門檻 +0.01 是站得住的。</p>
+  <figure>
+    <header><h3>線上排序相關：模型 vs 天真基準</h3><span class="legend"><span style="--sw:var(--model)">模型</span><span style="--sw:var(--base)">天真基準</span></span></header>
+    <div id="bar1"></div>
+    <figcaption>基準各不相同：振幅對歷史中位數、波動率對 EWMA、成交量對量能持續。三角形是離線走查的模型分數。樣本 204 / 101 / 153 筆，26 檔，8/10 到 9/14。</figcaption>
+    <details><summary>資料表</summary>
+      <table><thead><tr><th>模型</th><th class="n">線上模型</th><th class="n">線上基準</th><th class="n">離線走查</th><th class="n">MAE 模型</th><th class="n">MAE 基準</th><th class="n">樣本</th></tr></thead>
+      <tbody>
+        <tr><td>週振幅 v2</td><td class="n">0.700</td><td class="n">0.668</td><td class="n">0.649</td><td class="n">3.37%</td><td class="n">4.94%</td><td class="n">204</td></tr>
+        <tr><td>波動率 v2</td><td class="n">0.708</td><td class="n">0.676</td><td class="n">0.606</td><td class="n">1.51%</td><td class="n">1.86%</td><td class="n">101</td></tr>
+        <tr><td>成交量 v1</td><td class="n">0.417</td><td class="n">0.238</td><td class="n">0.482</td><td class="n">0.341</td><td class="n">0.406</td><td class="n">153</td></tr>
+      </tbody></table>
+    </details>
+  </figure>
+  <p>要注意的是樣本只有 5~6 週，而且這段期間台股單邊上漲（使用者存的預測裡 95% 的目標日收盤高於基準日），基準本身也跟著好看。「通過」要在下一段震盪或下跌期複驗。</p>
+
+  <h2>四、方向模型：沒有站得住的證據</h2>
+
+  <h3>M3 籌碼：離線 edge 在縮水，線上幾乎不出手</h3>
+  <div class="tiles">
+    <div class="tile"><div class="k">走查買進方向（2012 起）</div><div class="v">56.9%</div><div class="s">2,541 次買進</div></div>
+    <div class="tile"><div class="k">走查買進方向（2018 起）</div><div class="v crit">51.5%</div><div class="s">同一模型、外生特徵齊全區間</div></div>
+    <div class="tile"><div class="k">離線模擬出手</div><div class="v">3.9 檔／日</div><div class="s">門檻 0.35</div></div>
+    <div class="tile"><div class="k">線上出手</div><div class="v crit">7 / 177</div><div class="s">4%，到期 6 次對 3 次</div></div>
+  </div>
+  <p>照這個速度要兩年才累積到 100 次出手，gate 永遠無法判定。原因待查：線上機率分布可能與訓練期不同，或 Hold 抑制比模擬嚴。Iteration 30 已標記 0.55 的權重站不住，至今未重驗；Iteration 36 加持股特徵 −0.37pp，否決。</p>
+
+  <h3>M2 新聞：唯一沒有任何驗證數字的方向模型</h3>
+  <p>規則引擎的 0.30 權重從未回測。XGBoost 版在 8/6 因只有 44 筆樣本、3 個新聞日期未部署；現在 <code>news_features</code> 有 357 筆、涵蓋約 31 個交易日，剛好跨過當時寫的「≥ 30 個交易日」建議門檻，可以重跑一次。</p>
+
+  <h3>LSTM：兩次實驗、一次線上比對，結論一致</h3>
+  <div class="charts-1">
+    <figure>
+      <header><h3>使用者存的 63 筆預測：MAPE</h3><span class="legend"><span style="--sw:var(--model)">模型</span><span style="--sw:var(--base)">天真基準（收盤不變）</span></span></header>
+      <div id="bar2"></div>
+      <figcaption>4 檔、8/10 起、共 581 個已到期的預測點。十個模型裡只有三個略優於「明天等於今天」，且都在誤差範圍內。</figcaption>
+    </figure>
+    <figure>
+      <header><h3>IMPR-001 六項改進：方向準確率</h3><span class="legend"><span style="--sw:var(--model)">四檔平均</span></span></header>
+      <div id="bar3"></div>
+      <figcaption>Iteration 36 跑完的改進輪次（2330 / 2344 / 2323 / 2324）。虛線是 51% 部署門檻，沒有一輪過。</figcaption>
+    </figure>
+  </div>
+  <details><summary>資料表：使用者存的預測（依模型）</summary>
+    <div class="scroll"><table><thead><tr><th>模型</th><th class="n">點數</th><th class="n">MAPE</th><th class="n">天真 MAPE</th><th class="n">信賴區間命中</th></tr></thead><tbody id="tb2"></tbody></table></div>
+  </details>
+  <p>Iteration 11 的誠實評估：十個模型 MAE 5.17~5.25，天真基準 5.20，方向 46.9~50.6%。已在投票裡降到 0.15 權重並可停用。不建議再投入 LSTM 架構調整。</p>
+
+  <h2>五、改進方向</h2>
+  <ol class="plan">
+    <li><b>修跳空模型的線上時序。</b>唯一「模型有效但線上無效」的案例，修好就是最大的立即收益。加洩漏自檢，並檢查美股跳空的推論端。</li>
+    <li><b>給 M3 一個能判定的線上流程。</b>台帳改記買進機率而非 0/1，評估改用排序相關與分位數報酬；做 2012~2017 與 2018 後的分期驗證，決定 0.55 權重去留。</li>
+    <li><b>M2 重跑 XGBoost 訓練。</b>資料剛過門檻。若仍不足，把規則引擎權重降到與「未驗證」相稱的水準（例如 0.10）。</li>
+    <li><b>超參數重調複跑。</b>Iteration 36 副產物：振幅、波動率、成交量在 lr 0.03、depth 4 下各 +0.01~+0.02，但基準用的是預設參數。以線上模型參數為基準重跑，過了就重訓部署；順便複驗振幅 v2 的韓日特徵。</li>
+    <li><b>方向訊號的替代路線。</b>Iteration 12 的 54 特徵梯度提升在出手率 5% 時方向 59.9%，比 M3 與 LSTM 都好，但只做過單層走查。用巢狀走查驗一次，通過就當「高信心低出手」的第四個方向來源。</li>
+    <li><b>累積樣本，不提前下結論。</b>線上實測才 5~6 週且處於單邊行情。<code>job_model_review</code> 每天 21:00 重評，前提是排程器有在跑（Iteration 36 的常駐化尚待註冊）。</li>
+    <li><b>資料品質。</b>DATA-007／008 的零價格列該在寫入層擋掉；<code>train_cross.py</code> 的跨股票整體 DA 仍不可信，重跑時只看逐股數字。</li>
+  </ol>
+
+  <h2>六、這份報告沒有回答的事</h2>
+  <p>方向模型扣除交易成本後的報酬：走查與台帳都只看方向與量級，Iteration 22 的週擇時策略是唯一算過成本的，結果輸給買進持有。四個閘門組合起來的效果：各自有效不代表 <code>cash_allocator</code> 的配置有效，那需要以實際持股台帳做「建議 vs 實際」的事後對照，目前資料量還太少。</p>
+</div>
+<div class="tip" id="tip"></div>
+
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const tip=document.getElementById('tip');
+function showTip(e,t){tip.textContent=t;tip.style.left=e.clientX+'px';tip.style.top=e.clientY+'px';tip.classList.add('on');}
+function hideTip(){tip.classList.remove('on');}
+function el(n,a,txt){const x=document.createElementNS(NS,n);for(const k in a)x.setAttribute(k,a[k]);if(txt!=null)x.textContent=txt;return x;}
+function svg(w,h){const s=el('svg',{viewBox:`0 0 ${w} ${h}`,role:'img'});return s;}
+
+// ── 跳空散佈圖 ──────────────────────────────────────────────
+const pts=[[-0.774,-0.794,-1.682],[2.615,1.017,1.449],[1.983,-0.496,1.155],[3.877,3.148,4.277],[-0.839,0.862,0.0],[-0.778,0.531,0.867],[-1.595,-3.493,-3.497],[-0.115,2.236,-0.621],[-2.018,1.919,0.68],[0.347,0.976,0.0],[-0.069,0.547,0.536],[-1.4,3.333,-1.754],[0.568,0.844,1.057],[0.391,1.021,0.484],[0.305,0.914,0.331],[-2.018,2.058,1.163],[-1.788,3.364,-0.585],[0.218,1.59,1.215],[0.039,-0.867,0.0],[0.048,-0.908,0.082],[1.184,0.0,1.288],[-0.077,0.382,-0.192],[1.906,-0.151,0.781],[-0.105,0.409,-0.574],[0.733,0.0,0.375],[0.698,0.0,0.481],[0.88,0.413,0.402],[1.155,-1.037,0.905],[1.712,-1.16,1.887],[4.317,-3.097,6.796],[0.633,0.165,2.833],[-0.221,0.781,0.0],[-0.056,1.449,0.236],[0.588,-0.158,1.449],[0.046,-0.235,0.234],[-0.012,0.467,0.922],[0.088,0.274,0.091],[0.113,0.315,0.078],[0.14,1.155,0.0],[0.457,4.277,0.0],[-0.248,0.0,-0.803],[0.576,0.486,-0.327],[-0.597,2.513,1.336],[-0.229,1.09,-0.792],[-0.756,2.208,-0.6],[-2.018,3.264,-1.127],[-0.229,3.321,0.357],[-0.279,7.809,-1.855],[1.337,0.0,2.696],[1.365,-0.192,1.021],[1.372,-0.574,0.914],[3.501,-1.22,0.862],[2.108,1.385,2.236],[2.773,-2.093,1.918],[-0.335,0.0,0.0],[-0.127,1.24,0.0],[-0.725,-1.037,-0.816],[0.932,0.0,0.976],[0.847,0.0,0.547],[3.55,-0.873,3.333],[0.964,0.42,0.844],[3.931,0.374,2.058],[3.931,-0.836,3.364],[1.835,0.338,1.59],[1.611,-0.323,0.165],[1.7,-1.621,-0.873],[-0.077,0.417,0.42],[-0.817,1.887,0.375],[-0.845,4.775,-0.836],[-0.746,0.865,0.338],[-0.09,-0.161,-0.323],[-0.653,1.383,-0.152],[0.004,0.0,1.017],[-0.646,0.505,-0.496],[-0.911,1.149,3.148],[-0.435,0.0,-2.213],[-0.175,-0.161,-0.805],[-0.327,0.706,-0.403],[-0.424,-0.785,-1.554],[-1.245,1.796,-1.721],[-0.28,0.594,-0.59],[-1.366,0.352,-1.678],[-0.213,1.235,-1.528],[2.173,-2.213,0.0],[1.095,-0.805,0.486],[2.966,-0.403,2.513],[2.468,-1.554,1.09],[3.905,-1.721,2.208],[1.78,-0.59,3.264],[3.875,-1.678,3.321],[4.096,0.867,7.81],[-0.077,0.0,-1.22],[-0.023,0.457,1.385],[-1.278,0.0,-2.093],[0.344,-0.706,0.238],[0.085,-0.174,0.694],[0.393,0.161,0.0],[0.136,-0.605,0.304],[-0.021,0.0,-0.135],[-0.04,-0.792,0.391],[0.554,-2.823,-1.224],[-0.818,-2.825,-0.829],[0.054,-0.574,0.191],[0.048,-0.726,0.542],[-0.02,-0.842,0.0],[4.838,0.347,2.545],[-0.655,-0.322,0.906],[0.655,0.626,0.0],[1.671,-1.46,2.93],[2.954,1.09,3.39],[1.354,0.678,0.697],[1.161,0.619,0.792],[1.107,-1.431,3.198],[0.917,-0.229,0.0],[0.882,-0.394,0.263],[0.927,0.775,1.165],[0.854,1.417,0.986],[0.654,-0.474,-0.794],[2.059,2.451,2.0],[0.766,0.0,0.508],[1.275,0.798,1.619],[1.229,-1.596,1.067],[0.896,0.0,0.358],[1.035,0.0,1.413],[0.774,-0.418,-0.216],[0.116,0.405,0.203],[-0.04,0.0,0.634],[0.073,-0.465,1.382],[0.056,1.14,0.285],[-0.003,-0.33,0.0],[0.805,-1.377,1.42],[0.772,0.352,0.725],[0.242,-0.928,-0.187],[0.147,0.09,0.179],[-0.226,2.92,-0.699],[-0.362,0.32,0.155],[-0.252,0.216,0.0],[0.002,0.0,0.926],[0.027,-0.64,-0.499],[0.56,1.191,0.803],[1.282,1.33,2.778],[-0.015,-0.174,0.69],[-0.459,1.127,-0.929],[-0.293,-1.406,-0.908],[-0.129,0.482,-0.118],[-0.096,0.92,0.515],[0.979,3.209,0.348],[0.246,0.931,1.648],[0.342,-0.67,-0.135],[0.423,2.725,1.581],[-0.595,-0.536,-4.061],[-0.152,1.127,0.1],[0.059,1.111,0.817],[0.369,1.049,1.056],[-0.042,0.907,1.786],[0.265,-0.958,0.274],[0.276,-0.784,0.314],[0.386,0.0,0.09],[1.658,0.707,2.92],[0.733,-1.258,0.319],[0.712,-1.316,0.216],[0.498,0.0,0.0],[0.578,-0.386,-0.64],[0.796,-1.239,1.235],[0.168,-0.811,0.405],[0.806,-1.581,1.19],[0.319,-1.093,1.33],[0.445,-0.174,-0.175],[0.873,-0.629,1.127],[0.508,-0.778,-1.406],[0.768,-0.948,0.482],[0.952,0.257,0.92],[1.371,-0.984,3.209],[0.93,-0.741,0.931],[0.12,-0.816,-0.67],[2.079,0.0,2.725],[0.811,0.794,-0.536],[1.278,-0.399,1.127],[0.795,0.0,1.111],[1.185,0.0,1.049],[1.199,-0.356,0.907],[-0.725,-1.3,-1.603],[-0.725,-1.359,-1.651],[-0.493,-0.723,-1.167],[-0.492,-2.847,-2.456],[-0.848,-0.164,-1.766],[-0.496,-2.709,-2.439],[-0.333,-0.467,-0.474],[-0.628,-2.101,-3.265],[-1.697,-2.916,-3.621],[-0.426,-0.348,-0.862],[-0.574,-0.322,-1.27],[-0.525,-1.613,-1.757],[-0.457,-1.474,-2.673],[-0.696,-0.665,-2.574],[-0.591,-3.146,-2.244],[-0.494,-2.281,-2.026],[-0.281,0.0,-0.672],[-0.491,-3.071,-2.515],[-0.314,-2.426,-1.622],[-0.905,-1.677,-2.533],[-0.495,-1.989,-2.235],[-0.926,-1.418,-2.381],[-0.907,-2.93,-1.94]];
+
+function scatter(id,yi,color,ylabel){
+  const W=420,H=340,m={l:46,r:12,t:12,b:40},pw=W-m.l-m.r,ph=H-m.t-m.b;
+  const lim=5, x=v=>m.l+(Math.max(-lim,Math.min(lim,v))+lim)/(2*lim)*pw, y=v=>m.t+ph-(Math.max(-lim,Math.min(lim,v))+lim)/(2*lim)*ph;
+  const s=svg(W,H);
+  [-4,-2,0,2,4].forEach(v=>{
+    s.appendChild(el('line',{x1:x(v),x2:x(v),y1:m.t,y2:m.t+ph,class:v===0?'axis':'grid'}));
+    s.appendChild(el('line',{y1:y(v),y2:y(v),x1:m.l,x2:m.l+pw,class:v===0?'axis':'grid'}));
+    s.appendChild(el('text',{x:x(v),y:H-22,'text-anchor':'middle',class:'num'},(v>0?'+':'')+v+'%'));
+    s.appendChild(el('text',{x:m.l-6,y:y(v)+4,'text-anchor':'end',class:'num'},(v>0?'+':'')+v+'%'));
+  });
+  s.appendChild(el('text',{x:m.l+pw/2,y:H-4,'text-anchor':'middle'},'模型預測的跳空'));
+  const yl=el('text',{x:12,y:m.t+ph/2,'text-anchor':'middle',transform:`rotate(-90 12 ${m.t+ph/2})`},ylabel);s.appendChild(yl);
+  // 對角線 y=x 當參考
+  s.appendChild(el('line',{x1:x(-lim),y1:y(-lim),x2:x(lim),y2:y(lim),class:'grid','stroke-dasharray':'0'}));
+  pts.forEach(p=>{
+    const c=el('circle',{cx:x(p[0]),cy:y(p[yi]),r:4,fill:color,'fill-opacity':.55,stroke:css('--surface'),'stroke-width':1});
+    c.addEventListener('mousemove',e=>showTip(e,`預測 ${p[0]>0?'+':''}${p[0].toFixed(2)}%  實際 ${p[yi]>0?'+':''}${p[yi].toFixed(2)}%`));
+    c.addEventListener('mouseleave',hideTip);
+    s.appendChild(c);
+  });
+  document.getElementById(id).appendChild(s);
+}
+scatter('sc1',1,css('--crit'),'目標日真實跳空');
+scatter('sc2',2,css('--model'),'預測當天已發生的跳空');
+
+// ── 水平配對長條：通用 ──────────────────────────────────────
+function pairedBars(id,rows,opts){
+  // rows: {label, a, b, extra?}  a=模型 b=基準；opts.max, opts.fmt, opts.marker (offline)
+  const W=560,rowH=opts.rowH||46,m={l:opts.left||120,r:56,t:8,b:28},H=m.t+rows.length*rowH+m.b,pw=W-m.l-m.r;
+  const x=v=>m.l+v/opts.max*pw;
+  const s=svg(W,H);
+  opts.ticks.forEach(v=>{s.appendChild(el('line',{x1:x(v),x2:x(v),y1:m.t,y2:H-m.b,class:v===0?'axis':'grid'}));
+    s.appendChild(el('text',{x:x(v),y:H-8,'text-anchor':'middle',class:'num'},opts.fmt(v)));});
+  if(opts.ref!=null){s.appendChild(el('line',{x1:x(opts.ref),x2:x(opts.ref),y1:m.t,y2:H-m.b,stroke:css('--ink-3'),'stroke-dasharray':'4 3'}));}
+  rows.forEach((r,i)=>{
+    const y0=m.t+i*rowH, bh=(rowH-14)/2-1;
+    s.appendChild(el('text',{x:m.l-10,y:y0+rowH/2+4,'text-anchor':'end',class:'lab'},r.label));
+    const bars=[[r.a,css('--model'),y0+6,r.ta],[r.b,css('--base'),y0+6+bh+2,r.tb]];
+    bars.forEach(([v,col,yy,t])=>{
+      if(v==null)return;
+      const b=el('rect',{x:x(0),y:yy,width:Math.max(0,x(v)-x(0)),height:bh,fill:col,rx:0});
+      b.addEventListener('mousemove',e=>showTip(e,t));b.addEventListener('mouseleave',hideTip);
+      s.appendChild(b);
+      s.appendChild(el('text',{x:x(v)+6,y:yy+bh/2+4,class:'num'},opts.fmt(v)));
+    });
+    if(opts.marker&&r.m!=null){
+      const cx=x(r.m),cy=y0+6+bh/2;
+      const t=el('path',{d:`M${cx} ${cy-6} L${cx+6} ${cy+5} L${cx-6} ${cy+5} Z`,fill:css('--surface'),stroke:css('--model'),'stroke-width':1.5});
+      t.addEventListener('mousemove',e=>showTip(e,`離線走查 ${opts.fmt(r.m)}`));t.addEventListener('mouseleave',hideTip);
+      s.appendChild(t);
+    }
+  });
+  document.getElementById(id).appendChild(s);
+}
+pairedBars('bar1',[
+  {label:'週振幅 v2',a:0.700,b:0.668,m:0.649,ta:'模型 0.700（n=204）',tb:'歷史中位數 0.668'},
+  {label:'波動率 v2',a:0.708,b:0.676,m:0.606,ta:'模型 0.708（n=101）',tb:'EWMA 0.676'},
+  {label:'成交量 v1',a:0.417,b:0.238,m:0.482,ta:'模型 0.417（n=153）',tb:'量能持續 0.238'},
+],{max:0.8,ticks:[0,0.2,0.4,0.6,0.8],fmt:v=>v.toFixed(2),marker:true,left:96,rowH:52});
+
+const lstm=[
+  ['m05_cnn_lstm',3.60,3.81,56,.839],['m07_seq2seq',3.69,3.81,56,.893],['m01_vanilla',3.71,3.81,56,.821],
+  ['m02_stacked',4.17,3.73,63,.873],['m10_ensemble',4.27,3.30,70,.886],['m08_mc_dropout',4.40,3.81,56,.839],
+  ['m09_technical',4.47,3.81,56,.804],['m04_attention',4.71,3.81,56,.839],['m06_multifeature',5.06,3.81,56,.786],['m03_bidirectional',6.99,3.81,56,.679]];
+pairedBars('bar2',lstm.map(r=>({label:r[0],a:r[1],b:r[2],ta:`${r[0]} MAPE ${r[1].toFixed(2)}%（${r[3]} 點）`,tb:`天真基準 ${r[2].toFixed(2)}%`})),
+  {max:8,ticks:[0,2,4,6,8],fmt:v=>v.toFixed(1)+'%',left:118,rowH:34});
+const tb=document.getElementById('tb2');
+lstm.forEach(r=>{const tr=document.createElement('tr');tr.innerHTML=`<td>${r[0]}</td><td class="n">${r[3]}</td><td class="n">${r[1].toFixed(2)}%</td><td class="n">${r[2].toFixed(2)}%</td><td class="n">${(r[4]*100).toFixed(1)}%</td>`;tb.appendChild(tr);});
+
+// ── IMPR-001：單序列直條 ────────────────────────────────────
+(function(){
+  const rows=[['R0 原版',46.9],['R1 log return',47.4],['R2 +十特徵',46.6],['R3 +z-score',49.7],['R4 +DA 早停',48.9],['R6 動態集成',47.5]];
+  const W=420,H=300,m={l:40,r:10,t:14,b:64},pw=W-m.l-m.r,ph=H-m.t-m.b,lo=40,hi=60;
+  const y=v=>m.t+ph-(v-lo)/(hi-lo)*ph, bw=pw/rows.length;
+  const s=svg(W,H);
+  [40,45,50,55,60].forEach(v=>{s.appendChild(el('line',{x1:m.l,x2:m.l+pw,y1:y(v),y2:y(v),class:v===lo?'axis':'grid'}));
+    s.appendChild(el('text',{x:m.l-6,y:y(v)+4,'text-anchor':'end',class:'num'},v+'%'));});
+  s.appendChild(el('line',{x1:m.l,x2:m.l+pw,y1:y(51),y2:y(51),stroke:css('--ink-3'),'stroke-dasharray':'4 3'}));
+  s.appendChild(el('text',{x:m.l+pw-2,y:y(51)-5,'text-anchor':'end'},'部署門檻 51%'));
+  s.appendChild(el('line',{x1:m.l,x2:m.l+pw,y1:y(50),y2:y(50),stroke:css('--ink-3'),'stroke-opacity':.5}));
+  s.appendChild(el('text',{x:m.l+4,y:y(50)+14},'擲銅板 50%'));
+  rows.forEach((r,i)=>{
+    const x0=m.l+i*bw+bw*0.22,w=bw*0.56;
+    const b=el('rect',{x:x0,y:y(r[1]),width:w,height:y(lo)-y(r[1]),fill:css('--model')});
+    b.addEventListener('mousemove',e=>showTip(e,`${r[0]}：${r[1].toFixed(1)}%`));b.addEventListener('mouseleave',hideTip);
+    s.appendChild(b);
+    s.appendChild(el('text',{x:x0+w/2,y:y(r[1])-6,'text-anchor':'middle',class:'num'},r[1].toFixed(1)));
+    const parts=r[0].split(' ');
+    s.appendChild(el('text',{x:x0+w/2,y:H-m.b+18,'text-anchor':'middle',class:'lab'},parts[0]));
+    s.appendChild(el('text',{x:x0+w/2,y:H-m.b+34,'text-anchor':'middle'},parts.slice(1).join(' ')));
+  });
+  document.getElementById('bar3').appendChild(s);
+})();
+})();
+</script>

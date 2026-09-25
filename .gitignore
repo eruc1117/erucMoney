@@ -1,0 +1,39 @@
+# Node
+node_modules/
+dist/
+Server/.jwt_secret
+Server/.env
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.egg-info/
+
+# ML 產出物（大檔，不進版控）
+LSTM/saved_models/
+LSTM/results/
+LSTM/report/
+XGBoost/saved_models/
+XGBoost/results/
+RandomForest/saved_models/
+"Graph Model"/saved_models/
+
+# 暫存 / 除錯
+crawl_debug.log
+yahoo_raw.html
+*.tmp
+
+# 環境設定
+.env
+.env.local
+Screen/.ui-shots/
+
+# 排程器日誌（Iteration 36）
+Crawler/logs/

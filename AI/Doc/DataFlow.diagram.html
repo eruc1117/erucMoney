@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>台股預測系統資料流</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #F3F5F7; --surface: #FFFFFF; --surface-2: #E9EDF1;
+    --ink: #17212B; --ink-2: #4F5D6B; --ink-3: #7B8794; --rule: #CBD3DB;
+    --src: #B7791F; --src-soft: #FBF1DC;
+    --crawl: #2F7D4F; --crawl-soft: #E3F1E7;
+    --db: #1B5E8F; --db-soft: #E0EAF4;
+    --feat: #7C3AED; --feat-soft: #EEE6FB;
+    --model: #B7352B; --model-soft: #F8E4E1;
+    --new: #0E6E5E; --new-soft: #DCEFEA;
+    --sans: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0F161D; --surface: #17212B; --surface-2: #1F2B37;
+      --ink: #E3E9EF; --ink-2: #A3B0BC; --ink-3: #74828F; --rule: #2E3B48;
+      --src: #E0A94A; --src-soft: #2E2616;
+      --crawl: #5FC08A; --crawl-soft: #15291D;
+      --db: #6FA8E8; --db-soft: #16273A;
+      --feat: #B693F5; --feat-soft: #241B38;
+      --model: #EF7F73; --model-soft: #2F1B18;
+      --new: #59C2AC; --new-soft: #14302B;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0F161D; --surface: #17212B; --surface-2: #1F2B37;
+    --ink: #E3E9EF; --ink-2: #A3B0BC; --ink-3: #74828F; --rule: #2E3B48;
+    --src: #E0A94A; --src-soft: #2E2616;
+    --crawl: #5FC08A; --crawl-soft: #15291D;
+    --db: #6FA8E8; --db-soft: #16273A;
+    --feat: #B693F5; --feat-soft: #241B38;
+    --model: #EF7F73; --model-soft: #2F1B18;
+    --new: #59C2AC; --new-soft: #14302B;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.7; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 64px; }
+  .kicker { font-family: var(--mono); font-size: 11.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--db); margin: 0 0 10px; }
+  h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.25; margin: 0 0 10px; text-wrap: balance; font-weight: 700; }
+  .lede { color: var(--ink-2); max-width: 70ch; margin: 0 0 28px; }
+  h2 { font-size: 20px; margin: 44px 0 8px; }
+  p { max-width: 72ch; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--surface-2); border-radius: 3px; padding: 1px 5px; }
+  figure { margin: 0; border: 1px solid var(--rule); background: var(--surface); }
+  .fig-body { overflow-x: auto; padding: 14px 12px 4px; }
+  figure svg { display: block; width: 100%; height: auto; font-family: var(--sans); }
+  figure svg text { font-size: 12px; fill: var(--ink); }
+  figure svg text.m { font-family: var(--mono); font-size: 11px; }
+  figure svg text.lbl { font-size: 11px; fill: var(--ink-2); }
+  figure svg text.h { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; fill: var(--ink-3); }
+  figure svg .node { stroke-width: 1.4; }
+  figure svg .edge { fill: none; stroke: currentColor; stroke-width: 1.5; }
+  figure svg .edge.new { stroke: var(--new); }
+  figure svg .edge.sched { stroke-dasharray: 5 4; }
+  figcaption { border-top: 1px solid var(--rule); background: var(--surface-2); padding: 10px 16px; font-size: 13px; color: var(--ink-2); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 12.5px; color: var(--ink-2); margin: 10px 0 0; }
+  .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1.4px solid; }
+  .tscroll { overflow-x: auto; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; background: var(--surface-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.m { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .note { border-left: 3px solid var(--new); background: var(--new-soft); padding: 12px 16px; margin: 18px 0 0; max-width: 72ch; font-size: 14px; }
+  @media (max-width: 680px) { .wrap { padding-block: 28px 48px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Data Flow · 2026-09-23 · Iteration 39</p>
+  <h1>台股預測系統資料流</h1>
+  <p class="lede">六個外部來源 → 十七支採集腳本 → PostgreSQL 二十九張表 → 對齊與特徵 → 模型、事件研究與前端。
+  箭頭上的字是搬動資料的腳本；綠色是本迭代新增的路徑（月營收公布時點、研究股、MOPS 規則分類）。</p>
+
+  <!-- ══════════ 圖一：整體資料流 ══════════ -->
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 1380 720" role="img" aria-label="整體資料流：外部來源經採集腳本寫入 PostgreSQL，再經對齊與特徵模組供模型、事件研究與前端使用">
+        <defs>
+          <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path>
+          </marker>
+          <marker id="arn" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L8,4 L0,8 z" fill="var(--new)"></path>
+          </marker>
+        </defs>
+
+        <!-- 欄標題 -->
+        <text class="h" x="20" y="22">① 外部來源</text>
+        <text class="h" x="300" y="22">② 採集 Crawler/</text>
+        <text class="h" x="580" y="22">③ PostgreSQL 表</text>
+        <text class="h" x="860" y="22">④ 對齊與特徵</text>
+        <text class="h" x="1140" y="22">⑤ 使用端</text>
+
+        <!-- ① 來源 -->
+        <g fill="var(--src-soft)" stroke="var(--src)">
+          <rect class="node" x="20" y="40" width="210" height="46" rx="4"></rect>
+          <rect class="node" x="20" y="120" width="210" height="46" rx="4"></rect>
+          <rect class="node" x="20" y="200" width="210" height="46" rx="4"></rect>
+          <rect class="node" x="20" y="280" width="210" height="46" rx="4"></rect>
+          <rect class="node" x="20" y="360" width="210" height="46" rx="4"></rect>
+          <rect class="node" x="20" y="600" width="210" height="46" rx="4"></rect>
+        </g>
+        <text x="125" y="59" text-anchor="middle" font-weight="700">FinMind API</text>
+        <text class="lbl" x="125" y="76" text-anchor="middle">行情、籌碼、持股、月營收、期貨</text>
+        <text x="125" y="139" text-anchor="middle" font-weight="700">yfinance</text>
+        <text class="lbl" x="125" y="156" text-anchor="middle">美股 23 檔、KOSPI／Nikkei</text>
+        <text x="125" y="219" text-anchor="middle" font-weight="700">鉅亨網 JSON API</text>
+        <text class="lbl" x="125" y="236" text-anchor="middle">tw_stock／us_stock／headline／tw_revenue</text>
+        <text x="125" y="299" text-anchor="middle" font-weight="700">公開 RSS</text>
+        <text class="lbl" x="125" y="316" text-anchor="middle">中央社、經濟日報、自由、BBC、Yahoo 個股</text>
+        <text x="125" y="379" text-anchor="middle" font-weight="700">MOPS 公開資訊觀測站</text>
+        <text class="lbl" x="125" y="396" text-anchor="middle">重大訊息（mopsov 舊端點）</text>
+        <text x="125" y="619" text-anchor="middle" font-weight="700">使用者</text>
+        <text class="lbl" x="125" y="636" text-anchor="middle">手動貼新聞、交易台帳</text>
+
+        <!-- ② 採集 -->
+        <g fill="var(--crawl-soft)" stroke="var(--crawl)">
+          <rect class="node" x="300" y="40" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="300" y="120" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="300" y="200" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="300" y="280" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="300" y="360" width="220" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="300" y="440" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="300" y="520" width="220" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--crawl-soft)" stroke="var(--crawl)">
+          <rect class="node" x="300" y="600" width="220" height="46" rx="4"></rect>
+        </g>
+        <text class="m" x="410" y="59" text-anchor="middle">finmind_scraper · backfill_prices</text>
+        <text class="lbl" x="410" y="76" text-anchor="middle">18:00 近 7 天增量；1992 起全史回補</text>
+        <text class="m" x="410" y="139" text-anchor="middle">backfill_us · futures · index</text>
+        <text class="lbl" x="410" y="156" text-anchor="middle">06:10／19:10 兩次增量</text>
+        <text class="m" x="410" y="219" text-anchor="middle">backfill_news · rss_news_scraper</text>
+        <text class="lbl" x="410" y="236" text-anchor="middle">每小時即時 + 啟動補洞；3 年回填 12 萬則</text>
+        <text class="m" x="410" y="299" text-anchor="middle">rss_news_scraper（RSS 分支）</text>
+        <text class="lbl" x="410" y="316" text-anchor="middle">抓原文頁、財金關鍵字過濾</text>
+        <text class="m" x="410" y="379" text-anchor="middle">backfill_mops</text>
+        <text class="lbl" x="410" y="396" text-anchor="middle">26 檔 × 37 月，6,574 則</text>
+        <text class="m" x="410" y="459" text-anchor="middle">backfill_revenue_dates</text>
+        <text class="lbl" x="410" y="476" text-anchor="middle">公布時點六來源合成（秒／日）</text>
+        <text class="m" x="410" y="539" text-anchor="middle">research_universe</text>
+        <text class="lbl" x="410" y="556" text-anchor="middle">159 檔研究股價格＋營收</text>
+        <text class="m" x="410" y="619" text-anchor="middle">Server/routes/news · holdings</text>
+        <text class="lbl" x="410" y="636" text-anchor="middle">Node.js 直寫</text>
+
+        <!-- ③ 表 -->
+        <g fill="var(--db-soft)" stroke="var(--db)">
+          <rect class="node" x="580" y="40" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="580" y="120" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="580" y="200" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="580" y="280" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="580" y="360" width="230" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="580" y="440" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="580" y="520" width="230" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--db-soft)" stroke="var(--db)">
+          <rect class="node" x="580" y="600" width="230" height="46" rx="4"></rect>
+        </g>
+        <text class="m" x="695" y="59" text-anchor="middle">stock_daily_prices</text>
+        <text class="lbl" x="695" y="76" text-anchor="middle">+ chip／foreign_holding／dividend／capital</text>
+        <text class="m" x="695" y="139" text-anchor="middle">us_daily_prices · futures_daily</text>
+        <text class="lbl" x="695" y="156" text-anchor="middle">index_daily_prices</text>
+        <text class="m" x="695" y="219" text-anchor="middle">news_crawl_raw → user_news</text>
+        <text class="lbl" x="695" y="236" text-anchor="middle">117,891 則、tier／scope／去重群</text>
+        <text class="m" x="695" y="299" text-anchor="middle">news_price_link · news_daily_features</text>
+        <text class="lbl" x="695" y="316" text-anchor="middle">instrument_alias · trading_calendar</text>
+        <text class="m" x="695" y="379" text-anchor="middle">news_llm_feature</text>
+        <text class="lbl" x="695" y="396" text-anchor="middle">LLM 抽取 + rule_mops_v1 規則分類</text>
+        <text class="m" x="695" y="459" text-anchor="middle">stock_revenue_announce</text>
+        <text class="lbl" x="695" y="476" text-anchor="middle">營收 + announce_ts／source</text>
+        <text class="m" x="695" y="539" text-anchor="middle">research_daily_prices</text>
+        <text class="lbl" x="695" y="556" text-anchor="middle">研究股，不進追蹤股清單</text>
+        <text class="m" x="695" y="619" text-anchor="middle">model_predictions · voting_results</text>
+        <text class="lbl" x="695" y="636" text-anchor="middle">weekly_forecasts · user_trades</text>
+
+        <!-- ④ 對齊與特徵 -->
+        <g fill="var(--feat-soft)" stroke="var(--feat)">
+          <rect class="node" x="860" y="40" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="860" y="120" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="860" y="200" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="860" y="280" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="860" y="600" width="230" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="860" y="400" width="230" height="46" rx="4"></rect>
+          <rect class="node" x="860" y="480" width="230" height="46" rx="4"></rect>
+        </g>
+        <text class="m" x="975" y="59" text-anchor="middle">rebuild_adj_close</text>
+        <text class="lbl" x="975" y="76" text-anchor="middle">除權息＋減資還原</text>
+        <text class="m" x="975" y="139" text-anchor="middle">night · intl · futures_extra</text>
+        <text class="lbl" x="975" y="156" text-anchor="middle">夜盤、韓日、未平倉特徵</text>
+        <text class="m" x="975" y="219" text-anchor="middle">news_sources → dedup → alias → align</text>
+        <text class="lbl" x="975" y="236" text-anchor="middle">SimHash 去重、別名標記、13:30 對齊</text>
+        <text class="m" x="975" y="299" text-anchor="middle">news_pilot（claude -p）</text>
+        <text class="lbl" x="975" y="316" text-anchor="middle">event_type／direction／is_expected</text>
+        <text class="m" x="975" y="419" text-anchor="middle">mops_event_study 規則分類</text>
+        <text class="lbl" x="975" y="436" text-anchor="middle">22 類、例行／非例行</text>
+        <text class="m" x="975" y="499" text-anchor="middle">revenue_event_study</text>
+        <text class="lbl" x="975" y="516" text-anchor="middle">SUE 五分組、日曆時間 t、漲跌停</text>
+        <text class="m" x="975" y="619" text-anchor="middle">UnifiedModel/panel.py</text>
+        <text class="lbl" x="975" y="636" text-anchor="middle">宣告式區塊 align()，54 特徵</text>
+
+        <!-- ⑤ 使用端 -->
+        <g fill="var(--model-soft)" stroke="var(--model)">
+          <rect class="node" x="1140" y="40" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="1140" y="200" width="220" height="46" rx="4"></rect>
+          <rect class="node" x="1140" y="600" width="220" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--new-soft)" stroke="var(--new)">
+          <rect class="node" x="1140" y="440" width="220" height="46" rx="4"></rect>
+        </g>
+        <g fill="var(--surface-2)" stroke="var(--ink-3)">
+          <rect class="node" x="1140" y="320" width="220" height="46" rx="4"></rect>
+        </g>
+        <text x="1250" y="59" text-anchor="middle" font-weight="700">LSTM/ serve.py :8001</text>
+        <text class="lbl" x="1250" y="76" text-anchor="middle">M01～M10 台股／美股路徑</text>
+        <text x="1250" y="219" text-anchor="middle" font-weight="700">M2 新聞模型 · train_m2</text>
+        <text class="lbl" x="1250" y="236" text-anchor="middle">每季 walk-forward，13 特徵</text>
+        <text x="1250" y="339" text-anchor="middle" font-weight="700">news_event_study</text>
+        <text class="lbl" x="1250" y="356" text-anchor="middle">媒體新聞 AR（Iteration 38）</text>
+        <text x="1250" y="459" text-anchor="middle" font-weight="700">AI/Doc/*EventStudy.md</text>
+        <text class="lbl" x="1250" y="476" text-anchor="middle">Revenue／Mops／News 三份報告</text>
+        <text x="1250" y="619" text-anchor="middle" font-weight="700">閘門／M3／投票 → 前端</text>
+        <text class="lbl" x="1250" y="636" text-anchor="middle">FastAPI :8000 → Node :3001 → React</text>
+
+        <!-- 邊：① → ② -->
+        <path class="edge" d="M230,63 L300,63" marker-end="url(#ar)"></path>
+        <path class="edge" d="M230,143 L300,143" marker-end="url(#ar)"></path>
+        <path class="edge" d="M230,223 L300,223" marker-end="url(#ar)"></path>
+        <path class="edge" d="M230,303 L300,303" marker-end="url(#ar)"></path>
+        <path class="edge" d="M230,383 L300,383" marker-end="url(#ar)"></path>
+        <path class="edge" d="M230,623 L300,623" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M230,86 C 260,86 260,463 300,463" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M230,246 C 265,246 265,455 300,455" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M230,72 C 270,72 270,543 300,543" marker-end="url(#arn)"></path>
+        <text class="lbl" x="265" y="52" text-anchor="middle">SDK／REST</text>
+        <text class="lbl" x="265" y="212" text-anchor="middle">分頁 API</text>
+
+        <!-- 邊：② → ③ -->
+        <path class="edge" d="M520,63 L580,63" marker-end="url(#ar)"></path>
+        <path class="edge" d="M520,143 L580,143" marker-end="url(#ar)"></path>
+        <path class="edge" d="M520,223 L580,223" marker-end="url(#ar)"></path>
+        <path class="edge" d="M520,303 C 550,303 550,223 580,223" marker-end="url(#ar)"></path>
+        <path class="edge" d="M520,383 C 550,383 550,233 580,233" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M520,463 L580,463" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M520,543 L580,543" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M520,553 C 550,553 550,473 580,473" marker-end="url(#arn)"></path>
+        <path class="edge" d="M520,623 C 550,623 550,240 580,240" marker-end="url(#ar)"></path>
+        <text class="lbl" x="550" y="52" text-anchor="middle">UPSERT</text>
+        <text class="lbl" x="550" y="212" text-anchor="middle">標題＋日期判重</text>
+
+        <!-- 邊：③ → ④ -->
+        <path class="edge" d="M810,63 L860,63" marker-end="url(#ar)"></path>
+        <path class="edge" d="M860,72 C 835,72 835,80 810,80" marker-end="url(#ar)"></path>
+        <path class="edge" d="M810,143 L860,143" marker-end="url(#ar)"></path>
+        <path class="edge" d="M810,223 L860,223" marker-end="url(#ar)"></path>
+        <path class="edge" d="M860,233 C 835,233 835,303 810,303" marker-end="url(#ar)"></path>
+        <path class="edge" d="M810,213 C 840,213 840,303 860,303" marker-end="url(#ar)"></path>
+        <path class="edge" d="M860,313 C 835,313 835,383 810,383" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M810,240 C 840,240 840,423 860,423" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M860,433 C 838,433 838,390 810,390" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M810,463 C 840,463 840,503 860,503" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M810,543 C 840,543 840,513 860,513" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M810,72 C 845,72 845,493 860,493" marker-end="url(#arn)"></path>
+        <path class="edge" d="M810,52 C 845,52 845,613 860,613" marker-end="url(#ar)"></path>
+        <path class="edge" d="M810,152 C 848,152 848,623 860,623" marker-end="url(#ar)"></path>
+        <path class="edge" d="M810,296 C 850,296 850,633 860,633" marker-end="url(#ar)"></path>
+        <text class="lbl" x="835" y="52" text-anchor="middle">讀</text>
+        <text class="lbl" x="835" y="98" text-anchor="middle">寫回 adj_close</text>
+        <text class="lbl" x="835" y="212" text-anchor="middle">MOPS 主旨</text>
+        <text class="lbl" x="835" y="405" text-anchor="middle">寫 rule_mops_v1</text>
+
+        <!-- 邊：④ → ⑤ -->
+        <path class="edge" d="M1090,63 L1140,63" marker-end="url(#ar)"></path>
+        <path class="edge" d="M1090,223 L1140,223" marker-end="url(#ar)"></path>
+        <path class="edge" d="M1090,233 C 1115,233 1115,343 1140,343" marker-end="url(#ar)"></path>
+        <path class="edge new" d="M1090,423 C 1115,423 1115,453 1140,453" marker-end="url(#arn)"></path>
+        <path class="edge new" d="M1090,503 C 1115,503 1115,470 1140,470" marker-end="url(#arn)"></path>
+        <path class="edge" d="M1140,355 C 1120,355 1120,462 1140,462" marker-end="url(#ar)"></path>
+        <path class="edge" d="M1090,623 L1140,623" marker-end="url(#ar)"></path>
+        <path class="edge" d="M1090,213 C 1120,213 1120,606 1140,606" marker-end="url(#ar)"></path>
+        <text class="lbl" x="1115" y="52" text-anchor="middle">序列</text>
+        <text class="lbl" x="1115" y="212" text-anchor="middle">13 特徵</text>
+        <text class="lbl" x="1115" y="612" text-anchor="middle">panel</text>
+
+        <!-- 回寫 -->
+        <path class="edge" d="M1140,640 C 1000,690 760,690 695,646" marker-end="url(#ar)"></path>
+        <text class="lbl" x="920" y="700" text-anchor="middle">預測、投票、週預測寫回台帳（20:00 / 21:00 / 週日 08:00）</text>
+      </svg>
+    </div>
+    <figcaption>圖一：資料由左向右流動。追蹤股 26 檔的行情走上排；新聞走中排（原始表 → 去重對齊 → 日級特徵 → M2）；
+    本迭代新增的綠色路徑把月營收公布時點與研究股價格接進事件研究，MOPS 公告主旨的規則分類寫進與 LLM 抽取同一張表。</figcaption>
+  </figure>
+  <div class="legend">
+    <span><i style="background:var(--src-soft);border-color:var(--src)"></i>外部來源</span>
+    <span><i style="background:var(--crawl-soft);border-color:var(--crawl)"></i>採集腳本</span>
+    <span><i style="background:var(--db-soft);border-color:var(--db)"></i>PostgreSQL 表</span>
+    <span><i style="background:var(--feat-soft);border-color:var(--feat)"></i>對齊／特徵</span>
+    <span><i style="background:var(--model-soft);border-color:var(--model)"></i>模型與服務</span>
+    <span><i style="background:var(--new-soft);border-color:var(--new)"></i>Iteration 39 新增</span>
+  </div>
+
+  <!-- ══════════ 圖二：新聞訊號研究流 ══════════ -->
+  <h2>新聞訊號研究線（方案階段 1／3／5）</h2>
+  <p>三條事件研究線共用同一套機制：找到<strong>精確時間戳</strong>、依 13:30 收盤規則對齊交易日、
+  用等權基準算異常報酬、用日曆時間投資組合處理同日叢集。差別只在事件從哪裡來、意外程度怎麼定義。</p>
+  <figure>
+    <div class="fig-body">
+      <svg viewBox="0 0 1180 400" role="img" aria-label="新聞訊號研究線：月營收、MOPS 公告與媒體新聞三條事件來源，各自對齊交易日後進入同一套異常報酬與統計流程">
+        <defs>
+          <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+            <path d="M0,0 L8,4 L0,8 z" fill="currentColor"></path>
+          </marker>
+        </defs>
+        <text class="h" x="20" y="22">事件來源</text>
+        <text class="h" x="330" y="22">事件表</text>
+        <text class="h" x="620" y="22">對齊與異常報酬</text>
+        <text class="h" x="920" y="22">關卡</text>
+
+        <!-- 來源 -->
+        <g fill="var(--src-soft)" stroke="var(--src)">
+          <rect class="node" x="20" y="40" width="260" height="58" rx="4"></rect>
+          <rect class="node" x="20" y="120" width="260" height="58" rx="4"></rect>
+          <rect class="node" x="20" y="200" width="260" height="58" rx="4"></rect>
+          <rect class="node" x="20" y="280" width="260" height="58" rx="4"></rect>
+        </g>
+        <text x="30" y="60" font-weight="700">階段 1・月營收（排程型）</text>
+        <text class="lbl" x="30" y="78">FinMind 營收數字；公布時點：MOPS 公告、鉅亨</text>
+        <text class="lbl" x="30" y="92">營收速報、媒體標題、FinMind、每日一覽、估計</text>
+        <text x="30" y="140" font-weight="700">階段 3・MOPS 重大訊息（公告型）</text>
+        <text class="lbl" x="30" y="158">6,137 則主旨 → 正則 22 類</text>
+        <text class="lbl" x="30" y="172">例行 76%／非例行 24%</text>
+        <text x="30" y="220" font-weight="700">階段 5・媒體報導（內生性高）</text>
+        <text class="lbl" x="30" y="238">鉅亨、RSS 11 萬則；字典情緒 → 五分組</text>
+        <text class="lbl" x="30" y="252">LLM 抽取 297 則試跑通過</text>
+        <text x="30" y="300" font-weight="700">研究股池（擴池）</text>
+        <text class="lbl" x="30" y="318">鉅亨營收速報 ≥ 12 個月的 159 檔</text>
+        <text class="lbl" x="30" y="332">價格另存 research_daily_prices</text>
+
+        <!-- 事件表 -->
+        <g fill="var(--db-soft)" stroke="var(--db)">
+          <rect class="node" x="330" y="40" width="240" height="58" rx="4"></rect>
+          <rect class="node" x="330" y="120" width="240" height="58" rx="4"></rect>
+          <rect class="node" x="330" y="200" width="240" height="58" rx="4"></rect>
+        </g>
+        <text class="m" x="450" y="62" text-anchor="middle">stock_revenue_announce</text>
+        <text class="lbl" x="450" y="80" text-anchor="middle">announce_ts／source 優先序；SUE = surprise ÷ σ₂₄</text>
+        <text class="m" x="450" y="142" text-anchor="middle">news_llm_feature（rule_mops_v1）</text>
+        <text class="lbl" x="450" y="160" text-anchor="middle">event_type、is_expected</text>
+        <text class="m" x="450" y="222" text-anchor="middle">news_price_link · news_daily_features</text>
+        <text class="lbl" x="450" y="240" text-anchor="middle">effective_date、本股／全市場情緒</text>
+
+        <!-- 對齊與 AR -->
+        <g fill="var(--feat-soft)" stroke="var(--feat)">
+          <rect class="node" x="620" y="40" width="260" height="218" rx="4"></rect>
+        </g>
+        <text x="750" y="66" text-anchor="middle" font-weight="700">同一套機制</text>
+        <text class="lbl" x="636" y="92">1. 13:30 前歸當日、否則下一交易日</text>
+        <text class="lbl" x="636" y="112">　（只有日期 → 視為收盤後，實測 93~97%）</text>
+        <text class="lbl" x="636" y="136">2. AR = 個股 − 股票池等權均值</text>
+        <text class="lbl" x="636" y="156">　（0050 由台積電主導，會造成共同負漂移）</text>
+        <text class="lbl" x="636" y="180">3. |AR| ÷ 該股自身無事件日基準</text>
+        <text class="lbl" x="636" y="204">4. 日曆時間投資組合 t（同日叢集）</text>
+        <text class="lbl" x="636" y="224">5. 同股同類 21 日內視窗不重疊</text>
+        <text class="lbl" x="636" y="244">6. 鎖漲跌停另計；月份固定效果迴歸</text>
+
+        <!-- 關卡 -->
+        <g fill="var(--model-soft)" stroke="var(--model)">
+          <rect class="node" x="920" y="40" width="240" height="40" rx="4"></rect>
+          <rect class="node" x="920" y="92" width="240" height="40" rx="4"></rect>
+          <rect class="node" x="920" y="144" width="240" height="40" rx="4"></rect>
+          <rect class="node" x="920" y="196" width="240" height="40" rx="4"></rect>
+          <rect class="node" x="920" y="248" width="240" height="40" rx="4"></rect>
+        </g>
+        <text class="m" x="932" y="65">N0</text><text x="962" y="65">時間戳可信？來源分布、對齊檢查</text>
+        <text class="m" x="932" y="117">N1</text><text x="962" y="117">t+1 後仍有漂移？CAR[1,20]</text>
+        <text class="m" x="932" y="169">N2</text><text x="962" y="169">控制動能／成交量後有增量？</text>
+        <text class="m" x="932" y="221">N3</text><text x="962" y="221">剔除鎖漲跌停後仍在？</text>
+        <text class="m" x="932" y="273">N4</text><text x="962" y="273">扣成本後仍在？（未做）</text>
+
+        <!-- 結果列 -->
+        <g fill="var(--surface-2)" stroke="var(--ink-3)">
+          <rect class="node" x="330" y="300" width="830" height="80" rx="4"></rect>
+        </g>
+        <text x="345" y="322" font-weight="700">目前結果（2026-09-23）</text>
+        <text class="lbl" x="345" y="342">月營收 181 檔：SUE 分組 N1／N2 不通過；但公布日反應預測漂移（CAR[1,20] 對 AR₀ β +0.41，t +4.0）、YoY 極端值反轉；來源選樣於「年增率高」</text>
+        <text class="lbl" x="345" y="360">MOPS：季報 |AR₀| ×1.48、資本支出 ×1.31、注意交易 ×2.3（內生）；例行 +0.18%、非例行 −0.32%（t 0.5／−0.7）→ 波動訊號、無漂移</text>
+        <text class="lbl" x="345" y="378">媒體：正面 +0.16%（t +4.2）、負面 −0.28%（t −3.2）、|AR₀| ×1.34；M2 走查 F1 +0.014、出手報酬 +0.08%/筆（未部署）</text>
+
+        <!-- 邊 -->
+        <path class="edge" d="M280,69 L330,69" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M280,149 L330,149" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M280,229 L330,229" marker-end="url(#ar2)"></path>
+        <path class="edge new" d="M280,309 C 305,309 305,85 330,85" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M570,69 L620,69" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M570,149 L620,149" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M570,229 L620,229" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M880,80 L920,80" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M880,132 L920,132" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M880,184 L920,184" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M880,236 L920,236" marker-end="url(#ar2)"></path>
+        <path class="edge" d="M1040,288 L1040,300" marker-end="url(#ar2)"></path>
+        <text class="lbl" x="305" y="60" text-anchor="middle">事件</text>
+        <text class="lbl" x="595" y="60" text-anchor="middle">t=0</text>
+        <text class="lbl" x="900" y="70" text-anchor="middle">報告</text>
+      </svg>
+    </div>
+    <figcaption>圖二：三條事件來源各自產生事件表，進入同一套對齊與異常報酬機制，最後過方案的五道關卡。
+    研究股池只接到月營收線；媒體線的 LLM 特徵尚未接進 M2。</figcaption>
+  </figure>
+
+  <!-- ══════════ 排程 ══════════ -->
+  <h2>誰在什麼時候搬資料</h2>
+  <div class="tscroll">
+    <table>
+      <thead><tr><th>時間</th><th>腳本</th><th>從 → 到</th><th>備註</th></tr></thead>
+      <tbody>
+        <tr><td class="m">每小時 :05</td><td class="m">scheduler.job_news</td><td>鉅亨 API + RSS → news_crawl_raw → user_news → news_daily_features（近 7 天）</td><td>啟動時 <code>_catch_up_news</code>：空洞 > 2 小時就用 API 補回</td></tr>
+        <tr><td class="m">06:10 / 19:10</td><td class="m">backfill_us · futures · index</td><td>FinMind／yfinance → us_daily_prices、futures_daily、index_daily_prices</td><td>夜盤與未平倉</td></tr>
+        <tr><td class="m">17:30</td><td class="m">data_freshness</td><td>檢查 stock_daily_prices 缺口 → 補齊</td><td>只取台股，市場基準日判準</td></tr>
+        <tr><td class="m">18:00</td><td class="m">finmind_scraper</td><td>FinMind → stock_daily_prices、stock_chip_analysis、stock_foreign_holding</td><td>近 7 天增量</td></tr>
+        <tr><td class="m">20:00</td><td class="m">voting_engine · us_model</td><td>panel → voting_results、model_predictions</td><td>多角色加權投票；美股跳空</td></tr>
+        <tr><td class="m">21:00</td><td class="m">resolve_predictions</td><td>行情 → 預測台帳實測回填</td><td>線上評估</td></tr>
+        <tr><td class="m">週日 08:00</td><td class="m">weekly_forecast</td><td>27 模型 × 49 檔 → weekly_forecasts</td><td>錯過則啟動補跑</td></tr>
+        <tr><td class="m">手動</td><td class="m">backfill_news · backfill_mops · backfill_revenue · backfill_revenue_dates · research_universe</td><td>歷史回填，可續跑</td><td>本迭代：營收 2013 起、公布時點 2023-09 起、研究股 2023-01 起</td></tr>
+        <tr><td class="m">手動</td><td class="m">revenue_event_study · mops_event_study · news_event_study · train_m2</td><td>表 → AI/Doc 報告、XGBoost/results</td><td>研究產出，不寫回業務表（mops 分類例外：寫 news_llm_feature）</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <strong>兩條不進業務表的邊界。</strong>研究股價格放 <code>research_daily_prices</code>，因為 LSTM、還原股價、新鮮度檢查都把 <code>stock_daily_prices</code> 的股票清單當追蹤股；
+    事件研究報告只落地到 <code>AI/Doc</code>，模型要用的只有 <code>news_llm_feature</code> 與 <code>news_daily_features</code> 兩張特徵表。
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{
+  "name": "money-dashboard",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "smoke": "node smoke.mjs",
+    "smoke:ui": "node smoke-interact.mjs",
+    "ui": "node ui-check.mjs",
+    "ui:light": "node ui-check.mjs --light"
+  },
+  "dependencies": {
+    "apexcharts": "^4.0.0",
+    "react": "^18.3.1",
+    "react-apexcharts": "^1.9.0",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^29.1.1",
+    "playwright": "^1.62.1",
+    "vite": "^5.4.0"
+  }
+}

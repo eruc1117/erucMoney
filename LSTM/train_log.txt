@@ -1,0 +1,42 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774018203.498305   22884 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1774018205.102047   22884 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+
+============================================================
+  跨股票 LSTM 訓練
+  模型：m01_vanilla, m02_stacked, m03_bidirectional, m04_attention, m05_cnn_lstm, m06_multifeature, m08_mc_dropout, m09_technical
+============================================================
+
+  [M01 Vanilla LSTM] 載入跨股票資料... WARNING:tensorflow:TensorFlow GPU support is not available on native Windows for TensorFlow >= 2.11. Even if CUDA/cuDNN are installed, GPU will not be used. Please use WSL2 or the TensorFlow-DirectML plugin.
+訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.67  RMSE=7.04  MAPE=2.20%  DA=48.1%
+
+  [M02 Stacked LSTM] 載入跨股票資料... 訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.70  RMSE=7.05  MAPE=2.23%  DA=48.1%
+
+  [M03 Bidirectional LSTM] 載入跨股票資料... 訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.69  RMSE=7.03  MAPE=2.21%  DA=48.1%
+
+  [M04 LSTM + Attention] 載入跨股票資料... WARNING:tensorflow:From C:\Users\Eric\Desktop\coding\money\LSTM\venv\lib\site-packages\keras\src\backend\tensorflow\core.py:232: The name tf.placeholder is deprecated. Please use tf.compat.v1.placeholder instead.
+
+訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.69  RMSE=7.06  MAPE=2.21%  DA=47.9%
+
+  [M05 CNN-LSTM] 載入跨股票資料... 訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.67  RMSE=6.97  MAPE=2.21%  DA=47.6%
+
+  [M06 Multi-feature LSTM] 載入跨股票資料... 訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.70  RMSE=7.13  MAPE=2.21%  DA=48.2%
+
+  [M08 MC Dropout LSTM] 載入跨股票資料... 訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.67  RMSE=7.03  MAPE=2.20%  DA=48.2%
+
+  [M09 LSTM + Technical] 載入跨股票資料... 訓練樣本=17700  驗證=3793  測試=3815
+    整體 MAE=2.70  RMSE=7.11  MAPE=2.20%  DA=48.3%
+Traceback (most recent call last):
+  File "C:\Users\Eric\Desktop\coding\money\LSTM\train_cross.py", line 183, in <module>
+    main()
+  File "C:\Users\Eric\Desktop\coding\money\LSTM\train_cross.py", line 175, in main
+    print(f"\n\u2713 摘要：{csv_path}")
+UnicodeEncodeError: 'cp950' codec can't encode character '\u2713' in position 2: illegal multibyte sequence

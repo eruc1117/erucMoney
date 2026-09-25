@@ -1,0 +1,61 @@
+﻿news_id,category,title,event_type,direction,magnitude,is_expected,affected_tickers,scope,note
+41220,TW,【台股投資週報】12檔營收創新高+配息5元以上績優股出列,other,negative,1,true,,TW,台股週報，週線收黑終止連漲，屬盤勢綜述
+26892,TW,美喆-KY現增案完成募集 繼台南投資後將赴泰國設廠,supply_chain,positive,2,false,8466,TW,美喆現增完成募集，赴泰設廠搶北美訂單
+41165,TW,動力-KY受惠泛電競訂單拉貨穩健成長 Q3獲利年增逾4成EPS 1.8元,earnings,positive,2,true,6591,TW,動力-KY Q3獲利年增逾4成，EPS 1.8元
+26920,TW,vivo V50搶攻Z世代市場奏效 首月銷量成長逾三成,product,neutral,1,true,,TW,vivo在台推新機，未上市，無股價影響
+15307,TW,兆豐銀信貸屢獲肯定 蟬連英國World Finance台灣最佳商業銀行,other,neutral,1,true,,TW,兆豐銀獲獎，屬形象新聞無實質影響
+15317,TW,〈智原法說〉Q3營收估季增1成  IP及NRE業績再拚新高,guidance,positive,2,true,3035,TW,智原法說預估Q3營收季增1成，IP及NRE業績創新高
+17632,TW,漢來美食上半年賺逾半個股本 將進行多項大型展店計畫,earnings,positive,2,true,1268,TW,漢來美食上半年EPS 6.27元創同期新高
+40726,TW,44搶13！國家藥科獎出爐：仲智數位AI檢測胰臟癌、台灣創材純化生物製劑並列金獎,other,neutral,1,true,,TW,國家藥科獎頒獎，得獎者多為未上市公司
+29220,TW,借鏡日本家族聯絡網 金管會推廣保單解約、提領通知指定家人,regulation,neutral,1,false,,TW,金管會推動保單指定聯絡人防詐機制，影響輕微
+17774,TW,〈聯詠法說〉手機備貨迎旺季 Q3營收季增1成 OLED TDDI明年量產,guidance,positive,2,true,3034,TW,聯詠預估Q3營收季增約1成，但毛利率微降
+17484,TW,〈台股盤後〉台積電漲勢略顯疲態 量縮上漲304點靠攏2萬2關卡,other,positive,1,true,,TW,台股量縮上漲304點的盤後綜述
+40778,TW,【ETF觀察】《大賣空》Burry做空AI股！00990A成關鍵布局？AI市場真的有泡沫嗎？,other,neutral,1,true,,TW,ETF行銷文，Burry做空AI為舊聞
+26549,TW,中港店部分品牌不續約 新光三越：與氣爆意外無關,other,neutral,1,true,,TW,新光三越澄清品牌不續約與氣爆無關
+40668,TW,玉晶光2025年前三季EPS 22.41元 估Q4營運動能優於去年同期,earnings,positive,2,true,3406,TW,玉晶光Q3 EPS 12.54元，看好Q4與明年
+29136,TW,溢泰南京廠大搶中國商用淨水器成長商機 3月營收達11.85億元,earnings,positive,2,true,7818,TW,溢泰3月營收年增近15%
+40752,TW,金像電規劃明年資本支出達72億元 對泰國廠還要投13億元,supply_chain,positive,2,false,2368,TW,金像電明年資本支出72億擴產，發CB籌資
+26439,TW,去年淨賺290億創紀錄！臺銀開辦財富管理18年有底氣 勇奪財管2大獎,other,neutral,1,true,,TW,臺銀獲財管獎，非上市公司宣傳
+15426,TW,逾3成國人未規劃老年財務支出 南山人壽教戰退休規劃攻略,other,neutral,1,true,,TW,南山人壽保單行銷文，無市場資訊
+15298,TW,〈台股盤後〉季線成反壓 尾盤翻黑收跌24點 月線中止連5紅跌833點,other,negative,1,true,,TW,台股盤後小跌24點，7月跌833點
+29274,TW,維田估Q2營運漸入佳境 全面盤點生產與美國市場應對關稅衝擊,guidance,mixed,2,false,6570,TW,維田估Q2轉佳，但關稅衝擊待評估
+82330,US,美政府重啟後數據何時出爐？預期將顯示這些趨勢,macro_rate,neutral,2,true,,US,政府重啟後經濟數據延後公布，預期就業降溫
+70620,US,特斯拉股價腰斬 馬斯克要員工別賣股票,other,negative,2,false,TSLA,US,特斯拉股價腰斬，馬斯克喊話員工抱股，盤前小跌
+65912,US,「卡瑪拉慘崩」結束 川普對美股保持沉默,geopolitics,neutral,1,true,,US,川普選戰拿股災作文章，對市場無新資訊
+81944,US,LinkedIn、IBM高層揭密：AI無法取代的三大關鍵能力！,other,neutral,1,true,,US,AI時代職場軟實力專題，與股價無關
+65865,US,〈財報〉速食需求堅韌 漢堡王母公司Restaurant Brands International營收超出預期,earnings,positive,2,true,QSR,US,漢堡王母公司Q2營收20.8億美元優於預期
+81910,US,馬斯克同框黃仁勳談太空AI：5年內成最便宜算力來源,product,neutral,1,true,NVDA;TSLA,US,馬斯克與黃仁勳談太空AI願景，無具體營運影響
+64608,US,華爾街大空頭被告了！美證交會、司法部控香櫞資本涉嫌詐欺 不法獲利逾6億,legal,neutral,2,false,,US,SEC與司法部起訴香櫞資本詐欺，對個股影響有限
+82212,US,女股神連四日大幅減碼 特斯拉狂瀉近7%,other,negative,4,false,TSLA,US,ARK連四日減碼，特斯拉重挫近7%
+71844,US,川普暫停關稅90日後 比特幣漲逾7% 重新站回8萬美元以上,regulation,positive,5,false,MSTR;HOOD;COIN,US,川普暫停對等關稅90天，比特幣與加密股大漲
+64538,US,Fed決策公布在即 高盛CEO改變利率預測,macro_rate,neutral,1,true,,US,Fed決策前市場預期按兵不動，9月降息
+70483,US,特斯拉下挫近6% 連五日大好漲勢中斷,earnings,negative,4,false,TSLA,US,歐洲銷量減40%加關稅疑慮，特斯拉跌近6%
+71800,US,川普挑戰獨立機構解雇權 鮑爾去留可能牽動其中,regulation,negative,2,false,,US,川普挑戰解雇權，牽動Fed獨立性疑慮
+81830,US,Fed柯林斯：利率「暫時適宜」 再降息需見就業明顯轉弱,macro_rate,negative,2,false,,US,柯林斯偏鷹，12月降息預期降溫
+71930,US,特斯拉恐受波及 傳馬斯克向川普求情降關稅不果,regulation,negative,3,false,TSLA;AAPL,US,馬斯克求情降關稅未果，特斯拉蘋果受衝擊
+70714,US,攜手通義千問、開源加速創新 蘇姿丰AMD AI PC峰會重點一次看,product,positive,1,true,AMD,US,AMD AI PC峰會屬例行宣傳，新資訊有限
+65845,US,英特爾股票狂跌後CEO大筆買入 但這可能不是你想的看漲信號？,other,neutral,1,true,INTC,US,基辛格例行買股，不具特別看漲意義
+82033,US,美股年末行情受挫：科技股失速 資金輪動至防禦性板塊,other,negative,1,true,,US,美股科技股走弱、資金轉向防禦類股的盤勢綜述
+71972,US,〈美對等關稅〉特斯拉盤前挫近9%領跌7巨頭！專家：當前拋售潮與1987年崩盤數據驚人相似,regulation,negative,5,false,TSLA;NVDA;AMZN;META;AAPL;MSFT;GOOGL,US,對等關稅引發拋售，七巨頭盤前重挫4至9%
+81900,US,孤獨的AI空頭！為何有分析師勇敢下調亞馬遜與微軟評級？,guidance,negative,2,false,AMZN;MSFT,US,羅斯柴爾德下調亞馬遜、微軟評級，憂AI回報被高估
+70476,US,Fed官員憂關稅對通膨影響「恐非暫時性」 利率可能持平一段時間,macro_rate,negative,2,false,,US,Fed官員稱關稅通膨恐非暫時，降息延後
+106252,GLOBAL,印度央行降息並暗示進一步寬鬆 以應對美國關稅衝擊,macro_rate,neutral,1,true,,GLOBAL,印度央行如預期降息，對台美股影響有限
+106141,GLOBAL,貿易戰再起 新興市場債券還能投資嗎？,other,neutral,1,true,,GLOBAL,基金經理人看好新興市場債，無新資訊
+110940,GLOBAL,美政府結束停擺 數據不確定性仍高 黃金有望創1個月最佳單周表現,macro_rate,neutral,1,true,,GLOBAL,金價週漲約5%，降息預期縮減，屬市況綜述
+105333,GLOBAL,美國財長：貿易夥伴可透過降低貿易壁壘避免4月加徵關稅,regulation,mixed,2,true,,US,財長稱4/2對等關稅可透過談判避免，政策已預告
+100883,GLOBAL,幣圈陷「極度恐慌」！市值失守2兆美元 比特幣跌破5萬美元 以太幣腰斬,macro_rate,negative,3,false,,GLOBAL,全球避險賣壓，比特幣跌破5萬、幣圈極度恐慌
+100846,GLOBAL,中國前7個月貨物貿易進出口總值人民幣24.83兆 年增6.2%,macro_rate,mixed,2,true,,GLOBAL,中國7月出口成長7%，低於預期9.5%
+106178,GLOBAL,調整製造布局 意法半導體3年內要裁2800人,other,mixed,2,false,STM,GLOBAL,意法三年裁員2800人，目標年省近10億美元
+100798,GLOBAL,OpenAI支持的人形機器人Figure 02發表 深度學習力引關注,product,neutral,1,false,,GLOBAL,未上市Figure發表新機器人，對上市股影響小
+99692,GLOBAL,32小時央行大戰籠罩市場 交易員繃緊神經,macro_rate,mixed,2,true,,GLOBAL,美日英央行決策前瞻，市場波動但屬預期
+99602,GLOBAL,鉅亨速報 - Factset 最新調查：默克藥廠(MRK-US)EPS預估下修至8.03元，預估目標價為142.00元,guidance,negative,1,true,MRK,US,FactSet調查默克EPS預估小幅下修
+105064,GLOBAL,中國首發特別國債 為四大國銀注資人民幣5000億元,macro_rate,positive,2,true,,GLOBAL,中國特別國債注資四大行，政策已預告
+110809,GLOBAL,川普稱將或改2026世界杯賽事舉辦地！法律專家：他沒有權力,other,neutral,1,false,,US,川普稱可能更改世界盃主辦城市，與市場關聯低
+105249,GLOBAL,〈紐約匯市〉美元兌歐元周線收高 投資人獲利了結,macro_rate,neutral,1,true,,GLOBAL,美元小幅走強，Fed不急於降息，屬例行匯市綜述
+110822,GLOBAL,中國9月減持5億美元美債 今年來第五次減碼,macro_rate,neutral,1,true,,GLOBAL,中國9月小幅減持美債5億美元，屬例行TIC數據
+106133,GLOBAL,"普丁宣布：未來10年投入1,000億美元 用於海軍艦船建造",geopolitics,neutral,1,false,,GLOBAL,俄羅斯宣布十年海軍造艦計畫，對台美股影響小
+110762,GLOBAL,比特幣跌破8.7萬美元創6個月新低 大戶9月來已賣出200億美元,macro_rate,negative,3,false,,GLOBAL,比特幣創半年低，降息機率降，風險資產承壓
+100925,GLOBAL,中國7月財新服務業PMI升至52.1 就業重回擴張,macro_rate,mixed,2,true,,GLOBAL,中國服務業PMI回升但製造業跌入收縮
+110953,GLOBAL,〈能源盤後〉Lukoil制裁將生效 原油上漲 唯庫存利空縮限漲幅,regulation,positive,2,true,,GLOBAL,Lukoil制裁將生效，油價小漲，庫存增限漲
+100955,GLOBAL,亞股「黑色星期五」 日股寫2020年以來最大盤中跌幅,macro_rate,negative,4,false,,GLOBAL,美衰退憂慮加日銀升息，亞股全面重挫
+110731,GLOBAL,李彥宏的AI豪賭！廣告業務連6季下滑 百度Q3虧逾112億但AI創收近百億 增速迅猛成亮點,earnings,mixed,3,true,BIDU,GLOBAL,百度Q3大虧廣告下滑，AI營收高成長

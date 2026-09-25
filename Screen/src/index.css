@@ -1,0 +1,605 @@
+/* ============================================================
+   設計 token（Iteration 25）
+   ------------------------------------------------------------
+   深色為預設，`html[data-theme="light"]` 覆寫成淺色。
+   所有尺寸以 rem 表示，根字級由 `html[data-size]` 決定——
+   字級切換若不是這樣做，寫在 JSX 裡的行內 px 就不會跟著縮放，
+   切了沒反應的設定比沒有更糟。
+============================================================ */
+:root,
+html[data-theme='dark'] {
+  --bg:        #0f1420;
+  --bg2:       #161d2e;   /* 卡片 */
+  --bg3:       #1f2839;   /* 抬升／hover */
+  --surface:   #1a2233;   /* 卡片內的次級面 */
+  --hover:     #202a3d;
+  --border:    #2a3446;
+  --border-soft:#232c3d;
+
+  --text:      #e6ebf5;
+  --text-strong:#f5f8ff;
+  --dim:       #8e9bb3;
+
+  --blue:      #5b9dff;
+  --green:     #35c76a;
+  --red:       #ff5f57;
+  --yellow:    #f2c14e;
+  --orange:    #f59e5b;
+  --purple:    #b98cff;
+  --on-accent: #0b0f17;
+
+  /* 漲跌與損益用台股慣例：漲／獲利＝紅，跌／虧損＝綠。
+     刻意不直接把 --green 換成紅色——那會讓程式碼變成「叫綠色但是紅的」，
+     日後任何人讀到都會判斷錯誤。用 --up / --down 表達「方向」，
+     --green / --red 保留給「成功／失敗」這種與價格無關的狀態。 */
+  --up:        #ff5f57;   /* 漲、獲利 */
+  --down:      #35c76a;   /* 跌、虧損 */
+  --up-soft:   rgba(255,95,87,.16);
+  --down-soft: rgba(53,199,106,.16);
+
+  --blue-soft:   rgba(91,157,255,.16);
+  --green-soft:  rgba(53,199,106,.16);
+  --red-soft:    rgba(255,95,87,.16);
+  --yellow-soft: rgba(242,193,78,.16);
+  --purple-soft: rgba(185,140,255,.16);
+  --dim-soft:    rgba(142,155,179,.14);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.35);
+  --shadow:    0 1px 3px rgba(0,0,0,.4), 0 10px 30px rgba(0,0,0,.28);
+  --shadow-lg: 0 24px 64px rgba(0,0,0,.55);
+  --scrim:     rgba(4,8,16,.7);
+
+  color-scheme: dark;
+}
+
+html[data-theme='light'] {
+  --bg:        #f3f5f9;
+  --bg2:       #ffffff;
+  --bg3:       #eef1f7;
+  --surface:   #f8fafc;
+  --hover:     #eaeff7;
+  --border:    #d9dfe9;
+  --border-soft:#e6eaf2;
+
+  --text:      #1a2233;
+  --text-strong:#0b1220;
+  --dim:       #5f6b80;
+
+  --blue:      #1d6ff2;
+  --green:     #17a34a;
+  --red:       #dc2626;
+  --yellow:    #b7791f;
+  --orange:    #d97706;
+  --purple:    #7c3aed;
+  --on-accent: #ffffff;
+
+  --up:        #dc2626;   /* 漲、獲利 */
+  --down:      #17a34a;   /* 跌、虧損 */
+  --up-soft:   rgba(220,38,38,.10);
+  --down-soft: rgba(23,163,74,.12);
+
+  --blue-soft:   rgba(29,111,242,.10);
+  --green-soft:  rgba(23,163,74,.12);
+  --red-soft:    rgba(220,38,38,.10);
+  --yellow-soft: rgba(183,121,31,.12);
+  --purple-soft: rgba(124,58,237,.10);
+  --dim-soft:    rgba(95,107,128,.10);
+
+  --shadow-sm: 0 1px 2px rgba(16,24,40,.06);
+  --shadow:    0 1px 2px rgba(16,24,40,.05), 0 10px 28px rgba(16,24,40,.07);
+  --shadow-lg: 0 24px 64px rgba(16,24,40,.16);
+  --scrim:     rgba(16,24,40,.45);
+
+  color-scheme: light;
+}
+
+/* 版面尺寸與字級 */
+:root {
+  --sidebar: 244px;
+  --topbar:  66px;
+  --radius:  14px;
+  --radius-sm: 9px;
+}
+
+html            { font-size: 16px; }   /* 中（預設）——比改版前的 14px 大一級 */
+html[data-size='sm'] { font-size: 14.5px; }
+html[data-size='md'] { font-size: 16px; }
+html[data-size='lg'] { font-size: 18px; }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: 'Inter', 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  transition: background .2s ease, color .2s ease;
+}
+
+/* 數字一律等寬對齊——金額與百分比在表格裡跳動會讓人看錯行 */
+.data-table td, .metric-value, .idx-val, .idx-chg, .time-display {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   LAYOUT
+============================================================ */
+.app { display: flex; height: 100vh; overflow: hidden; }
+
+.sidebar {
+  width: var(--sidebar); min-width: var(--sidebar);
+  background: var(--bg2);
+  border-right: 1px solid var(--border-soft);
+  display: flex; flex-direction: column;
+  height: 100vh; overflow-y: auto;
+}
+
+.sidebar-brand {
+  display: flex; align-items: center; gap: .7rem;
+  padding: 1.35rem 1.1rem 1.1rem;
+  border-bottom: 1px solid var(--border-soft);
+}
+.brand-icon { font-size: 1.75rem; }
+.brand-name { font-size: 1.06rem; font-weight: 700; color: var(--text-strong); letter-spacing: .01em; }
+.brand-sub  { font-size: .68rem; color: var(--dim); letter-spacing: .06em; text-transform: uppercase; }
+
+.sidebar-nav { flex: 1; padding: .85rem .6rem; display: flex; flex-direction: column; gap: .18rem; }
+
+.nav-item {
+  display: flex; align-items: center; gap: .7rem;
+  padding: .68rem .8rem; border-radius: var(--radius-sm);
+  color: var(--dim); text-decoration: none;
+  font-size: .94rem; font-weight: 500;
+  cursor: pointer; transition: background .15s, color .15s;
+  border: none; background: none; width: 100%; text-align: left;
+  position: relative;
+}
+.nav-item:hover  { background: var(--hover); color: var(--text); }
+.nav-item.active { background: var(--blue-soft); color: var(--blue); font-weight: 600; }
+/* 選中狀態多一條左側指示條：只靠顏色區分在淺色主題下對比不夠 */
+.nav-item.active::before {
+  content: ''; position: absolute; left: -.6rem; top: 20%; bottom: 20%;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--blue);
+}
+.nav-icon { font-size: 1.06rem; width: 1.3rem; text-align: center; }
+
+.sidebar-footer {
+  padding: 1rem 1.1rem; border-top: 1px solid var(--border-soft);
+  display: flex; flex-direction: column; gap: .4rem;
+}
+.sys-status { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--dim); }
+.api-stack  { font-size: .68rem; color: var(--dim); opacity: .75; margin-top: .4rem; line-height: 1.7; }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* ============================================================
+   TOPBAR
+============================================================ */
+.topbar {
+  height: var(--topbar); min-height: var(--topbar);
+  background: var(--bg2); border-bottom: 1px solid var(--border-soft);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 1.5rem; gap: 1rem;
+}
+.page-title { font-size: 1.32rem; font-weight: 700; color: var(--text-strong); letter-spacing: -.01em; }
+
+.topbar-right { display: flex; align-items: center; gap: 1rem; }
+
+.index-ticker { display: flex; align-items: baseline; gap: .4rem; }
+.idx-label { font-size: .72rem; color: var(--dim); }
+.idx-val   { font-size: 1rem; font-weight: 700; }
+.idx-chg   { font-size: .8rem; }
+.idx-divider { width: 1px; height: 1.8rem; background: var(--border); }
+
+.market-badge {
+  display: flex; align-items: center; gap: .4rem;
+  padding: .3rem .7rem; border-radius: 999px;
+  font-size: .8rem; font-weight: 600;
+  background: var(--bg3); color: var(--dim);
+}
+.market-badge.open { background: var(--green-soft); color: var(--green); }
+
+.time-display { font-size: .85rem; color: var(--dim); font-family: ui-monospace, monospace; min-width: 5rem; }
+
+/* 主題／字級切換 */
+.ui-toggle { display: flex; align-items: center; gap: .2rem;
+             background: var(--bg3); border: 1px solid var(--border);
+             border-radius: 999px; padding: .18rem; }
+.ui-toggle button {
+  border: none; background: none; cursor: pointer;
+  color: var(--dim); font-size: .8rem; font-weight: 600;
+  padding: .28rem .6rem; border-radius: 999px; line-height: 1;
+  transition: background .15s, color .15s;
+}
+.ui-toggle button:hover  { color: var(--text); }
+.ui-toggle button.active { background: var(--bg2); color: var(--blue); box-shadow: var(--shadow-sm); }
+
+/* ============================================================
+   CONTENT
+============================================================ */
+.content {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 1.4rem 1.5rem 4rem;
+  display: flex; flex-direction: column; gap: 1.1rem;
+}
+
+/* 這一行不能拿掉。
+   .content 是直向 flex 容器且高度受限，子項預設 flex-shrink: 1；
+   而 flex 項目的自動最小尺寸（min-height: auto）只在 overflow 為 visible 時
+   才等於內容高度——`.card` 有 overflow: hidden，min-height 因此變成 0，
+   於是內容一超過視窗高度，所有卡片就被壓扁、內容被裁掉看不見。
+   症狀是「DOM 都在、畫面卻空白」，而且沒有任何錯誤訊息。 */
+.content > * { flex-shrink: 0; }
+
+/* ============================================================
+   CARDS
+============================================================ */
+.cards-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: .9rem; }
+
+.metric-card {
+  background: var(--bg2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius); padding: 1.1rem 1.2rem;
+  box-shadow: var(--shadow-sm);
+}
+.metric-label { font-size: .72rem; color: var(--dim); margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.metric-value { font-size: 1.65rem; font-weight: 700; color: var(--text-strong); letter-spacing: -.02em; }
+.metric-value.sm { font-size: 1.15rem; }
+.metric-delta { font-size: .82rem; margin-top: .3rem; color: var(--dim); }
+
+.card {
+  background: var(--bg2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius); box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* justify-content: space-between 是原本就有的：各頁的標題列多半是
+   「標題 + 右側資訊／控制項」兩塊，拿掉會讓右側那塊黏回標題旁邊。 */
+.card-header {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-soft); gap: .6rem;
+}
+.card-title { font-size: 1.06rem; font-weight: 650; color: var(--text-strong); }
+
+/* ============================================================
+   TAGS
+============================================================ */
+.tag {
+  font-size: .72rem; font-weight: 600; padding: .16rem .55rem;
+  border-radius: 6px; background: var(--dim-soft); color: var(--dim);
+  white-space: nowrap;
+}
+.tag.blue   { background: var(--blue-soft);   color: var(--blue); }
+.tag.green  { background: var(--green-soft);  color: var(--green); }
+.tag.yellow { background: var(--yellow-soft); color: var(--yellow); }
+.tag.red    { background: var(--red-soft);    color: var(--red); }
+.tag.purple { background: var(--purple-soft); color: var(--purple); }
+
+/* ============================================================
+   TWO-COL
+============================================================ */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+
+/* ============================================================
+   TABLE
+============================================================ */
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.data-table th {
+  padding: .7rem 1rem; text-align: left; font-size: .74rem; font-weight: 700;
+  color: var(--dim); background: var(--bg3); text-transform: uppercase;
+  letter-spacing: .05em; white-space: nowrap; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1;
+}
+.data-table td { padding: .75rem 1rem; border-bottom: 1px solid var(--border-soft); white-space: nowrap; }
+/* 數值欄右對齊：小數點對齊才看得出大小，這是數字表格最基本的要求 */
+.data-table th.num, .data-table td.num { text-align: right; }
+.data-table th.mid, .data-table td.mid { text-align: center; }
+
+/* 統計磚：用 1px 間隙露出底色當分隔線，比逐格畫 border 乾淨 */
+.stat-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 1px; background: var(--border-soft);
+  border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft);
+}
+.stat-tile { background: var(--bg2); padding: .85rem 1.1rem; }
+.stat-tile .k { font-size: .74rem; color: var(--dim); font-weight: 600; letter-spacing: .03em; }
+.stat-tile .v { font-size: 1.28rem; font-weight: 700; margin-top: .2rem; letter-spacing: -.01em;
+                font-variant-numeric: tabular-nums; }
+.stat-tile .s { font-size: .74rem; color: var(--dim); margin-top: .15rem; }
+
+/* 迷你進度條（已比對天數之類的比例） */
+.mini-bar { width: 4.5rem; height: .35rem; border-radius: 999px; background: var(--bg3); overflow: hidden; }
+.mini-bar > i { display: block; height: 100%; background: var(--green); border-radius: 999px; }
+
+/* 卡片標題兩行版：主標一行、次要資訊一行，避免十幾個標籤擠成一團 */
+.row-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.row-sub  { display: flex; align-items: center; gap: .8rem; flex-wrap: wrap;
+            margin-top: .35rem; font-size: .8rem; color: var(--dim); }
+.toolbar  { display: flex; align-items: flex-end; gap: .8rem; flex-wrap: wrap;
+            padding: .9rem 1.25rem; border-top: 1px solid var(--border-soft); }
+.toolbar .fld { display: flex; flex-direction: column; gap: .25rem; }
+.toolbar .fld > span { font-size: .72rem; color: var(--dim); font-weight: 600; letter-spacing: .04em; }
+.note-box { font-size: .78rem; color: var(--dim); line-height: 1.8; padding: .85rem 1.25rem;
+            border-top: 1px solid var(--border-soft); background: var(--surface); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover   { background: var(--hover); }
+
+/* ============================================================
+   DOTS / 色彩工具
+============================================================ */
+.dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.dot.green  { background: var(--green); }
+.dot.red    { background: var(--red); }
+.dot.blue   { background: var(--blue); }
+.dot.yellow { background: var(--yellow); }
+.dot.blink  { animation: blink 1.2s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+
+.up    { color: var(--up); }     /* 漲：台股慣例用紅色 */
+.down  { color: var(--down); }   /* 跌：台股慣例用綠色 */
+.muted { color: var(--dim); }
+
+/* ============================================================
+   BUTTONS
+============================================================ */
+.btn-primary {
+  background: var(--blue); color: var(--on-accent); border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: .55rem 1.05rem; font-size: .9rem; font-weight: 600; cursor: pointer;
+  transition: filter .15s, box-shadow .15s; white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+}
+.btn-primary:hover    { filter: brightness(1.08); }
+.btn-primary:disabled { opacity: .5; cursor: default; filter: none; }
+
+.btn-secondary {
+  background: var(--bg3); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: .55rem 1.05rem;
+  font-size: .9rem; font-weight: 500; cursor: pointer;
+  transition: background .15s, border-color .15s; white-space: nowrap;
+}
+.btn-secondary:hover    { background: var(--hover); border-color: var(--blue); }
+.btn-secondary:disabled { opacity: .5; cursor: default; }
+
+.btn-group { display: flex; gap: .3rem; }
+
+.btn-period, .btn-chip, .btn-filter {
+  background: var(--bg3); color: var(--dim); border: 1px solid var(--border);
+  border-radius: 7px; padding: .3rem .7rem; font-size: .82rem; cursor: pointer;
+  white-space: nowrap; transition: all .15s;
+}
+.btn-filter { background: transparent; }
+.btn-period:hover, .btn-chip:hover, .btn-filter:hover { color: var(--text); border-color: var(--blue); }
+.btn-period.active, .btn-chip.active, .btn-filter.active {
+  background: var(--blue-soft); color: var(--blue); border-color: var(--blue);
+}
+.filter-group { display: flex; gap: .3rem; }
+
+.btn-icon {
+  background: none; border: none; color: var(--dim); cursor: pointer;
+  font-size: 1rem; padding: .3rem .5rem; border-radius: 6px;
+  transition: background .15s, color .15s; flex-shrink: 0;
+}
+.btn-icon:hover { background: var(--bg3); color: var(--text); }
+
+.btn-danger {
+  background: var(--red-soft); color: var(--red);
+  border: 1px solid var(--red); border-radius: var(--radius-sm);
+  padding: .55rem 1.05rem; font-size: .9rem; font-weight: 600; cursor: pointer;
+  transition: filter .15s; white-space: nowrap;
+}
+.btn-danger:hover    { filter: brightness(1.1); }
+.btn-danger:disabled { opacity: .5; cursor: default; }
+
+/* ============================================================
+   輸入元件
+============================================================ */
+.stock-selector { display: flex; align-items: center; gap: .7rem; padding: 1rem 1.25rem; flex-wrap: wrap; }
+.stock-input, .form-input, .form-textarea, .ctrl-select, .budget-input {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: .92rem; padding: .5rem .75rem; outline: none;
+  transition: border-color .15s, box-shadow .15s;
+  font-family: inherit;
+}
+.stock-input { width: 10rem; }
+.ctrl-select { cursor: pointer; }
+.form-textarea { resize: vertical; line-height: 1.7; padding: .65rem .8rem; }
+.stock-input:focus, .form-input:focus, .form-textarea:focus, .ctrl-select:focus, .budget-input:focus {
+  border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft);
+}
+.quick-select { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
+
+/* ============================================================
+   圖表容器
+============================================================ */
+.chart-pad    { padding: .5rem .8rem .25rem; }
+.chart-pad-sm { padding: 0 .8rem .25rem; }
+
+/* ============================================================
+   MODEL CONTROLS
+============================================================ */
+.model-controls { display: flex; align-items: flex-end; gap: 1rem; padding: 1.1rem 1.25rem; flex-wrap: wrap; }
+.ctrl-group     { display: flex; flex-direction: column; gap: .3rem; }
+.ctrl-label     { font-size: .72rem; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.retrain-status { display: flex; align-items: center; gap: .5rem; padding: 0 1.25rem 1rem; font-size: .88rem; color: var(--green); }
+
+/* ============================================================
+   NEWS FEED
+============================================================ */
+.news-card {
+  display: flex; gap: .9rem; padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-soft); transition: background .15s; cursor: pointer;
+}
+.news-card:last-child { border-bottom: none; }
+.news-card:hover      { background: var(--hover); }
+
+.news-sentiment { flex-shrink: 0; width: 3.4rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .25rem; }
+.sentiment-label { font-size: .7rem; font-weight: 700; padding: .1rem .45rem; border-radius: 5px; }
+.sentiment-label.bullish { background: var(--green-soft); color: var(--green); }
+.sentiment-label.neutral { background: var(--blue-soft);  color: var(--blue); }
+.sentiment-label.bearish { background: var(--red-soft);   color: var(--red); }
+.sentiment-label.unknown { background: var(--dim-soft);   color: var(--dim); }
+
+.news-body  { flex: 1; min-width: 0; }
+.news-title { font-size: .98rem; font-weight: 600; margin-bottom: .25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.news-meta  { font-size: .76rem; color: var(--dim); display: flex; gap: .65rem; flex-wrap: wrap; }
+.news-tags  { margin-top: .4rem; display: flex; gap: .3rem; flex-wrap: wrap; }
+.news-tag   { font-size: .7rem; padding: .05rem .5rem; border-radius: 5px; background: var(--bg3); color: var(--dim); }
+
+/* ============================================================
+   SCROLLBAR
+============================================================ */
+::-webkit-scrollbar          { width: .5rem; height: .5rem; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: var(--border); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+
+/* ============================================================
+   BUDGET SEARCH
+============================================================ */
+.budget-form { display: flex; align-items: center; gap: .8rem; padding: 1.1rem 1.25rem; flex-wrap: wrap; }
+.budget-input-wrap { display: flex; align-items: center; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.currency-prefix { padding: .5rem .7rem; background: var(--bg3); color: var(--dim); font-size: .88rem; border-right: 1px solid var(--border); }
+.budget-input { border: none; border-radius: 0; font-size: 1.05rem; font-weight: 600; width: 10rem; }
+.budget-input:focus { box-shadow: none; }
+
+.budget-hint { display: flex; align-items: center; gap: .65rem; padding: 0 1.25rem 1rem; font-size: .88rem; flex-wrap: wrap; }
+.hint-item { display: flex; align-items: center; gap: .4rem; }
+.hint-sep  { color: var(--dim); font-size: 1rem; }
+
+/* ============================================================
+   ALERT
+============================================================ */
+.alert-card {
+  display: flex; align-items: center; gap: .9rem;
+  padding: 1.1rem 1.3rem; border-radius: var(--radius); border: 1px solid;
+}
+.alert-card.warn  { background: var(--yellow-soft); border-color: var(--yellow); }
+.alert-card.error { background: var(--red-soft);    border-color: var(--red); }
+.alert-icon  { font-size: 1.6rem; flex-shrink: 0; }
+.alert-body  { flex: 1; }
+.alert-title { font-weight: 650; font-size: .98rem; margin-bottom: .1rem; }
+.alert-sub   { font-size: .84rem; }
+
+.alert-error {
+  padding: .7rem .95rem; border-radius: var(--radius-sm);
+  background: var(--red-soft); border: 1px solid var(--red);
+  color: var(--red); font-size: .88rem;
+}
+
+.crawl-status { display: flex; align-items: center; gap: .5rem; font-size: .88rem; }
+
+/* ============================================================
+   進度條
+============================================================ */
+.crawl-progress { margin-top: .8rem; }
+.progress-label { display: flex; align-items: center; gap: .5rem; font-size: .88rem; margin-bottom: .5rem; }
+.progress-label .muted { margin-left: auto; font-size: .82rem; }
+.progress-track { height: .5rem; border-radius: 999px; background: var(--bg3); overflow: hidden; }
+.progress-fill  { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .4s ease; }
+
+/* ============================================================
+   TOAST
+============================================================ */
+.crawl-toast {
+  position: fixed; bottom: 1.8rem; right: 1.8rem; z-index: 999;
+  display: flex; align-items: center; gap: .8rem;
+  padding: 1rem 1.2rem; border-radius: var(--radius);
+  background: var(--bg2); border: 1px solid var(--green);
+  box-shadow: var(--shadow-lg); animation: slideUp .3s ease; max-width: 24rem;
+}
+.toast-body { display: flex; flex-direction: column; gap: .1rem; flex: 1; }
+.toast-body strong { font-size: .95rem; color: var(--green); }
+.toast-body span   { font-size: .82rem; color: var(--dim); }
+.toast-close { background: none; border: none; color: var(--dim); cursor: pointer; font-size: 1.05rem; padding: 0 .25rem; }
+.toast-close:hover { color: var(--text); }
+
+@keyframes slideUp { from { transform: translateY(1.2rem); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+
+/* ============================================================
+   FORMS
+============================================================ */
+.stock-form     { display: flex; flex-direction: column; gap: .9rem; padding: 1.1rem 1.25rem; }
+.stock-form-row { display: flex; flex-direction: column; gap: .4rem; }
+.required       { color: var(--red); margin-left: .1rem; }
+
+.news-form  { display: flex; flex-direction: column; gap: 1rem; padding: 1.1rem 1.25rem; }
+.form-row   { display: flex; flex-direction: column; gap: .4rem; }
+.form-label { font-size: .74rem; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.char-count { font-size: .74rem; color: var(--dim); text-align: right; margin-top: .1rem; }
+
+.platform-select { display: flex; gap: .4rem; flex-wrap: wrap; }
+
+.ticker-area {
+  display: flex; flex-wrap: wrap; gap: .4rem; align-items: center;
+  padding: .55rem .7rem; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg3); min-height: 2.6rem;
+}
+.ticker-tag { display: flex; align-items: center; gap: .25rem; padding: .12rem .55rem; border-radius: 6px; font-size: .82rem; font-weight: 600; }
+.ticker-tag.auto   { background: var(--green-soft); color: var(--green); }
+.ticker-tag.manual { background: var(--blue-soft);  color: var(--blue); }
+.ticker-remove { background: none; border: none; color: inherit; cursor: pointer; font-size: .95rem; line-height: 1; padding: 0 .1rem; }
+.ticker-input-wrap { display: flex; gap: .25rem; align-items: center; }
+.ticker-input { background: transparent; border: none; color: var(--text); font-size: .84rem; outline: none; width: 5rem; }
+
+.form-actions { display: flex; align-items: center; gap: .65rem; flex-wrap: wrap; }
+.status-ok    { color: var(--green); font-size: .88rem; }
+.status-err   { color: var(--red);   font-size: .88rem; }
+
+/* ============================================================
+   EMPTY STATE
+============================================================ */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: .5rem; padding: 3.5rem 1.25rem; color: var(--dim); text-align: center;
+  font-size: .95rem;
+}
+.empty-icon { font-size: 2.6rem; opacity: .85; }
+
+/* ============================================================
+   GRIDS
+============================================================ */
+.models-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.1rem; }
+
+/* ============================================================
+   MODAL
+============================================================ */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200; background: var(--scrim);
+  display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+  backdrop-filter: blur(2px);
+}
+.modal {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: 1rem;
+  width: 100%; max-width: 46rem; max-height: 84vh;
+  display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
+}
+.modal-header { display: flex; align-items: center; gap: .8rem; padding: 1.1rem 1.3rem; border-bottom: 1px solid var(--border-soft); }
+.modal-title  { flex: 1; font-size: 1.05rem; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.modal-body   { flex: 1; overflow-y: auto; padding: 1.3rem; }
+.modal-footer { display: flex; align-items: center; gap: .5rem; padding: 1rem 1.3rem; border-top: 1px solid var(--border-soft); }
+
+/* ============================================================
+   APEXCHARTS
+============================================================ */
+.apexcharts-canvas foreignObject { display: none; }
+.apexcharts-tooltip { box-shadow: var(--shadow) !important; }
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+@media (max-width: 1400px) { .models-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 1100px) {
+  .cards-grid  { grid-template-columns: repeat(2, 1fr); }
+  .two-col     { grid-template-columns: 1fr; }
+  .models-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .sidebar { display: none; }
+  .cards-grid { grid-template-columns: 1fr; }
+  .content { padding: 1rem .9rem 3rem; }
+}
