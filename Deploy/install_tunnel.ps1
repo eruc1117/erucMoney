@@ -48,9 +48,9 @@ if (-not (Test-Path $Cred)) { throw "找不到憑證 $Cred（隧道可能是在�
 Write-Host "隧道 $TunnelName = $TunnelId"
 
 Write-Host '[4/6] 寫 config.yml'
-$cfg = Get-Content (Join-Path $Here 'cloudflared-config.yml') -Raw
+$cfg = [IO.File]::ReadAllText((Join-Path $Here 'cloudflared-config.yml'))
 $cfg = $cfg.Replace('<TUNNEL_ID>', $TunnelId).Replace('<CREDENTIALS_FILE>', $Cred.Replace('\', '/'))
-Set-Content -Path (Join-Path $CfDir 'config.yml') -Value $cfg -Encoding utf8
+[IO.File]::WriteAllText((Join-Path $CfDir 'config.yml'), $cfg, (New-Object System.Text.UTF8Encoding $false))
 
 Write-Host "[5/6] DNS：$Hostname → 隧道"
 cloudflared tunnel route dns $TunnelName $Hostname 2>&1 | ForEach-Object { Write-Host "  $_" }

@@ -41,6 +41,31 @@ GitHub repo 改為 `https://github.com/eruc1117/erucMoney.git`（原 `eruc1117/m
 4. GitHub Settings → Pages：Source 選 GitHub Actions、Custom domain 填 `erucmoney.com`、Enforce HTTPS。
 5. commit + push。
 
+## 實際部署紀錄（2026-09-25 13:20～13:55）
+
+| 步驟 | 結果 |
+|------|------|
+| PostgreSQL 密碼 | 換成 32 字元隨機值，`.env` 同步；歷史裡的舊值失效 |
+| git 歷史 | 舊歷史留在本機分支 `backup/history-before-squash`；master 重建成單一初始 commit（460 檔）推到 `eruc1117/erucMoney` |
+| `.env` | `JWT_SECRET`、`ADMIN_PASSWORD`（admin 的 DB 雜湊同步改成這個值）、`ALLOWED_ORIGINS`、`RATE_LIMIT_PER_MIN=300`；啟動驗證：白名單來源拿到 CORS 標頭、其他來源拿不到 |
+| Node API 常駐 | `install_api_task.ps1` → 工作排程器 `MoneyApi` Running，health OK |
+| GitHub Pages | 第一次 workflow 的 deploy 失敗（Pages 尚未設成 GitHub Actions 來源），設定後重推一次 → 成功，`https://erucmoney.com` 200，標題「智慧投資儀表板」 |
+| Cloudflare DNS | 使用者加了 5 筆 Pages 紀錄（目前是橘雲 Proxied，可用；GitHub 自簽憑證需要灰雲，見下）；`api` CNAME 由 `cloudflared tunnel route dns` 自動加 |
+| Tunnel | 隧道 `money`（id `db75f1c4…`），ingress 只有 3001；`https://api.erucmoney.com/health` 200、經隧道登入 200 且 CORS 正確 |
+
+### 過程中修掉的問題
+
+- `Deploy/*.ps1` 是 UTF-8 無 BOM，Windows PowerShell 5.1 當 ANSI 讀，中文字串把引號吃掉 → parse error。存成 UTF-8 BOM。
+- `cloudflared-config.yml` 的中文註解經 PowerShell 讀寫變成亂碼加 BOM，cloudflared 回 `control characters are not allowed`。
+  範本改成純 ASCII，腳本改用 `[IO.File]::WriteAllText` 不帶 BOM 寫檔。
+- `cloudflared service install` 需要系統管理員，UAC 提示被取消；先用 `cloudflared tunnel run money` 前景跑通全鏈路。
+  服務安裝要在系統管理員 PowerShell 跑：`cloudflared --config "$env:USERPROFILE\.cloudflared\config.yml" service install; Start-Service cloudflared`。
+
+### 還可以調整的
+
+- Pages 的 5 筆 DNS 改成灰雲（DNS only），GitHub 才能簽自己的憑證並開 Enforce HTTPS；橘雲時 TLS 由 Cloudflare 終結、Cloudflare 到 GitHub 走 Full，也能用。
+- admin 密碼登入前端後在「帳號」頁改成自己記得住的。
+
 ## 敏感資料（推送前的檢查，2026-09-25）
 
 掃描結果（會進 commit 的檔案、以及 git 歷史）：

@@ -1,6 +1,6 @@
-# Cloudflare Tunnel 設定（install_tunnel.ps1 會把 <TUNNEL_ID> 換掉並複製到 %USERPROFILE%\.cloudflared\config.yml）
-#
-# 只開 Node.js 的 3001。FastAPI :8000、LSTM :8001、PostgreSQL :5432 不在 ingress 裡，外面碰不到。
+# Cloudflare Tunnel config (ASCII only: Windows PowerShell 5.1 mangles UTF-8 without BOM).
+# install_tunnel.ps1 replaces <TUNNEL_ID> / <CREDENTIALS_FILE> and copies this to %USERPROFILE%/.cloudflared/config.yml
+# Only Node.js :3001 is exposed. FastAPI :8000, LSTM :8001 and PostgreSQL :5432 are NOT in ingress.
 tunnel: <TUNNEL_ID>
 credentials-file: <CREDENTIALS_FILE>
 
@@ -9,5 +9,4 @@ ingress:
     service: http://localhost:3001
     originRequest:
       connectTimeout: 30s
-      noTLSVerify: true
   - service: http_status:404
