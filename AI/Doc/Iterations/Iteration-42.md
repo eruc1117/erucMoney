@@ -64,6 +64,13 @@ GitHub repo 改為 `https://github.com/eruc1117/erucMoney.git`（原 `eruc1117/m
   `HKLM:\SYSTEM\CurrentControlSet\Services\cloudflared\ImagePath` = `"cloudflared.exe" --config "<使用者>\.cloudflared\config.yml" --logfile "Server\logs\cloudflared.log" tunnel run`，
   再 `sc start`。服務 Running、`https://api.erucmoney.com/health` 200，日誌在 `Server/logs/cloudflared.log`。`install_tunnel.ps1` 已改成這個做法。
 
+### 後端全部常駐（2026-09-25 14:15）
+
+`Deploy/install_services_task.ps1`：FastAPI（`MoneyCrawlerApi`，`python main.py --mode server`）與 LSTM（`MoneyLstm`，
+`LSTM\venv\Scripts\python.exe serve.py`）比照 MoneyApi 註冊成登入即啟動的工作，日誌 `Crawler/logs/api.log`、`LSTM/logs/serve.log`。
+`start-dev.bat` 偵測到三個工作在跑就不再開重複的視窗。四個常駐：`MoneyScheduler`（若已裝）、`MoneyApi`、`MoneyCrawlerApi`、`MoneyLstm`，
+加上 `cloudflared` 服務。
+
 ### 還可以調整的
 
 - Pages 的 5 筆 DNS 改成灰雲（DNS only），GitHub 才能簽自己的憑證並開 Enforce HTTPS；橘雲時 TLS 由 Cloudflare 終結、Cloudflare 到 GitHub 走 Full，也能用。

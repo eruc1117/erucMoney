@@ -24,6 +24,7 @@ PostgreSQL、FastAPI、LSTM、排程器全部留在本機，不對外。
 | `Deploy/cloudflared-config.yml` | 隧道 ingress：只有 `api.erucmoney.com → localhost:3001` |
 | `Deploy/install_tunnel.ps1` | 裝 cloudflared → 登入 → 建隧道 → 寫設定 → DNS → 裝服務 |
 | `Deploy/install_api_task.ps1` | Node API 登入即啟動（工作排程器 `MoneyApi`） |
+| `Deploy/install_services_task.ps1` | FastAPI :8000（`MoneyCrawlerApi`）與 LSTM :8001（`MoneyLstm`）登入即啟動；只聽本機，不進隧道 |
 
 ## 你要做的步驟（依序）
 
