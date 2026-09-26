@@ -4,8 +4,8 @@
 
 | 網域 | 內容 | 來源 |
 |------|------|------|
-| `erucmoney.com` | **統一前端**：行事曆平台（含「股票」分頁），登入只有一套 | GitHub Pages，[meeting_front_end](https://github.com/eruc1117/meeting_front_end) |
-| `stock.erucmoney.com` | 股票完整儀表板（從行事曆按「開啟完整儀表板」以 `#token=` 交接免登入） | GitHub Pages，本 repo `Screen/`；**Actions 部署不讀 `public/CNAME`，Custom domain 要在 repo Settings → Pages 手動填 `stock.erucmoney.com`** |
+| `erucmoney.com` | **統一前端**：行事曆平台，股票系統的全部功能都在它的「股票」分頁（分析／管理雙模式，Iteration 44），登入只有一套 | GitHub Pages，[meeting_front_end](https://github.com/eruc1117/meeting_front_end) |
+| `stock.erucmoney.com` | 獨立的股票儀表板（本 repo `Screen/`）；統一前端已不再連過去，留著當備援，可收掉 | GitHub Pages，本 repo `Screen/`；**Actions 部署不讀 `public/CNAME`，Custom domain 要在 repo Settings → Pages 手動填 `stock.erucmoney.com`** |
 | `api.erucmoney.com` | 股票 API（本機 Node :3001） | Cloudflare Tunnel |
 | `calendar-api.erucmoney.com` | 行事曆 API（本機 Node :5000，[meeting_API_Server](https://github.com/eruc1117/meeting_API_Server)） | Cloudflare Tunnel |
 

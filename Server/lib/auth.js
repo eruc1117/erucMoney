@@ -48,6 +48,7 @@ function readToken(req) {
 
 // 行事曆 id → 本系統使用者，記憶體快取（重啟就重讀 DB）
 const externalCache = new Map()
+const SSO_ADMINS = new Set(String(process.env.SSO_ADMIN_USERNAMES || '').split(',').map(s => s.trim()).filter(Boolean))
 
 /** 把行事曆帳號對應到本系統 users 列，沒有就建立。回傳 { id, role, name, external: true } 或 null（已停用）。 */
 async function resolveExternalUser(externalId, username) {
@@ -69,8 +70,15 @@ async function resolveExternalUser(externalId, username) {
     rows = ins.rows
     console.log(`[auth] 行事曆帳號 ${username || externalId} 第一次登入，建立本系統使用者 id=${rows[0].id}`)
   }
-  const u = rows[0]
+  let u = rows[0]
   if (!u.is_active) return null
+  // 單一登入的管理者：.env 的 SSO_ADMIN_USERNAMES（逗號分隔的行事曆帳號 username）第一次進來就升成 admin，
+  // 不必先有一個本地 admin 去改角色。之後在「使用者」頁改回 user 也會被這裡再升回來——要降級就從清單移除。
+  if (username && SSO_ADMINS.has(username) && u.role !== 'admin') {
+    await db.query('UPDATE users SET role = $2 WHERE id = $1', [u.id, 'admin'])
+    u = { ...u, role: 'admin' }
+    console.log(`[auth] ${username} 在 SSO_ADMIN_USERNAMES 內，升為 admin（users.id=${u.id}）`)
+  }
   const out = { id: u.id, role: u.role, name: u.username, external: true }
   externalCache.set(externalId, out)
   return out
