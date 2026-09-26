@@ -33,8 +33,12 @@ meeting_front_end /stock/:mode/:page                meeting_API_Server          
 - **代理放開**（meeting_API_Server）：`StockService.proxy({ method, path, query, token, body, timeoutMs })`，允許的第一段路徑
   `health stocks forecast catalog predictions voting holdings cash gap model models news crawler data us auth`，
   只擋 `/auth/login`、`/auth/change-password`；上游 4xx 原樣回狀態碼與 detail；長工作逾時 180 秒；`express.json` 上限 10kb → 256kb（新聞全文）。
-- **SSO 管理者**（erucMoney `lib/auth.js`）：`.env` 的 `SSO_ADMIN_USERNAMES`（行事曆 username，逗號分隔）第一次進來就把
-  對應的 users 列升成 admin——不必先有本地 admin 去改角色。
+- **整套平台只有一種 admin**（同日追加）：行事曆後端 `users` 表加 `role`／`is_active`（migration 1790500000000），
+  JWT payload 改成 `{ id, username, role }`，新增 `/api/admin/users`（列出、改角色、停用、刪除；不能動自己）與 `adminMiddleware`；
+  第一個 admin 由行事曆 `.env` 的 `ADMIN_ACCOUNTS` 在註冊／登入時升級。erucMoney `lib/auth.js` 改成信任行事曆 token 的 role，
+  每次請求同步進自己的 `users.role`（升降級即時生效）；原本的 `SSO_ADMIN_USERNAMES` 移除。
+  前端：`AuthContext` 存 role，管理模式多一頁「平台使用者」（`AdminPlatformUsers.jsx`，打 `/api/admin/users`），
+  原「使用者」改名「股票本地帳號」。
 
 ## 檔案
 
@@ -43,7 +47,9 @@ meeting_front_end /stock/:mode/:page                meeting_API_Server          
 | meeting_front_end | `src/stock/StockApp.jsx`、`nav.js`、`stock.css`（產生）、`stock-overrides.css`、`services/{api,auth}.js`、`pages/Admin{Crawler,Data,Users,Health}.jsx`、搬來的 15 頁與 4 個元件、`scripts/prefix-stock-css.js`、`pages/Stock/index.tsx`、`router/config.ts`、`router/index.tsx`、`public/index.html`（CSP 去掉 frame-src）、`.github/workflows/pages.yml`（去掉 `REACT_APP_STOCK_URL`）、`package.json`（+apexcharts、react-apexcharts）、README |
 | meeting_front_end（刪） | `components/Stock/`、`contexts/StockContext.js`、`content/StockContent.json` |
 | meeting_API_Server | `services/StockService.js`、`controllers/StockController.js`、`routes/stock/stock.js`、`app.js`、`tests/services/StockService.test.js`（53 項）、README、`docs/API.md` §4 |
-| money | `Server/lib/auth.js`（SSO_ADMIN_USERNAMES）、`.env.example`、本文件、`Deploy/README.md` |
+| money | `Server/lib/auth.js`（信任行事曆 token 的 role 並同步）、`.env.example`、本文件、`Deploy/README.md` |
+| meeting_API_Server（admin） | `migrations/1790500000000_add-users-role.js`、`models/User.js`、`services/AuthService.js`、`services/AdminService.js`、`controllers/AdminController.js`、`routes/admin/admin.js`、`middlewares/adminMiddleware.js`、`utils/httpStatusMapper.js`、tests（adminMiddleware 4、AdminService 10） |
+| meeting_front_end（admin） | `contexts/AuthContext.js`、`stock/services/auth.js`、`stock/pages/AdminPlatformUsers.jsx`、`stock/nav.js` |
 
 ## 驗證（本機，2026-09-26）
 
@@ -59,7 +65,7 @@ meeting_front_end /stock/:mode/:page                meeting_API_Server          
 | Jest `StockService` | 53/53 |
 | `react-scripts build` | 通過（既有 ESLint 警告） |
 
-測試帳號已從兩邊資料庫刪除，`SSO_ADMIN_USERNAMES` 只留使用者自己的行事曆帳號。
+測試帳號已從兩邊資料庫刪除。之後使用者要求「現有帳密清空」：兩邊 users 全刪（備份在 `E:\Desktop\coding\backups\accounts-wipe-2026-09-26\`）。
 
 ## 限制
 

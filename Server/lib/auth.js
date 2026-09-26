@@ -48,12 +48,14 @@ function readToken(req) {
 
 // 行事曆 id → 本系統使用者，記憶體快取（重啟就重讀 DB）
 const externalCache = new Map()
-const SSO_ADMINS = new Set(String(process.env.SSO_ADMIN_USERNAMES || '').split(',').map(s => s.trim()).filter(Boolean))
 
 /** 把行事曆帳號對應到本系統 users 列，沒有就建立。回傳 { id, role, name, external: true } 或 null（已停用）。 */
-async function resolveExternalUser(externalId, username) {
+// 行事曆 token 的 role（user / admin）是整套平台唯一的身分來源：這裡把它同步進 users.role，
+// 所以行事曆的 admin 進到股票系統也是 admin，被降級的下次請求就變回 user。
+async function resolveExternalUser(externalId, username, tokenRole) {
+  const wantRole = tokenRole === 'admin' ? 'admin' : 'user'
   const hit = externalCache.get(externalId)
-  if (hit) return hit
+  if (hit && hit.role === wantRole) return hit
   let { rows } = await db.query(
     'SELECT id, username, role, is_active FROM users WHERE external_id = $1', [externalId])
   if (!rows[0]) {
@@ -72,12 +74,10 @@ async function resolveExternalUser(externalId, username) {
   }
   let u = rows[0]
   if (!u.is_active) return null
-  // 單一登入的管理者：.env 的 SSO_ADMIN_USERNAMES（逗號分隔的行事曆帳號 username）第一次進來就升成 admin，
-  // 不必先有一個本地 admin 去改角色。之後在「使用者」頁改回 user 也會被這裡再升回來——要降級就從清單移除。
-  if (username && SSO_ADMINS.has(username) && u.role !== 'admin') {
-    await db.query('UPDATE users SET role = $2 WHERE id = $1', [u.id, 'admin'])
-    u = { ...u, role: 'admin' }
-    console.log(`[auth] ${username} 在 SSO_ADMIN_USERNAMES 內，升為 admin（users.id=${u.id}）`)
+  if (u.role !== wantRole) {
+    await db.query('UPDATE users SET role = $2 WHERE id = $1', [u.id, wantRole])
+    console.log(`[auth] 行事曆帳號 ${username || externalId} 角色同步：${u.role} → ${wantRole}（users.id=${u.id}）`)
+    u = { ...u, role: wantRole }
   }
   const out = { id: u.id, role: u.role, name: u.username, external: true }
   externalCache.set(externalId, out)
@@ -98,7 +98,7 @@ async function requireAuth(req, res, next) {
     if (p.sub) {
       req.user = { id: Number(p.sub), role: p.role, name: p.name }
     } else if (p.id) {
-      const u = await resolveExternalUser(Number(p.id), p.username)
+      const u = await resolveExternalUser(Number(p.id), p.username, p.role)
       if (!u) return res.status(401).json({ detail: '帳號已停用', code: 'INACTIVE' })
       req.user = u
     } else {
