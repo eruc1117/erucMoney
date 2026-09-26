@@ -1,0 +1,32 @@
+{
+  "items": {
+    "total": 3,
+    "last_page": 1,
+    "data": [
+      {
+        "newsId": 5001,
+        "title": "〈台股盤後〉友達（2409）漲停 光電股走強",
+        "summary": "友達今日漲停。",
+        "content": "&lt;p&gt;友達 (2409-TW) 今日以漲停作收，&nbsp;群創同步走高。&lt;/p&gt;",
+        "publishAt": 1790405400,
+        "market": [{"code": "2409", "name": "友達"}, {"code": "9999", "name": "不存在"}],
+        "keyword": ["友達", "光電"]
+      },
+      {
+        "newsId": 5002,
+        "title": "營收速報 - 台積電(2330)8月營收2,600億元創新高",
+        "summary": "",
+        "content": "台積電 8 月合併營收 2,600 億元。",
+        "publishAt": 1789030980,
+        "market": [],
+        "keyword": []
+      },
+      {
+        "newsId": 5003,
+        "title": "",
+        "content": "沒有標題的項目",
+        "publishAt": 1790405400
+      }
+    ]
+  }
+}

@@ -43,10 +43,11 @@ TWSE_API = {
 }
 
 # ── PostgreSQL 連線設定 ────────────────────────────────────────────────────────
+# CRAWLER_TEST_DB：只給 tests/ 用——設了就改連這個資料庫（其餘連線參數不變），正式執行不會設。
 DB = {
     "host": os.environ.get("DB_HOST", "localhost"),
     "port": int(os.environ.get("DB_PORT", "5432")),
-    "dbname": os.environ.get("DB_NAME", "Stock"),
+    "dbname": os.environ.get("CRAWLER_TEST_DB") or os.environ.get("DB_NAME", "Stock"),
     "user": os.environ.get("DB_USER", "postgres"),
     "password": os.environ.get("DB_PASSWORD", ""),      # 只從 .env 來
 }
@@ -68,3 +69,9 @@ FINMIND = {
     # 填入 token 後可提高至每小時 600 次
     "token": os.environ.get("FINMIND_TOKEN", ""),
 }
+
+
+def validate() -> None:
+    """設定檢查：密碼沒填就明講，不要等到 psycopg2 吐一串英文。目前沒有人在啟動時呼叫，供測試與手動檢查。"""
+    if not DB["password"]:
+        raise ValueError("DB_PASSWORD 未設定：請在 repo 根目錄的 .env 填 DB_PASSWORD（見 .env.example）")

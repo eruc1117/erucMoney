@@ -3,11 +3,24 @@
  *
  * GET  /news   取得使用者提交的新聞列表（最新 200 筆）
  * POST /news   儲存使用者貼上的新聞至 user_news 表
+ * PUT  /news/:id、DELETE /news/:id   只能動自己的（admin 可動任何一筆）
  */
 const { Router } = require('express')
 const db = require('../db')
 
 const router = Router()
+
+// 修改／刪除只能動自己的新聞；admin 可以動任何一筆（含爬蟲抓進來、user_id 為空的）。
+// 回傳 null 表示可以；否則 { status, detail }。
+async function checkOwner(req) {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id <= 0) return { status: 400, detail: 'id 格式錯誤' }
+  const { rows } = await db.query('SELECT user_id FROM user_news WHERE id = $1', [id])
+  if (!rows[0]) return { status: 404, detail: 'not found' }
+  if (req.user?.role === 'admin') return null
+  if (rows[0].user_id == null || rows[0].user_id !== req.user?.id) return { status: 403, detail: '只能修改或刪除自己提交的新聞' }
+  return null
+}
 
 // ── 取得新聞列表 ─────────────────────────────────────────────────────────────
 router.get('/', async (_req, res) => {
@@ -44,6 +57,8 @@ router.post('/', async (req, res) => {
 // Body: { platform, title, content, stock_tickers }
 router.put('/:id', async (req, res) => {
   try {
+    const denied = await checkOwner(req)
+    if (denied) return res.status(denied.status).json({ detail: denied.detail })
     const { platform, title, content, stock_tickers, keywords } = req.body
     const { rowCount } = await db.query(`
       UPDATE user_news
@@ -60,6 +75,8 @@ router.put('/:id', async (req, res) => {
 // ── 刪除新聞 ─────────────────────────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
   try {
+    const denied = await checkOwner(req)
+    if (denied) return res.status(denied.status).json({ detail: denied.detail })
     const { rowCount } = await db.query(
       'DELETE FROM user_news WHERE id = $1', [req.params.id]
     )

@@ -151,3 +151,27 @@ with get_conn() as conn:
 | `MAX_RETRIES` | 3 | 5xx 錯誤自動重試次數 |
 | `DB` | localhost:5432/money | PostgreSQL 連線設定 |
 | `SCHEDULE.stock_cron` | 18:00 | 排程執行時間 |
+
+## 自動測試（tests/）
+
+只測「抓得對、存得對、排得對」；特徵工程與模型不在這裡。全部不上網：`responses` 攔 `requests`，FinMind 的 `DataLoader` 用假物件，`time.sleep` 一律 no-op。
+
+```
+pip install -r requirements-test.txt
+python -m pytest -q               # 全部（db 標記的測試用 CRAWLER_TEST_DB，預設 Stock_crawler_test）
+python -m pytest -q -m "not db"   # 只跑不碰資料庫的（秒級）
+```
+
+| 檔案 | 對應 | 內容 |
+|------|------|------|
+| `test_config.py` | `config.py` | `.env` 手寫解析（引號、空白、註解、不覆蓋既有環境變數）、`validate()` 缺密碼明講、`FINMIND_TOKEN` 空字串＝匿名 |
+| `test_price_parsers.py` | `scrapers/twse_scraper.py`、`scrapers/finmind_scraper.py`、`backfill_revenue.py` | 千分位、全形、停牌列、欄位型別、空回應、新舊欄名、NaN→None、除權息／減資列、額度耗盡 |
+| `test_chip_parsers.py` | 同上（籌碼、外資持股） | 買賣超正負號、自營商合計／子項、外資持股比與上限、持股日期晚於行情 |
+| `test_mops_parsers.py` | `backfill_mops.py`、`backfill_revenue.py`、`backfill_revenue_dates.py` | 民國日期＋發言時間→`announce_ts`、`source_url` 去重鍵、被擋重試、營收月份對應、鉅亨網快訊 vs 一覽、來源優先序 |
+| `test_news_pipeline.py` | `scrapers/rss_news_scraper.py`、`news_scraper.py`、`news_alias.py`、`news_dedup.py`、`news_align.py`、`news_sources.py`、`backfill_news.py` | RSS／鉅亨網 API／原文頁解析、標題清理、時區、內文驗證、個股標記與別名、SimHash 去重與 3 天窗口、日級對齊、429 重試 |
+| `test_freshness.py` `db` | `data_freshness.py` | 落後用「市場有的交易日」算（週末假日不算）、預測與持股才顧、一次最多 N 檔、額度用完提早停、外生資料三張表、來源互不影響 |
+| `test_scheduler.py` | `scheduler.py`、`weekly_forecast.py` | 每個工作的 cron 時點與 `max_instances=1`、啟動補跑（凍結時間：只補已過時點且資料落後的、一天一次、週末略過、失敗不中斷）、每週預測到期 |
+| `test_api_ops.py` | `api.py` | `/crawler/run` 冷卻／並發／歷史模式、`/crawler/status`、`/crawler/news` 關鍵字過濾與狀態、`/data/freshness`、`/data/backfill`、`/forecast/weekly/*`；`db`：`/stocks/*` |
+| `test_upsert.py` `db` | `db/repository.py`、`rebuild_adj_close.py`、`sync_stock_info.py`、`news_alias.py`、`news_align.py` | 同鍵重跑不重複、新聞兩層去重（source_url；標題＋發布日）、adj_close 回溯還原、殘留列、別名表、交易日曆與對齊 |
+
+測試資料庫：`tests/helpers/db_setup.py` 依正式順序建 schema（`db/schema.sql` → Node 啟動時建的四張表 → `Server/migrations/*.sql` → `news_schema.py`），只在名字以 `_test` 結尾的資料庫上動作；連不上就整批 skip。CI 在 `.github/workflows/test.yml` 的 `crawler` job。

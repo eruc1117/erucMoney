@@ -1,6 +1,8 @@
 /**
  * FastAPI Proxy 工具
  * 將請求轉發至 Crawler FastAPI (localhost:8000)
+ *
+ * 測試用：環境變數 FASTAPI_HOST / FASTAPI_PORT 可把目標改到假伺服器；沒設就是原本的 localhost 與呼叫端給的 port。
  */
 const http = require('http')
 
@@ -15,8 +17,8 @@ const http = require('http')
 function proxyToFastAPI({ path, method = 'GET', body = null, res, onError, port = 8000 }) {
   const bodyStr = body ? JSON.stringify(body) : ''
   const options = {
-    hostname: 'localhost',
-    port,
+    hostname: process.env.FASTAPI_HOST || 'localhost',
+    port: process.env.FASTAPI_PORT ? Number(process.env.FASTAPI_PORT) : port,
     path,
     method,
     headers: {

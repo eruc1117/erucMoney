@@ -1,0 +1,9 @@
+{
+  "msg": "success",
+  "status": 200,
+  "data": [
+    {"date": "2026-07-01", "stock_id": "2330", "country": "Taiwan", "revenue": 260000000000, "revenue_month": 6, "revenue_year": 2026, "create_time": "2026-07-10 14:30:00"},
+    {"date": "2025-12-01", "stock_id": "2330", "country": "Taiwan", "revenue": 250000000000, "revenue_month": 11, "revenue_year": 2025, "create_time": ""},
+    {"date": "", "stock_id": "2330", "revenue": 1}
+  ]
+}

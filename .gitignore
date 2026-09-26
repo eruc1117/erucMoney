@@ -37,3 +37,7 @@ Screen/.ui-shots/
 
 # 排程器日誌（Iteration 36）
 Crawler/logs/
+
+# jest 覆蓋率輸出
+Server/coverage/
+!Server/.env.test
