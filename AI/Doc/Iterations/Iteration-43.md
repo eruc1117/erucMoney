@@ -94,3 +94,13 @@ erucMoney 的 `.env` 把 `JWT_SECRET` 改成同一把、加 `AUTH_API_URL=http:/
 - 行事曆 token 只有 1 小時；交接到 erucMoney 後一小時要重新從行事曆開啟（或在 erucmoney.com 用行事曆帳密登入）。
 - erucMoney 本地 admin 仍是本地帳號；行事曆帳號在 erucMoney 一律 `user` 角色，要給 admin 到 erucMoney「帳號」頁改角色。
 - 行事曆後端在 `project/` 目錄裡是 .NET 版；本迭代改的是 GitHub 上的 Node.js 版（`meeting_API_Server`），沒有推送，只在本機 commit。
+
+## 登入「伺服器錯誤，請稍後再試」（2026-09-26 修）
+
+症狀：erucmoney.com 登入一律失敗；curl 打 `calendar-api.erucmoney.com/api/auth/login` 正常（含 CORS 標頭），但頁面內任何 `fetch` 都丟 `TypeError: Failed to fetch`。
+原因：`meeting_front_end/public/index.html` 的 CSP `connect-src` 只放行 `localhost:5000/4000`，瀏覽器在網路層之前就擋掉跨網域請求，前端把它當成伺服器錯誤。
+修法（meeting_front_end commit `91b48ec`）：`connect-src` 加 `%REACT_APP_BASEURL%`（CRA 建置時代換）與 `calendar-api`／`chat` 網域；`frame-src` 加 `%REACT_APP_STOCK_URL%`（股票分頁內嵌儀表板要用）。
+驗證：本機以正式環境變數建置後，頁面內 `fetch` 登入 200、表單登入導向 `/schedule`；push 後 Pages 一分鐘內重佈，`erucmoney.com` 已送出新的 CSP。
+
+待辦：`stock.erucmoney.com` 的 DNS CNAME 已加，但 GitHub 回 404 且憑證未簽——用 GitHub Actions 部署時 `public/CNAME` **不會**自動綁網域，
+要到 `eruc1117/erucMoney` → Settings → Pages → Custom domain 填 `stock.erucmoney.com`，等 DNS check 過再勾 Enforce HTTPS。
