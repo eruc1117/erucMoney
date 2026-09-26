@@ -14,10 +14,11 @@ $Server   = Join-Path $Root 'Server'
 New-Item -ItemType Directory -Force (Join-Path $Server 'logs') | Out-Null
 
 $node = (Get-Command node).Source
-# cmd /c 包一層才能把 stdout/stderr 導到檔案；視窗用 -WindowStyle Hidden 隱藏
+# 經 Deploy\run_logged.js 啟動：視窗標題 = MoneyApi，輸出同時印在視窗與寫進 log
 $log = Join-Path $Server 'logs\api.log'
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' `
-    -Argument "/c `"`"$node`" index.js >> `"$log`" 2>&1`"" -WorkingDirectory $Server
+$runner = Join-Path $Root 'Deploy\run_logged.js'
+$action = New-ScheduledTaskAction -Execute $node `
+    -Argument "`"$runner`" $TaskName `"$log`" `"$node`" index.js" -WorkingDirectory $Server
 
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $trigger.Delay = 'PT1M'
@@ -31,8 +32,11 @@ $settings = New-ScheduledTaskSettingsSet `
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
+Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue |
+    ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Settings $settings -Principal $principal `
     -Description '台股決策系統 Node.js API :3001（JWT、持股、代理 FastAPI／LSTM）' | Out-Null

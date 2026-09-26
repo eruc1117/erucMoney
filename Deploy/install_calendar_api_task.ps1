@@ -15,8 +15,10 @@ New-Item -ItemType Directory -Force (Join-Path $Repo 'logs') | Out-Null
 
 $node = (Get-Command node).Source
 $log = Join-Path $Repo 'logs\task.out'   # 應用程式本身的 pino 寫 logs\api.log，stdout 另外導到 task.out 以免 EBUSY
-$action = New-ScheduledTaskAction -Execute 'cmd.exe' `
-    -Argument "/c `"`"$node`" server.js >> `"$log`" 2>&1`"" -WorkingDirectory $Repo
+# 經 Deploy\run_logged.js 啟動：視窗標題 = MoneyCalendarApi，輸出同時印在視窗與寫進 log
+$runner = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) 'run_logged.js'
+$action = New-ScheduledTaskAction -Execute $node `
+    -Argument "`"$runner`" $TaskName `"$log`" `"$node`" server.js" -WorkingDirectory $Repo
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $trigger.Delay = 'PT1M'
 $settings = New-ScheduledTaskSettingsSet `
@@ -27,8 +29,11 @@ $settings = New-ScheduledTaskSettingsSet `
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
 
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    Stop-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
+Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue |
+    ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Settings $settings -Principal $principal `
     -Description '行事曆平台 Node.js API :5000（統一登入來源；經 calendar-api.erucmoney.com 對外）' | Out-Null

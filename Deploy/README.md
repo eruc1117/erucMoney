@@ -35,6 +35,8 @@ PostgreSQL、FastAPI、LSTM、排程器全部留在本機，不對外。
 | `Deploy/install_tunnel.ps1` | 裝 cloudflared → 登入 → 建隧道 → 寫設定 → DNS → 裝服務 |
 | `Deploy/install_api_task.ps1` | Node API 登入即啟動（工作排程器 `MoneyApi`） |
 | `Deploy/install_services_task.ps1` | FastAPI :8000（`MoneyCrawlerApi`）與 LSTM :8001（`MoneyLstm`）登入即啟動；只聽本機，不進隧道 |
+| `Deploy/install_calendar_api_task.ps1` | 行事曆 API :5000（`MoneyCalendarApi`），統一登入來源 |
+| `Deploy/run_logged.js` | 四個常駐工作的外殼：CMD 視窗標題 = 工作名稱，輸出同時印在視窗與寫進 log。關掉視窗 = 關掉該服務 |
 
 ## 你要做的步驟（依序）
 

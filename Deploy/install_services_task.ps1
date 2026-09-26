@@ -10,10 +10,12 @@
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
-function Register-MoneyTask($Name, $WorkDir, $Exe, $Arguments, $Log, $Desc) {
+function Register-MoneyTask($Name, $WorkDir, $Exe, $Arguments, $Log, $Desc, $Port) {
     New-Item -ItemType Directory -Force (Split-Path -Parent $Log) | Out-Null
-    $action = New-ScheduledTaskAction -Execute 'cmd.exe' `
-        -Argument "/c `"`"$Exe`" $Arguments >> `"$Log`" 2>&1`"" -WorkingDirectory $WorkDir
+    # 經 Deploy\run_logged.js 啟動：視窗標題 = 工作名稱，輸出同時印在視窗與寫進 log
+    $runner = Join-Path $Root 'Deploy\run_logged.js'
+    $action = New-ScheduledTaskAction -Execute $node `
+        -Argument "`"$runner`" $Name `"$Log`" `"$Exe`" $Arguments" -WorkingDirectory $WorkDir
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
     $trigger.Delay = 'PT1M'
     $settings = New-ScheduledTaskSettingsSet `
@@ -23,8 +25,11 @@ function Register-MoneyTask($Name, $WorkDir, $Exe, $Arguments, $Log, $Desc) {
         -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -Hidden
     $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
     if (Get-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue) {
+        Stop-ScheduledTask -TaskName $Name -ErrorAction SilentlyContinue
         Unregister-ScheduledTask -TaskName $Name -Confirm:$false
     }
+    Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+        ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
     Register-ScheduledTask -TaskName $Name -Action $action -Trigger $trigger `
         -Settings $settings -Principal $principal -Description $Desc | Out-Null
     Start-ScheduledTask -TaskName $Name
@@ -32,13 +37,14 @@ function Register-MoneyTask($Name, $WorkDir, $Exe, $Arguments, $Log, $Desc) {
 }
 
 $py = (Get-Command python).Source
+$node = (Get-Command node).Source
 Register-MoneyTask -Name 'MoneyCrawlerApi' -WorkDir (Join-Path $Root 'Crawler') -Exe $py -Arguments 'main.py --mode server' `
-    -Log (Join-Path $Root 'Crawler\logs\api.log') -Desc '台股決策系統 FastAPI :8000（爬蟲、投票、模型目錄；只聽本機）'
+    -Log (Join-Path $Root 'Crawler\logs\api.log') -Port 8000 -Desc '台股決策系統 FastAPI :8000（爬蟲、投票、模型目錄；只聽本機）'
 
 $lstmPy = Join-Path $Root 'LSTM\venv\Scripts\python.exe'
 if (-not (Test-Path $lstmPy)) { $lstmPy = $py }
 Register-MoneyTask -Name 'MoneyLstm' -WorkDir (Join-Path $Root 'LSTM') -Exe $lstmPy -Arguments 'serve.py' `
-    -Log (Join-Path $Root 'LSTM\logs\serve.log') -Desc '台股決策系統 LSTM 推論 :8001（只聽本機）'
+    -Log (Join-Path $Root 'LSTM\logs\serve.log') -Port 8001 -Desc '台股決策系統 LSTM 推論 :8001（只聽本機）'
 
 Start-Sleep -Seconds 15
 foreach ($t in 'MoneyCrawlerApi', 'MoneyLstm') { Write-Host "$t：$((Get-ScheduledTask -TaskName $t).State)" }
