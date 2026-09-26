@@ -1,6 +1,16 @@
-# 部署：erucmoney.com（階段 2～4）
+# 部署：erucmoney.com（階段 2～4；Iteration 43 起改為統一前端）
 
-目標：前端 `https://erucmoney.com`（GitHub Pages，免費）→ API `https://api.erucmoney.com`（Cloudflare Tunnel → 本機 Node.js :3001）。
+網域配置（2026-09-26）：
+
+| 網域 | 內容 | 來源 |
+|------|------|------|
+| `erucmoney.com` | **統一前端**：行事曆平台（含「股票」分頁），登入只有一套 | GitHub Pages，[meeting_front_end](https://github.com/eruc1117/meeting_front_end) |
+| `stock.erucmoney.com` | 股票完整儀表板（從行事曆按「開啟完整儀表板」以 `#token=` 交接免登入） | GitHub Pages，本 repo `Screen/`（`public/CNAME`） |
+| `api.erucmoney.com` | 股票 API（本機 Node :3001） | Cloudflare Tunnel |
+| `calendar-api.erucmoney.com` | 行事曆 API（本機 Node :5000，[meeting_API_Server](https://github.com/eruc1117/meeting_API_Server)） | Cloudflare Tunnel |
+
+Cloudflare DNS 要有：apex 四筆 A + `www` CNAME（GitHub Pages，灰雲）、`stock` CNAME → `eruc1117.github.io`（灰雲）、
+`api`／`calendar-api` CNAME → 隧道（橘雲，`cloudflared tunnel route dns` 自動加）。
 PostgreSQL、FastAPI、LSTM、排程器全部留在本機，不對外。
 
 ```

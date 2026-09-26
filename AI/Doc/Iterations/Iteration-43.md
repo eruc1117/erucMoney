@@ -68,6 +68,19 @@ erucMoney 的 `.env` 把 `JWT_SECRET` 改成同一把、加 `AUTH_API_URL=http:/
 
 測試帳號已從兩邊資料庫刪除。
 
+## 網域改道（2026-09-26 00:10～）
+
+使用者決定 `erucmoney.com` 改為統一前端（meeting_front_end），股票儀表板搬到 `stock.erucmoney.com`：
+
+| 做了 | 狀態 |
+|------|------|
+| erucMoney `Screen/public/CNAME` → `stock.erucmoney.com`，push → Pages 重佈成功（自訂網域由 CNAME 檔切換） | 完成 |
+| meeting_front_end：`public/CNAME` = `erucmoney.com`、`.github/workflows/pages.yml`（CRA build、`404.html` fallback、正式 API 位址）、鎖定檔同步 | 完成、已推 |
+| 隧道 ingress 加 `calendar-api.erucmoney.com → :5000`、`route dns`、服務重啟 | 完成，公開 401（未登入）正確 |
+| 行事曆 API 常駐 `MoneyCalendarApi`（`Deploy/install_calendar_api_task.ps1`；stdout 導到 `logs/task.out`，因為 pino 自己佔用 `logs/api.log`） | Running |
+| `meeting_API_Server/.env`：`ALLOWED_ORIGINS` 加 `https://erucmoney.com`、`NODE_ENV=production`；money `.env`：`AUTH_API_URL=https://calendar-api.erucmoney.com`，MoneyApi 重啟 | 完成 |
+| meeting_API_Server 的兩個 commit 推上 GitHub | 完成 |
+
 ## 部署要做的
 
 1. `meeting_API_Server` 正式環境的 `.env`：`STOCK_API_URL=https://api.erucmoney.com`；`SECRET` 與 erucMoney `.env` 的 `JWT_SECRET` 相同。

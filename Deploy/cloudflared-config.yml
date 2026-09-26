@@ -9,4 +9,8 @@ ingress:
     service: http://localhost:3001
     originRequest:
       connectTimeout: 30s
+  - hostname: calendar-api.erucmoney.com
+    service: http://localhost:5000
+    originRequest:
+      connectTimeout: 30s
   - service: http_status:404
