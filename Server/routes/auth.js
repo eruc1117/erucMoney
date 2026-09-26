@@ -21,7 +21,7 @@ const router = Router()
 const loginLimiter = rateLimit({ windowMs: 60 * 1000, limit: 10, standardHeaders: true, legacyHeaders: false,
                                  message: { detail: '登入嘗試太頻繁，一分鐘後再試' } })
 
-const PUBLIC = 'id, username, role, display_name, is_active, created_at, last_login_at'
+const PUBLIC = 'id, username, role, display_name, is_active, created_at, last_login_at, external_id'
 
 // SSO：AUTH_API_URL 有設時，先拿帳密去行事曆平台（meeting_API_Server）登入；成功就回它簽的 token
 // （本系統用同一把密鑰驗證，requireAuth 會自動建立對應使用者）。行事曆說帳號不存在／密碼錯，才退回本地帳號（admin）。
