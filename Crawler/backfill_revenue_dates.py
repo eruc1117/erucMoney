@@ -49,6 +49,7 @@ from db.connection import get_conn
 logger = logging.getLogger(__name__)
 
 PRIORITY = {'mops_item': 5, 'cnyes_item': 4, 'news_item': 3, 'finmind': 2, 'cnyes_list': 1, 'estimated': 0}
+# revenue_month 慣例：公布月（所屬月 + 1）。所有來源都寫到同一種鍵，才能和 revenue 數字配對（Iteration 49 修正）。
 CNYES_START = date(2024, 3, 1)         # tw_revenue 分類 2024-02 仍為 0 則
 MIGRATION = '016_revenue_announce_ts.sql'
 LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
@@ -111,10 +112,17 @@ def upsert_dates(rows: list) -> int:
 
 
 # ── ① 鉅亨網 tw_revenue ─────────────────────────────────────────────────────
-def _rev_month(month: int, published: datetime) -> date:
-    """標題只有「X月營收」：營收月份一定早於公布月份——同年若 month < 公布月，否則是去年（1 月公布 12 月營收）。"""
+def _own_month(month: int, published: datetime) -> date:
+    """標題只有「X月營收」：營收所屬月一定早於公布月——同年若 month < 公布月，否則是去年（1 月公布 12 月營收）。"""
     year = published.year if month < published.month else published.year - 1
     return date(year, month, 1)
+
+
+def _rev_month(month: int, published: datetime) -> date:
+    """表的鍵 revenue_month 是**公布月**（FinMind 慣例：2026-09-01 那列放 8 月營收，Iteration 48 用台積電核對過），
+    所以「X 月營收」的公告要寫到 X+1 月那一列。Iteration 49 之前寫在 X 月那列，公告日全部早了一個月、配到上一期的營收數字。"""
+    own = _own_month(month, published)
+    return date(own.year + (own.month == 12), own.month % 12 + 1, 1)
 
 
 def _batch_codes(content: str) -> list:
@@ -284,8 +292,8 @@ def infer_from_news(since: date = date(2023, 9, 1)) -> dict:
             if '一覽' in title or '前三' in title or '排行' in title:
                 continue
             rev_month = _rev_month(mo, ts)
-            lag = (ts.date() - rev_month).days
-            if not (28 <= lag <= 50):          # 次月 1 日 ~ 約 20 日；其他是季報／年報回顧
+            lag = (ts.date() - _own_month(mo, ts)).days
+            if not (28 <= lag <= 50):          # 所屬月 1 日起算：次月 1 日 ~ 約 20 日；其他是季報／年報回顧
                 continue
             src = 'mops_item' if is_mops else 'news_item'
             key = (sid, rev_month, src)
@@ -319,16 +327,14 @@ def estimate_missing(min_known: int = 3) -> dict:
         lags = []
         for rm, ad, src in lst:
             if ad and src and src != 'estimated':
-                nxt = date(rm.year + (rm.month == 12), rm.month % 12 + 1, 1)
-                lags.append((ad - nxt).days)
+                lags.append((ad - rm).days)            # rm 已是公布月 1 日
         if len(lags) < min_known:
             continue
         lags.sort()
         med = lags[len(lags) // 2]
         for rm, ad, src in lst:
             if ad is None or src == 'estimated':
-                nxt = date(rm.year + (rm.month == 12), rm.month % 12 + 1, 1)
-                est = nxt + timedelta(days=max(0, med))
+                est = rm + timedelta(days=max(0, med))
                 if est > date.today():
                     continue
                 out.append({'stock_id': sid, 'revenue_month': rm, 'announce_date': est,

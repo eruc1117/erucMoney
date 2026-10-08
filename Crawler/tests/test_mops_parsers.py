@@ -78,12 +78,14 @@ def test_fetch_revenue_month_vs_create_time(fx):
 
 # ── 公布時點的多來源解析 ──────────────────────────────────────────────────────
 @pytest.mark.parametrize('month, published, expected', [
-    (8, datetime(2026, 9, 10), date(2026, 8, 1)),      # 9 月公布 8 月營收
-    (12, datetime(2026, 1, 8), date(2025, 12, 1)),     # 1 月公布去年 12 月
-    (9, datetime(2026, 9, 30), date(2025, 9, 1)),      # 同月不可能是當月 → 去年
+    (8, datetime(2026, 9, 10), date(2026, 9, 1)),      # 9 月公布 8 月營收 → 鍵是公布月 2026-09-01（與 FinMind 數字同列）
+    (12, datetime(2026, 1, 8), date(2026, 1, 1)),      # 1 月公布去年 12 月 → 2026-01-01
+    (9, datetime(2026, 9, 30), date(2025, 10, 1)),     # 同月不可能是當月 → 去年 9 月營收，鍵 2025-10-01
 ])
 def test_rev_month_mapping(month, published, expected):
     assert brd._rev_month(month, published) == expected
+    own = brd._own_month(month, published)
+    assert (own.month % 12) + 1 == expected.month          # 所屬月 + 1 = 鍵
 
 
 @pytest.mark.parametrize('title, expected', [
@@ -110,7 +112,7 @@ def test_parse_cnyes_item_quick_report_vs_daily_list():
     assert [r['stock_id'] for r in rows] == ['2330', '2303']          # 累計排行段落不拿
     assert rows[0]['source'] == 'cnyes_list' and rows[0]['announce_ts'] is None
     assert rows[0]['announce_date'] == date(2026, 9, 10)               # 清單日 − 1
-    assert rows[0]['revenue_month'] == date(2026, 8, 1)
+    assert rows[0]['revenue_month'] == date(2026, 9, 1)               # 8 月營收 → 鍵是公布月 9 月
 
     zero = dict(listing, title='營收速報 - 2026年9月11日台股大型公司8月營收一覽（新增0家）')
     assert brd.parse_cnyes_item(zero)[0] == []                          # 新增 0 家卻有代號 → 不信

@@ -87,6 +87,7 @@ python market_data.py --backfill --source exchange     # 或：交易所每日�
 python market_data.py --events --index --rebuild-adj   # 除權息／減資（交易所表）、含息大盤 TAIEX_TR、還原價
 python market_data.py --check                          # 回測前七項資料檢查
 python backfill_revenue_mops.py                        # 全市場月營收：MOPS 彙總表，一市場一月一頁（不吃額度）
+python portfolio_backtest.py --signal sue --segment dev # 月調倉回測（對手 0050）；每次寫實驗日誌 N+1；--list 看日誌
 ```
 
 ---

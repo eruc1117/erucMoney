@@ -189,7 +189,7 @@ dedup_group_id / is_canonical`。寫入判重：有發布時間時「標題 + �
 
 | 欄位 | 說明 |
 |------|------|
-| `stock_id`, `revenue_month` | 主鍵；`revenue_month` 是營收所屬月份（月初），不是公布月 |
+| `stock_id`, `revenue_month` | 主鍵；`revenue_month` 是**公布月**（所屬月 + 1，FinMind 慣例：2026-09-01 那列放 8 月營收）。Iteration 49 之前鉅亨／MOPS／媒體來源的公告日寫在所屬月那列、早了一個月，已搬正並改 `_rev_month` |
 | `revenue` | 合併營收（元），FinMind；2013 年起，`backfill_revenue.py` |
 | `announce_date` | 公布日（可為 NULL，migration 016 拿掉 NOT NULL） |
 | `announce_ts` | 公布時間（秒），只有 MOPS 公告／鉅亨營收速報／媒體標題來源有 |
