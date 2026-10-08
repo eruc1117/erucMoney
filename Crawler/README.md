@@ -86,6 +86,7 @@ python market_data.py --backfill --source finmind      # 逐檔回補 2018 起�
 python market_data.py --backfill --source exchange     # 或：交易所每日檔逐日回補（不吃額度）
 python market_data.py --events --index --rebuild-adj   # 除權息／減資（交易所表）、含息大盤 TAIEX_TR、還原價
 python market_data.py --check                          # 回測前七項資料檢查
+python backfill_revenue_mops.py                        # 全市場月營收：MOPS 彙總表，一市場一月一頁（不吃額度）
 ```
 
 ---

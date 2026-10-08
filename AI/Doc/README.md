@@ -60,7 +60,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
-| [Iteration-48.md](./Iterations/Iteration-48.md) | **打敗大盤計畫階段 1**：全市場股票池 `market_universe`（2,621 檔，含 112 檔 2018 後下市）、日線 `market_daily_prices`（migration 020；FinMind 逐檔或交易所檔兩條路線）、除權息／減資從交易所表、批次還原價、含息大盤 `TAIEX_TR`、`job_market_daily` 18:30、`--check` 七項檢查；月營收全市場與公告日精確度未解 |
+| [Iteration-48.md](./Iterations/Iteration-48.md) | **打敗大盤計畫階段 1**：全市場股票池 `market_universe`（2,621 檔，含 112 檔 2018 後下市）、日線 `market_daily_prices`（migration 020；FinMind 逐檔或交易所檔兩條路線）、除權息／減資從交易所表、批次還原價、含息大盤 `TAIEX_TR`、`job_market_daily` 18:30、`--check` 七項檢查；月營收改抓 MOPS 彙總表 480 頁補齊全市場 2016-10 起（公告日精確度仍未解） |
 | [Iteration-47.md](./Iterations/Iteration-47.md) | **新聞訊號模型**（依「新聞與股價關聯性」方案）：六個維度成為面板區塊 news／event、三個模型（事件波動通過、營收漂移與語調未通過）、五道關卡進訓練腳本與前端關卡表、20:10 台帳、新頁「新聞訊號」與週預測三欄 |
 | [Iteration-46.md](./Iterations/Iteration-46.md) | **修跳空模型線上時序**：夜盤特徵改用次一交易日那一場、夜盤未收就不預測；06:20 排程專跑跳空；台帳 `invalid_reason`（migration 019）作廢 8/7~9/22 的 256 筆；稽核加對齊自檢；MoneyScheduler 註冊成常駐工作（之前從未常駐，七週只有 9 天有預測） |
 | [Iteration-45.md](./Iterations/Iteration-45.md) | 固定自動測試腳本（非模型部分，第 1～4 期）：股票 API Jest 130 項、爬蟲 pytest 124 項、Stock_test／Stock_crawler_test 測試庫、CI |
