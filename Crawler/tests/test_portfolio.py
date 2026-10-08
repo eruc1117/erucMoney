@@ -148,6 +148,68 @@ def test_build_targets_buffer_and_tsmc_weight():
     assert ps.build_targets(pd.Series(dtype=float), [], 2, 3).empty
 
 
+def test_build_targets_tranche_mode_only_swaps_the_expired_batch():
+    scores = pd.Series({'a': 9, 'b': 8, 'c': 7, 'd': 6, 'e': 5, 'f': 4, 'g': 3})
+    held = ['e', 'f', 'g', 'd']                       # 上期持股（排名不高也留著）
+    t = ps.build_targets(scores, held, top_n=6, buffer=40, tranche_new=2, release=['e'])
+    assert list(t['stock_id']) == ['f', 'g', 'd', 'a', 'b', 'c']   # 只賣到期那批 e；持股不足 top_n 時補滿（下市缺口才不會一直空著）
+    assert t['target_weight'].round(6).tolist() == [round(1 / 6, 6)] * 6
+    # 初期沒持股：一次最多補到 top_n（不只一批）
+    t0 = ps.build_targets(scores, [], top_n=6, buffer=40, tranche_new=2, release=[])
+    assert list(t0['stock_id']) == ['a', 'b', 'c', 'd', 'e', 'f']
+
+
+def test_composite_scores_are_rank_averages_and_require_all_parts():
+    mkt, _ = _market(n_days=80)
+    d = pd.Timestamp('2024-03-11')
+    ids = pd.Index(['1111', '2222', '3333'])
+    sur = pd.DataFrame([{'stock_id': '1111', 'revenue_month': pd.Timestamp('2024-03-01'), 'sue': 1.0, 'announce_date': pd.NaT, 'announce_ts': pd.NaT, 'announce_source': None},
+                        {'stock_id': '2222', 'revenue_month': pd.Timestamp('2024-03-01'), 'sue': -1.0, 'announce_date': pd.NaT, 'announce_ts': pd.NaT, 'announce_source': None}])
+    c = ps.scores_on('win+sue', mkt, sur, d, ids)
+    assert set(c.index) == {'1111', '2222'}                         # 3333 沒有 SUE → 不進組合
+    w = ps.signal_win(mkt, d).reindex(ids).rank(pct=True)
+    s = ps.signal_sue(sur, d).reindex(ids).rank(pct=True)
+    assert c['1111'] == pytest.approx((w['1111'] + s['1111']) / 2)
+    assert ps.signal_mom(mkt, d).empty                               # 80 天不夠 252 日動能
+    assert set(ps.signal_win3(mkt, d).index) >= set(ids)
+
+
+def test_estimate_tsmc_weight_recovers_known_mix():
+    """0050 = 0.5 × 台積電 + 0.5 × 其他等權 → 估計約 0.5；歷史不足 120 天 → None。"""
+    rng = np.random.default_rng(3)
+    days = pd.bdate_range('2023-01-02', periods=320)
+    others = [str(1000 + i) for i in range(6)]
+    r = {s: rng.normal(0.0005, 0.015, len(days)) for s in others}
+    r[ps.TSMC] = rng.normal(0.0005, 0.02, len(days))
+    r[ps.BENCH] = 0.5 * r[ps.TSMC] + 0.5 * np.mean([r[s] for s in others], axis=0)
+    rows = []
+    for s, ret in r.items():
+        px = 100 * np.cumprod(1 + ret)
+        for d, p in zip(days, px):
+            rows.append({'stock_id': s, 'trade_date': d, 'open_price': p, 'high_price': p, 'low_price': p, 'close_price': p, 'adj_close': p, 'turnover_value': 1e8})
+    meta = pd.DataFrame({'stock_id': others + [ps.TSMC], 'listing_date': pd.NaT, 'delisted_date': pd.NaT}).set_index('stock_id')
+    mkt = ps.Market(pd.DataFrame(rows), meta)
+    w = ps.estimate_tsmc_weight(mkt, days[-1])
+    assert w == pytest.approx(0.5, abs=0.03)
+    assert ps.estimate_tsmc_weight(mkt, days[100]) is None
+
+
+def test_liq_weighting_caps_single_name():
+    liq = pd.Series({'a': 1000.0, 'b': 10.0, 'c': 10.0})
+    w = ps._weights(['a', 'b', 'c'], 1.0, 'liq', liq, cap=0.5)
+    assert w['a'] == pytest.approx(0.5) and w['b'] == pytest.approx(0.25) and w['c'] == pytest.approx(0.25)
+    assert ps._weights(['a', 'b'], 0.8, 'equal', None) == {'a': 0.4, 'b': 0.4}
+
+
+def test_simulate_tranches_cut_turnover():
+    """分批輪動：每月只換 1/3，年換手應該明顯低於月月重排。"""
+    mkt, _ = _market(n_days=300, stocks=tuple(str(1000 + i) for i in range(12)), start='2023-06-01')
+    base = pb.simulate(mkt, pd.DataFrame(), 'win', date(2024, 1, 1), date(2024, 10, 31), top_n=6, buffer=6, universe_n=12, excl_limit_pct=0)
+    tr = pb.simulate(mkt, pd.DataFrame(), 'win', date(2024, 1, 1), date(2024, 10, 31), top_n=6, buffer=6, universe_n=12, excl_limit_pct=0, tranches=3)
+    assert tr['traded_total'] < base['traded_total']
+    assert tr['n_rebalances'] == base['n_rebalances']
+
+
 # ── 模擬帳 ────────────────────────────────────────────────────────────────────
 def _flat_market(stocks=('1111', '2222'), n_days=100, start='2023-11-01', price=100.0, drift=0.0):
     days = pd.bdate_range(start, periods=n_days)

@@ -48,7 +48,7 @@ RESULTS_DIR = None   # main() 設成 UnifiedModel/results
 
 def simulate(mkt: ps.Market, sur: pd.DataFrame, signal: str, start: date, end: date, top_n: int = 20, buffer: int = 40,
              universe_n: int = 300, excl_limit_pct: float = 0.10, tsmc_weight: Optional[float] = None,
-             costs: dict = COSTS) -> dict:
+             costs: dict = COSTS, tranches: int = 1, weighting: str = 'equal') -> dict:
     schedule = ps.rebalance_schedule(mkt, start, end)
     if not schedule:
         raise RuntimeError('期間內沒有任何調倉日')
@@ -62,6 +62,8 @@ def simulate(mkt: ps.Market, sur: pd.DataFrame, signal: str, start: date, end: d
     cost_total, traded_total = 0.0, 0.0
     holdings_order: list = []
     skipped: list = []
+    tranche_queue: list = []            # 分批模式：每個月進場的那批名單，滿 tranches 批就把最舊的賣掉
+    tsmc_log: list = []                 # 每次調倉用的台積電權重（'est' 時是估計值）
 
     def price_row(frame, d):
         return frame.loc[d]
@@ -72,13 +74,28 @@ def simulate(mkt: ps.Market, sur: pd.DataFrame, signal: str, start: date, end: d
             s = exec_map[d]
             ids = ps.eligible(mkt, s, universe_n, excl_limit_pct)
             scores = ps.scores_on(signal, mkt, sur, s, ids)
-            if len(scores) < top_n:
+            if len(scores) < (top_n if tranches == 1 else max(1, top_n // tranches)):
                 # 這個月訊號不足（例如 AR₀ 在沒有精確公告日的年份）：不調倉、照舊持有，不算一次換手
                 skipped.append(s.date())
                 nav_val = cash + sum(u * (adj_row.get(sid) if pd.notna(adj_row.get(sid, np.nan)) else last_px.get(sid, 0.0)) for sid, u in units.items())
                 nav.append((d, nav_val))
                 continue
-            targets = ps.build_targets(scores, holdings_order, top_n, buffer, tsmc_weight)
+            liq_s = mkt.liq.loc[s] if weighting == 'liq' else None
+            if tsmc_weight == 'est':
+                w_tsmc = ps.estimate_tsmc_weight(mkt, s)
+                w_tsmc = ps.TSMC_WEIGHT_FALLBACK if w_tsmc is None else w_tsmc
+            else:
+                w_tsmc = tsmc_weight
+            tsmc_log.append((s.date(), w_tsmc))
+            if tranches > 1:
+                release = tranche_queue.pop(0) if len(tranche_queue) >= tranches else []
+                held_now = [sid for sid in holdings_order if sid in units]
+                targets = ps.build_targets(scores, held_now, top_n, buffer, w_tsmc, weighting, liq_s,
+                                           tranche_new=max(1, top_n // tranches), release=release)
+                prev_set = set(held_now) - set(release)
+                tranche_queue.append([sid for sid in targets['stock_id'] if sid not in prev_set and sid != ps.TSMC])
+            else:
+                targets = ps.build_targets(scores, holdings_order, top_n, buffer, w_tsmc, weighting, liq_s)
             open_row = price_row(mkt.adj_open, d)
             locked_row = price_row(mkt.locked, d)
             liq_rank = mkt.liq.loc[s].rank(ascending=False)
@@ -134,7 +151,7 @@ def simulate(mkt: ps.Market, sur: pd.DataFrame, signal: str, start: date, end: d
                 units[sid] = units.get(sid, 0.0) + val / px
                 filled.setdefault(sid, True)
                 trades.append((d, sid, 'buy', val))
-            holdings_order = [sid for sid in targets['stock_id'] if sid in units]
+            holdings_order = [sid for sid in targets['stock_id'] if sid in units and sid != ps.TSMC]
             for r in targets.itertuples(index=False):
                 positions.append({'rebalance_date': s.date(), 'exec_date': d.date(), 'stock_id': r.stock_id, 'rank': r.rank,
                                   'signal_value': r.signal_value, 'target_weight': r.target_weight, 'filled': filled.get(r.stock_id, True)})
@@ -157,7 +174,8 @@ def simulate(mkt: ps.Market, sur: pd.DataFrame, signal: str, start: date, end: d
 
     nav = pd.Series(dict(nav)).sort_index()
     return {'nav': nav, 'positions': pd.DataFrame(positions), 'trades': trades, 'cost_total': cost_total,
-            'traded_total': traded_total, 'n_rebalances': len(schedule) - len(skipped), 'skipped': skipped, 'schedule': schedule}
+            'traded_total': traded_total, 'n_rebalances': len(schedule) - len(skipped), 'skipped': skipped, 'schedule': schedule,
+            'tsmc_log': tsmc_log}
 
 
 # ── 指標 ──────────────────────────────────────────────────────────────────────
@@ -195,6 +213,8 @@ def metrics(nav: pd.Series, bench: pd.Series, sim: dict) -> dict:
         'n_rebalances': sim['n_rebalances'],
         'unfilled': int((~sim['positions']['filled']).sum()) if len(sim['positions']) else 0,
         'skipped_months': len(sim.get('skipped', [])),
+        'tsmc_weight_mean': (round(float(np.mean([w for _, w in sim.get('tsmc_log', []) if w is not None])), 3)
+                             if any(w is not None for _, w in sim.get('tsmc_log', [])) else None),
         'total_return_port': round(float(n.iloc[-1] - 1), 4), 'total_return_bench': round(float(b.iloc[-1] - 1), 4),
     }, m_act
 
@@ -240,18 +260,26 @@ def save_run(n: int, name: str, signal: str, segment: str, start: date, end: dat
 
 def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Optional[date] = None, top_n: int = 20, buffer: int = 40,
         universe_n: int = 300, excl_limit_pct: float = 0.10, tsmc_weight: Optional[float] = None, costs: dict = COSTS,
-        name: Optional[str] = None, notes: str = '', save: bool = True) -> dict:
+        name: Optional[str] = None, notes: str = '', save: bool = True, tranches: int = 1, weighting: str = 'equal',
+        _cache: Optional[dict] = None) -> dict:
+    """tsmc_weight：None（不持台積電）、數字（固定權重）、'est'（每次調倉用 estimate_tsmc_weight 估 0050 的台積電權重）。"""
     seg_start, seg_end = SEGMENTS.get(segment, (None, None))
     start = start or seg_start
     end = end or seg_end or date.today()
     if start is None:
         raise ValueError('要給 segment 或 start')
     t0 = datetime.now()
-    prices = ps.load_prices(start, end)
-    meta = ps.load_universe_meta()
-    mkt = ps.Market(prices, meta)
-    sur = ps.surprises(ps.load_revenue(start)) if signal in ('sue', 'ar0') else pd.DataFrame(columns=['stock_id', 'revenue_month', 'sue', 'announce_date', 'announce_ts', 'announce_source'])
-    sim = simulate(mkt, sur, signal, start, end, top_n, buffer, universe_n, excl_limit_pct, tsmc_weight, costs)
+    key = (start, end)
+    if _cache is not None and _cache.get('key') == key:
+        mkt, sur = _cache['mkt'], _cache['sur']
+    else:
+        prices = ps.load_prices(start, end)
+        meta = ps.load_universe_meta()
+        mkt = ps.Market(prices, meta)
+        sur = ps.surprises(ps.load_revenue(start))
+        if _cache is not None:
+            _cache.update({'key': key, 'mkt': mkt, 'sur': sur})
+    sim = simulate(mkt, sur, signal, start, end, top_n, buffer, universe_n, excl_limit_pct, tsmc_weight, costs, tranches, weighting)
     bench = mkt.adj[ps.BENCH].dropna()
     met, m_act = metrics(sim['nav'], bench, sim)
     n, var = next_n_and_var()
@@ -259,14 +287,14 @@ def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Op
     met.update({'experiment_n': n, 'dsr': round(d['dsr'], 4), 'sr_star_m': round(d['sr_star'], 4), 'var_sharpe_prior': round(var, 6),
                 'skew_m': round(d['skew'], 3), 'kurt_m': round(d['kurt'], 3)})
     params = {'signal': signal, 'top_n': top_n, 'buffer': buffer, 'universe_n': universe_n, 'excl_limit_pct': excl_limit_pct,
-              'tsmc_weight': tsmc_weight, 'costs': costs, 'segment': segment}
-    name = name or f'{signal}-{segment}-top{top_n}'
+              'tsmc_weight': tsmc_weight, 'costs': costs, 'segment': segment, 'tranches': tranches, 'weighting': weighting}
+    name = name or f'{signal}-{segment}-top{top_n}' + (f'-t{tranches}' if tranches > 1 else f'-b{buffer}') + (f'-u{universe_n}' if universe_n != 300 else '') + ('-liq' if weighting == 'liq' else '') + (f'-tsmc{tsmc_weight}' if tsmc_weight else '')
     run_id = save_run(n, name, signal, segment, start, met_end(met), params, met, sim['positions'], notes) if save else None
     logger.info('[backtest] #%d %s：主動報酬 %+.2f%%/年、IR %s、DSR %.3f、換手 %.1f 倍、成本 %.2f%%/年（%.0f 秒）',
                 n, name, met['ann_active'] * 100, met['info_ratio'], met['dsr'], met['turnover_annual'], met['cost_drag_annual'] * 100,
                 (datetime.now() - t0).total_seconds())
     return {'run_id': run_id, 'name': name, 'metrics': met, 'monthly_active': m_act, 'nav': sim['nav'], 'bench': bench,
-            'positions': sim['positions'], 'params': params}
+            'positions': sim['positions'], 'params': params, 'experiment_n': n}
 
 
 def met_end(met: dict) -> date:
@@ -277,7 +305,8 @@ def report_md(res: dict) -> str:
     m, p = res['metrics'], res['params']
     L = [f"# 月調倉回測 #{m['experiment_n']}：{res['name']}", '',
          f"**期間：** {m['start']} ~ {m['end']}（{m['years']} 年、{m['months']} 個月、{m['n_rebalances']} 次調倉）　**對手：** 0050 含息",
-         f"**規則：** 訊號 `{p['signal']}`、流動性前 {p['universe_n']}、排除漲停前 {int(p['excl_limit_pct'] * 100)}%、前 {p['top_n']} 檔等權、緩衝 {p['buffer']} 名、台積電權重 {p['tsmc_weight']}",
+         f"**規則：** 訊號 `{p['signal']}`、流動性前 {p['universe_n']}、排除漲停前 {int(p['excl_limit_pct'] * 100)}%、前 {p['top_n']} 檔{'等權' if p.get('weighting', 'equal') == 'equal' else '成交金額加權'}、"
+         + (f"分 {p['tranches']} 批輪動" if p.get('tranches', 1) > 1 else f"緩衝 {p['buffer']} 名") + f"、台積電權重 {p['tsmc_weight']}",
          f"**成本：** 單邊手續費 {p['costs']['fee'] * 100:.4f}%、賣出稅 {p['costs']['tax'] * 100:.1f}%、滑價 {p['costs']['slip'] * 100:.2f}%（小型股 {p['costs']['slip_small'] * 100:.2f}%）", '',
          '| 指標 | 組合 | 0050 |', '|---|---|---|',
          f"| 年化報酬 | {m['cagr_port'] * 100:+.2f}% | {m['cagr_bench'] * 100:+.2f}% |",
@@ -294,7 +323,8 @@ def report_md(res: dict) -> str:
          f"| 年換手（單邊） | {m['turnover_annual']} 倍 | 3~6 倍 |",
          f"| 成本占年報酬 | {m['cost_drag_annual'] * 100:.2f}% | |",
          f"| 未成交單 | {m['unfilled']} | |",
-         f"| 訊號不足而未調倉的月 | {m.get('skipped_months', 0)} | |", '']
+         f"| 訊號不足而未調倉的月 | {m.get('skipped_months', 0)} | |",
+         f"| 台積電平均權重 | {m.get('tsmc_weight_mean')} | |", '']
     ma = res['monthly_active']
     if len(ma):
         L += ['## 逐年主動報酬', '', '| 年 | 主動報酬 | 月數 |', '|---|---|---|']
@@ -315,12 +345,14 @@ def main():
     import os
     RESULTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'UnifiedModel', 'results')
     ap = argparse.ArgumentParser()
-    ap.add_argument('--signal', choices=['sue', 'win', 'ar0'])
+    ap.add_argument('--signal', help="sue / win / ar0 / mom / win3，或用 + 組合（排名平均），例如 win+mom")
     ap.add_argument('--segment', choices=list(SEGMENTS), default='dev')
     ap.add_argument('--start'); ap.add_argument('--end')
     ap.add_argument('--top-n', type=int, default=20); ap.add_argument('--buffer', type=int, default=40)
     ap.add_argument('--universe-n', type=int, default=300); ap.add_argument('--excl-limit-pct', type=float, default=0.10)
-    ap.add_argument('--tsmc-weight', type=float, default=None)
+    ap.add_argument('--tsmc-weight', default=None, help="數字＝固定權重；est＝用滾動迴歸估 0050 的台積電權重")
+    ap.add_argument('--tranches', type=int, default=1, help='分批輪動：每月只換 1/K（K 個月持有期）')
+    ap.add_argument('--weighting', choices=['equal', 'liq'], default='equal')
     ap.add_argument('--name'); ap.add_argument('--notes', default='')
     ap.add_argument('--no-save', action='store_true')
     ap.add_argument('--holdout-once', action='store_true', help='保留期只能看一次：沒有這個旗標不跑 holdout')
@@ -338,8 +370,10 @@ def main():
         ap.error('--signal 必填')
     if a.segment == 'holdout' and not a.holdout_once:
         ap.error('holdout 只能看一次：確定要看就加 --holdout-once，並在 --notes 寫下理由')
+    tw = None if a.tsmc_weight in (None, '', 'none') else ('est' if a.tsmc_weight == 'est' else float(a.tsmc_weight))
     res = run(a.signal, a.segment, date.fromisoformat(a.start) if a.start else None, date.fromisoformat(a.end) if a.end else None,
-              a.top_n, a.buffer, a.universe_n, a.excl_limit_pct, a.tsmc_weight, COSTS, a.name, a.notes, save=not a.no_save)
+              a.top_n, a.buffer, a.universe_n, a.excl_limit_pct, tw, COSTS, a.name, a.notes, save=not a.no_save,
+              tranches=a.tranches, weighting=a.weighting)
     md = report_md(res)
     print(md)
     if not a.no_save:

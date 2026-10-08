@@ -228,37 +228,143 @@ def signal_ar0(sur: pd.DataFrame, mkt: Market, d: pd.Timestamp) -> pd.Series:
     return pd.Series(out, dtype=float)
 
 
-def scores_on(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp, ids: pd.Index) -> pd.Series:
+def signal_mom(mkt: Market, d: pd.Timestamp, long_days: int = 252, skip_days: int = 21) -> pd.Series:
+    """12-1 動能：d 往前 252 個交易日到 21 個交易日的累積異常報酬（跳過最近一個月的反轉）。"""
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right')) - 1
+    if i - long_days < 0:
+        return pd.Series(dtype=float)
+    seg = mkt.ar.iloc[i - long_days + 1:i - skip_days + 1]
+    return seg.sum(min_count=int(len(seg) * 0.8)).dropna()
+
+
+def signal_win3(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """最近三個公告窗口（本月、上月、上上月的 1 日到 11 日）的累積異常報酬：平滑版 win。"""
+    total = None
+    for k in range(3):
+        y, m = d.year, d.month - k
+        while m <= 0:
+            y, m = y - 1, m + 12
+        start = pd.Timestamp(year=y, month=m, day=1)
+        end = min(d, pd.Timestamp(year=y, month=m, day=11)) if k else d
+        seg = mkt.ar.loc[start:end]
+        s = seg.sum(min_count=3)
+        total = s if total is None else total.add(s, fill_value=np.nan)
+    return total.dropna() if total is not None else pd.Series(dtype=float)
+
+
+SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3')
+
+
+TSMC_WEIGHT_FALLBACK = 0.35       # 歷史不足 120 個交易日時（2018 上半年）用的固定假設；之後一律用估計值
+
+
+def estimate_tsmc_weight(mkt: Market, d: pd.Timestamp, window: int = 250, top_n: int = 100,
+                         lo: float = 0.20, hi: float = 0.70, min_days: int = 120) -> Optional[float]:
+    """
+    台積電在 0050 裡的權重（沒有持股權重表時的估計）：
+    用 d 以前 window 個交易日，把 0050 的日報酬對「台積電日報酬」與「流動性前 top_n（不含台積電）等權日報酬」做 OLS，
+    台積電的係數就是權重估計（夾在 [lo, hi]）。只用 d 以前的資料，沒有前視。
+    """
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right'))
+    if BENCH not in mkt.adj.columns or TSMC not in mkt.adj.columns:
+        return None
+    window = min(window, i - 1)
+    if window < min_days:
+        return None
+    lr = np.log(mkt.adj.iloc[i - window - 1:i]).diff().iloc[1:]
+    b, t = lr[BENCH], lr[TSMC]
+    liq = mkt.liq.iloc[i - 1].drop(labels=[BENCH, TSMC], errors='ignore').dropna().sort_values(ascending=False)
+    others = lr[liq.index[:top_n]].mean(axis=1)
+    x = pd.concat([t, others], axis=1).dropna()
+    y = b.reindex(x.index)
+    ok = y.notna()
+    x, y = x[ok], y[ok]
+    if len(y) < window * 0.8:
+        return None
+    X = np.column_stack([np.ones(len(x)), x.values])
+    beta, *_ = np.linalg.lstsq(X, y.values, rcond=None)
+    return float(min(hi, max(lo, beta[1])))
+
+
+def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.Series:
     if signal == 'sue':
-        s = signal_sue(sur, d)
-    elif signal == 'win':
-        s = signal_win(mkt, d)
-    elif signal == 'ar0':
-        s = signal_ar0(sur, mkt, d)
-    else:
-        raise ValueError(f'未知訊號 {signal}')
-    return s.reindex(ids).dropna()
+        return signal_sue(sur, d)
+    if signal == 'win':
+        return signal_win(mkt, d)
+    if signal == 'ar0':
+        return signal_ar0(sur, mkt, d)
+    if signal == 'mom':
+        return signal_mom(mkt, d)
+    if signal == 'win3':
+        return signal_win3(mkt, d)
+    raise ValueError(f'未知訊號 {signal}')
+
+
+def scores_on(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp, ids: pd.Index) -> pd.Series:
+    """單一訊號直接回原值；'a+b' 是各訊號在候選池內的百分位排名平均（每個成分都要有值）。"""
+    parts = signal.split('+')
+    if len(parts) == 1:
+        return _single(signal, mkt, sur, d).reindex(ids).dropna()
+    ranks = [_single(p, mkt, sur, d).reindex(ids).rank(pct=True) for p in parts]
+    return pd.concat(ranks, axis=1).dropna().mean(axis=1)
+
+
+def _weights(keep: list, total: float, weighting: str, liq: Optional[pd.Series], cap: float = 0.10) -> dict:
+    """equal：等權；liq：按 60 日成交金額比例、單檔上限 cap（超過的部分按比例分給其他）。"""
+    if not keep:
+        return {}
+    if weighting == 'liq' and liq is not None:
+        w = liq.reindex(keep).fillna(0.0).clip(lower=0.0)
+        w = w / w.sum() if w.sum() > 0 else pd.Series(1.0 / len(keep), index=keep)
+        for _ in range(5):
+            over = w > cap
+            if not over.any():
+                break
+            excess = (w[over] - cap).sum()
+            w[over] = cap
+            rest = ~over
+            if w[rest].sum() > 0:
+                w[rest] += excess * w[rest] / w[rest].sum()
+        return {s: float(w[s] * total) for s in keep}
+    return {s: total / len(keep) for s in keep}
 
 
 def build_targets(scores: pd.Series, prev_holdings: list, top_n: int = 20, buffer: int = 40,
-                  tsmc_weight: Optional[float] = None) -> pd.DataFrame:
+                  tsmc_weight: Optional[float] = None, weighting: str = 'equal', liq: Optional[pd.Series] = None,
+                  tranche_new: Optional[int] = None, release: Optional[list] = None) -> pd.DataFrame:
     """
-    排名 → 目標權重。緩衝區：上期持股只要還在前 buffer 名就留著，空位由排名最高的新股補；等權。
-    台積電不參與排名；tsmc_weight 給了就固定那個權重，其餘 (1 − w) 分給 top_n 檔。
+    排名 → 目標權重。
+    一般模式：上期持股只要還在前 buffer 名就留著，空位由排名最高的新股補。
+    分批模式（tranche_new 給了）：release 是這個月到期要賣的那一批，其餘上期持股照留（不看排名），
+    只挑 tranche_new 檔排名最高、目前沒持有的新股——每月只換 1/K，年換手壓到 K 分之一。
+    台積電不參與排名；tsmc_weight 給了就固定那個權重，其餘 (1 − w) 分給選出的股票。
     """
     ranked = scores.sort_values(ascending=False)
     rank = pd.Series(np.arange(1, len(ranked) + 1), index=ranked.index)
-    keep = [s for s in prev_holdings if s in rank.index and rank[s] <= buffer][:top_n]
-    for s in ranked.index:
-        if len(keep) >= top_n:
-            break
-        if s not in keep:
-            keep.append(s)
+    if tranche_new is not None:
+        rel = set(release or [])
+        keep = [s for s in prev_holdings if s not in rel]
+        n_new = max(tranche_new, top_n - len(keep)) if len(keep) < top_n - tranche_new else tranche_new
+        added = 0
+        for s in ranked.index:
+            if added >= n_new or len(keep) >= top_n:
+                break
+            if s not in keep:
+                keep.append(s)
+                added += 1
+    else:
+        keep = [s for s in prev_holdings if s in rank.index and rank[s] <= buffer][:top_n]
+        for s in ranked.index:
+            if len(keep) >= top_n:
+                break
+            if s not in keep:
+                keep.append(s)
     w_t = float(tsmc_weight or 0.0)
     rows = []
     if keep:
-        w = (1.0 - w_t) / len(keep)
-        rows = [{'stock_id': s, 'rank': int(rank[s]), 'signal_value': float(ranked[s]), 'target_weight': w} for s in keep]
+        wmap = _weights(keep, 1.0 - w_t, weighting, liq)
+        rows = [{'stock_id': s, 'rank': int(rank[s]) if s in rank.index else None,
+                 'signal_value': float(ranked[s]) if s in ranked.index else None, 'target_weight': wmap[s]} for s in keep]
     if w_t > 0:
         rows.append({'stock_id': TSMC, 'rank': None, 'signal_value': None, 'target_weight': w_t})
     return pd.DataFrame(rows, columns=['stock_id', 'rank', 'signal_value', 'target_weight'])

@@ -60,6 +60,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-50.md](./Iterations/Iteration-50.md) | **打敗大盤：44 次實驗的網格搜尋**（分批輪動、緩衝、股票池、動能／組合訊號、成交金額權重、台積電權重滾動迴歸估計）；轉折是**固定持有台積電**（追蹤誤差 20%→12%）；候選 `win3+mom-t3-tsmcest` 開發期 +8.6%、驗證期 +15.7%（IR 1.09）、全期間 +7.1%／年七年六正，**但 DSR 0.13**——下一步是紙上交易與保留期，不是再搜 |
 | [Iteration-49.md](./Iterations/Iteration-49.md) | **打敗大盤階段 2**：月調倉回測引擎（股票池、sue／ar0／win 三訊號、成本、未成交、DSR、實驗日誌 migration 021）；前四次實驗**都沒打敗 0050**（換手 13~20 倍、成本吃 5~8%）；**發現公告日早一個月的 bug**（鉅亨／MOPS 來源寫到所屬月列，配到上一期營收）已修並搬正 11,442 列，第 39／47 結論待重跑 |
 | [Iteration-48.md](./Iterations/Iteration-48.md) | **打敗大盤計畫階段 1**：全市場股票池 `market_universe`（2,621 檔，含 112 檔 2018 後下市）、日線 `market_daily_prices`（migration 020；FinMind 逐檔或交易所檔兩條路線）、除權息／減資從交易所表、批次還原價、含息大盤 `TAIEX_TR`、`job_market_daily` 18:30、`--check` 七項檢查；月營收改抓 MOPS 彙總表 480 頁補齊全市場 2016-10 起（公告日精確度仍未解） |
 | [Iteration-47.md](./Iterations/Iteration-47.md) | **新聞訊號模型**（依「新聞與股價關聯性」方案）：六個維度成為面板區塊 news／event、三個模型（事件波動通過、營收漂移與語調未通過）、五道關卡進訓練腳本與前端關卡表、20:10 台帳、新頁「新聞訊號」與週預測三欄 |
