@@ -212,6 +212,19 @@ MOPS 重大訊息 6,137 則的主旨用正則分 22 類（營收、財報-季報
 董事會決議、其他），寫進同一張表：`model = 'rule_mops_v1'`、`event_type` = 類別、`is_expected` = 是否例行、
 `direction = 'neutral'`、`magnitude = 1`。M2 要過濾例行公告時用 `is_expected`。
 
+### 2.10 全市場股票池與日線 `market_universe`、`market_daily_prices`（Iteration 48，migration 020）
+
+打敗大盤計畫（月調倉選股）的資料層。與 2.8 同一個理由另開表：追蹤股那兩張表是各條舊鏈的清單，全市場不能塞進去。
+
+| 表 | 欄位重點 | 來源與程式 |
+|------|------|------|
+| `market_universe` | `stock_id` 主鍵、`market_type`（twse/tpex）、`industry_type`、`listing_date`（第一筆價格推回，起點前上市者為 NULL）、`delisted_date`（NULL = 在市） | FinMind `TaiwanStockInfo` + `TaiwanStockDelisting`，`Crawler/market_universe.py --sync`；只收上市櫃 4 碼普通股，含已下市 |
+| `market_daily_prices` | 欄位同 `stock_daily_prices`，另有 `adj_close`（報酬一律用它）、`source`（finmind/twse/tpex） | `Crawler/market_data.py`：`--backfill --source finmind`（逐檔）或 `--source exchange`（交易所每日檔）；每日 `job_market_daily` 18:30 走交易所檔 |
+| `index_daily_prices` 多兩個 symbol | `TAIEX_TR` 發行量加權股價報酬指數（含息大盤）、`TAIEX` | FinMind `TaiwanStockTotalReturnIndex` 回補；每日從證交所 `MI_INDEX` 報酬指數表 |
+
+公司行動沿用 `stock_dividend_result` / `stock_capital_reduction`，但全市場的事件從交易所參考價表來（`TWT49U`、`exDailyQ`、`TWTAUU`，`market_data.py --events`），
+還原價用 `market_data.rebuild_adj()` 批次重算。`--check` 印七項資料檢查（存活者、交易日覆蓋、adj_close NULL、與追蹤股表一致、一字漲跌停比例、月營收覆蓋、大盤指數涵蓋）。
+
 ---
 
 ## 3. 模型訓練整合視圖 (View)

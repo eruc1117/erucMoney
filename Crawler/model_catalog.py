@@ -44,7 +44,8 @@ CREDIBILITY_LABEL = {
 # 頁面代號與 Screen/src/App.jsx 的 tab key 一致
 PAGE_KEYS = ['overview', 'analysis', 'predict', 'compare',
              'voting', 'idlecash', 'holdings', 'models', 'us',
-             'predict_us', 'compare_us']     # 趨勢預測／預測比對切到美股時的頁面代號
+             'predict_us', 'compare_us',     # 趨勢預測／預測比對切到美股時的頁面代號
+             'signals']                      # 新聞訊號頁（Iteration 47）
 
 CATALOG = {
     # ── 決策主力：量級與閘門 ───────────────────────────────────────────────
@@ -141,6 +142,49 @@ CATALOG = {
         'selectable': ['voting'],
         'default': True,
     },
+
+    # ── 新聞訊號（Iteration 47，依「新聞與股價關聯性」研究方案）──────────────
+    # credibility 由 train_news_models.py 的關卡決定，寫在 results/news_models.json；
+    # 這裡的值是最近一次訓練的結果，`news_models.credibility_of()` 會以 bundle 為準覆蓋。
+    'news_event_vol': {
+        'label': '事件波動（次日振幅）', 'icon': '📣', 'kind': 'gate',
+        'registry_type': 'news_event_vol', 'role_key': None,
+        'target': '次一交易日 (最高−最低) ÷ 前收', 'horizon_days': 1,
+        'blocks': ['price', 'news', 'event'],
+        'credibility': 'unvalidated',
+        'metric': '見 UnifiedModel/results/news_models.md（price_only vs price_news 消融）',
+        'note': '方案 §04／MopsEventStudy：新聞與非例行公告是波動訊號，不是方向訊號。'
+                '異常注意力、非例行重大訊息、營收公布日抬高次日振幅；只回答「明天會不會震」',
+        'pages': ['signals', 'analysis', 'models'],
+        'selectable': [],
+        'default': True,
+    },
+    'news_drift': {
+        'label': '營收漂移（PEAD 覆蓋層）', 'icon': '📈', 'kind': 'direction',
+        'registry_type': 'news_drift', 'role_key': None,
+        'target': '月營收公布後 20 日超額報酬方向（|預測| 前 20% 才出手）', 'horizon_days': 20,
+        'blocks': ['price', 'event', 'news'],
+        'credibility': 'unvalidated',
+        'metric': '見 UnifiedModel/results/news_models.md',
+        'note': '設計 A 覆蓋層：只在營收公布後 20 日窗口內有值，用 SUE、公布日 AR₀、極端 YoY 反轉。'
+                'RevenueEventStudy 顯示 SUE 本身無顯著漂移、AR₀ 與極端 YoY 才有——這個模型就是在驗證那兩條',
+        'pages': ['signals', 'analysis', 'models'],
+        'selectable': [],
+        'default': True,
+    },
+    'news_tone': {
+        'label': '新聞語調（3 日）', 'icon': '🗞️', 'kind': 'direction',
+        'registry_type': 'news_tone', 'role_key': None,
+        'target': '有新聞日的 3 日超額報酬方向（|預測| 前 20% 才出手）', 'horizon_days': 3,
+        'blocks': ['price', 'news'],
+        'credibility': 'unvalidated',
+        'metric': '見 UnifiedModel/results/news_models.md',
+        'note': '字典情緒（L1，無前視偏誤）× 新穎度 × 不確定性 × 異常注意力，控制價量後看有沒有增量。'
+                'Iteration 40 的 28 個新聞模型 AUC 全在 0.50~0.53，這裡是同一個問題的關卡版',
+        'pages': ['signals', 'analysis', 'models'],
+        'selectable': [],
+        'default': True,
+    },
 }
 
 # ── LSTM：10 個各自成為一個目錄項 ──────────────────────────────────────────
@@ -190,6 +234,29 @@ for _k, (_label, _desc) in _LSTM.items():
         'selectable': [],
         'default': False,
     }
+
+
+def _sync_news_credibility():
+    """新聞訊號三模型的可信度以最近一次訓練的關卡為準（results/news_models.json），讀不到就維持 unvalidated。"""
+    try:
+        import news_models
+        for key in news_models.MODEL_KEYS:
+            if key not in CATALOG:
+                continue
+            CATALOG[key]['credibility'] = news_models.credibility_of(key)
+            g = news_models.gates_summary().get(key) or {}
+            pn, po = g.get('price_news') or {}, g.get('price_only') or {}
+            if pn.get('rank_corr') is None:
+                continue
+            metric = f"走查排序相關 {pn['rank_corr']:.4f}（價格控制組 {po.get('rank_corr', 0):.4f}）"
+            if pn.get('dir_acc') is not None:
+                metric += f"；出手列方向 {pn['dir_acc']:.1%} 對多數類別 {pn['majority']:.1%}"
+            CATALOG[key]['metric'] = metric
+    except Exception:                                       # pragma: no cover
+        pass
+
+
+_sync_news_credibility()
 
 
 # ── 查詢 ────────────────────────────────────────────────────────────────────

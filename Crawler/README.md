@@ -10,7 +10,7 @@
 Crawler/
 ├── main.py               # 程式入口點（支援 server / stock / schedule 三種模式）
 ├── api.py                # FastAPI 伺服器（HTTP API，port 8000）
-├── scheduler.py          # APScheduler 排程器（每日 18:00）
+├── scheduler.py          # APScheduler 排程器（06:10 外生／06:20 跳空／17:30 新鮮度／18:00 股價／20:00 投票／20:10 新聞訊號／21:00 模型評估）
 ├── config.py             # 全域設定（含 DB 連線）
 ├── requirements.txt
 ├── db/
@@ -77,8 +77,15 @@ python main.py --mode stock --stocks 2330 2317 2454
 # 指定日期
 python main.py --mode stock --date 20260310
 
-# 啟動排程器（每日 18:00 自動執行，Ctrl+C 停止）
+# 啟動排程器（Ctrl+C 停止；常駐請用 install_scheduler_task.ps1 註冊成 MoneyScheduler）
 python main.py --mode schedule
+
+# 全市場股票池與日線（Iteration 48，打敗大盤計畫；只讀寫 market_* 表，不碰追蹤股那條鏈）
+python market_universe.py --sync                       # 上市櫃普通股含下市股（2 次 FinMind 呼叫）
+python market_data.py --backfill --source finmind      # 逐檔回補 2018 起（免費額度；可中斷續跑）
+python market_data.py --backfill --source exchange     # 或：交易所每日檔逐日回補（不吃額度）
+python market_data.py --events --index --rebuild-adj   # 除權息／減資（交易所表）、含息大盤 TAIEX_TR、還原價
+python market_data.py --check                          # 回測前七項資料檢查
 ```
 
 ---

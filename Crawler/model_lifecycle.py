@@ -68,6 +68,7 @@ SELECT v.id, v.model_type, v.version, v.status, v.is_serving, v.target_kind,
   FROM model_versions v
   LEFT JOIN model_predictions p
          ON p.model_version_id = v.id AND p.actual_value IS NOT NULL
+        AND p.invalid_reason IS NULL      -- 對齊錯誤等事後作廢的紀錄不算成績（migration 019）
  WHERE (%s IS NULL OR v.model_type = %s)
  ORDER BY v.model_type, v.version
 """

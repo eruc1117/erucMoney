@@ -428,6 +428,26 @@ def get_gap_prediction(stock_ids: str = None):
     return gap_model.predict_gaps(ids)
 
 
+# ── 新聞訊號（Iteration 47）────────────────────────────────────────────────
+@app.get("/news/signals")
+def get_news_signals(stock_ids: str = None):
+    """
+    每檔最新的六個新聞維度（意外程度、情緒、新穎度、報導強度、異常注意力、不確定性）
+    與三個新聞訊號模型的輸出。**只有訓練關卡通過的模型才有值**，其餘回 serving=false 與關卡數字。
+    stock_ids：逗號分隔，省略則全部追蹤股票。
+    """
+    import news_models
+    ids = [x.strip() for x in stock_ids.split(',')] if stock_ids else None
+    return news_models.signals(ids, log=False)
+
+
+@app.get("/news/signals/gates")
+def get_news_signal_gates():
+    """訓練報告的五道關卡（UnifiedModel/results/news_models.json）。"""
+    import news_models
+    return {'models': news_models.gates_summary()}
+
+
 # ── 美股（Iteration 32）──────────────────────────────────────────────────────
 @app.get("/us/overview")
 def get_us_overview(days: int = 60):

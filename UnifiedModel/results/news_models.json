@@ -1,0 +1,108 @@
+{
+  "news_event_vol": {
+    "label": "事件波動（次日振幅）",
+    "target_kind": "range",
+    "horizon": 1,
+    "n": 17710,
+    "price_only": {
+      "rank_corr": 0.6378036071422789,
+      "mae": 0.013205362507713397
+    },
+    "price_news": {
+      "rank_corr": 0.6512370866249206,
+      "mae": 0.012963183381772062
+    },
+    "baseline": {
+      "rank_corr": 0.6178777662851341,
+      "mae": 0.013034873844694116
+    },
+    "gates": {
+      "N2_gain": 0.01343347948264173,
+      "N2_worst_fold": 0.012005431901461305,
+      "N2_pass": true,
+      "beats_naive": true,
+      "deploy": true
+    },
+    "trained_at": "2026-09-29T23:47"
+  },
+  "news_drift": {
+    "label": "營收漂移（PEAD 覆蓋層）",
+    "target_kind": "signal",
+    "horizon": 20,
+    "n": 14265,
+    "price_only": {
+      "rank_corr": 0.005325979732405645,
+      "mae": 0.11389875838745916,
+      "dir_acc": 0.5589884809807553,
+      "majority": 0.6104379527999839,
+      "dir_acc_exc": 0.4974737469131879,
+      "mean_exc_ret": 0.0023182536789117516,
+      "net_exc_ret": -0.0035317463210882485,
+      "dir_acc_unlocked": 0.5363953604046612
+    },
+    "price_news": {
+      "rank_corr": 0.013336874839252177,
+      "mae": 0.11309145882065381,
+      "dir_acc": 0.557922670712582,
+      "majority": 0.5950692298720288,
+      "dir_acc_exc": 0.4754039320702402,
+      "mean_exc_ret": 0.007982237898303735,
+      "net_exc_ret": 0.0021322378983037347,
+      "dir_acc_unlocked": 0.538834620716552
+    },
+    "baseline": null,
+    "gates": {
+      "N2_gain": 0.008010895106846532,
+      "N2_worst_fold": -0.05672480237032979,
+      "N2_pass": false,
+      "N1_dir_margin": -0.03714655915944687,
+      "N1_pass": false,
+      "N3_dir_acc_unlocked": 0.538834620716552,
+      "N3_pass": false,
+      "N4_net_exc_ret": 0.0021322378983037347,
+      "N4_pass": true,
+      "deploy": false
+    },
+    "trained_at": "2026-09-29T23:47"
+  },
+  "news_tone": {
+    "label": "新聞語調（3 日）",
+    "target_kind": "signal",
+    "horizon": 3,
+    "n": 11077,
+    "price_only": {
+      "rank_corr": 0.003961245687053602,
+      "mae": 0.038484805654299035,
+      "dir_acc": 0.5295010088528919,
+      "majority": 0.5434906707098102,
+      "dir_acc_exc": 0.4787583503340133,
+      "mean_exc_ret": -0.0015180646558145593,
+      "net_exc_ret": -0.0073680646558145595,
+      "dir_acc_unlocked": 0.493253904759365
+    },
+    "price_news": {
+      "rank_corr": -0.0022839132083764214,
+      "mae": 0.038484873890997084,
+      "dir_acc": 0.5313257239190189,
+      "majority": 0.5399447434274419,
+      "dir_acc_exc": 0.49522354227502435,
+      "mean_exc_ret": 0.001915920416838195,
+      "net_exc_ret": -0.003934079583161805,
+      "dir_acc_unlocked": 0.4926601162713767
+    },
+    "baseline": null,
+    "gates": {
+      "N2_gain": -0.006245158895430023,
+      "N2_worst_fold": -0.029190124559840065,
+      "N2_pass": false,
+      "N1_dir_margin": -0.008619019508423031,
+      "N1_pass": false,
+      "N3_dir_acc_unlocked": 0.4926601162713767,
+      "N3_pass": false,
+      "N4_net_exc_ret": -0.003934079583161805,
+      "N4_pass": false,
+      "deploy": false
+    },
+    "trained_at": "2026-09-29T23:47"
+  }
+}

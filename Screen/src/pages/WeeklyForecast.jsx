@@ -53,6 +53,24 @@ function LstmCell({ w }) {
   )
 }
 
+// 新聞訊號模型（Iteration 47）：未過關卡的顯示「未服役」，過關的才有值
+function NewsModelCell({ r, short }) {
+  if (!r) return <span className="muted">–</span>
+  if (!r.serving) return <span className="muted" title="訓練關卡未通過；每天照樣寫台帳累積線上紀錄">未服役</span>
+  const v = r.value
+  if (!v) return <span className="muted">–</span>
+  if (short === 'event_vol') {
+    return (
+      <span title={`自身 20 日中位數的 ${num(v.self_ratio)} 倍`}>
+        {num(v.range_pct)}%{v.is_elevated ? <span className="up"> ★</span> : null}
+        <div className="muted" style={{ fontSize: '0.72rem' }}>×{num(v.self_ratio)}</div>
+      </span>
+    )
+  }
+  const cls = v.signal > 0 ? 'up' : v.signal < 0 ? 'down' : 'muted'
+  return <span className={cls} title={v.eligible ? '' : '不在可出手的列'}>{v.label}</span>
+}
+
 function SignalCell({ s }) {
   if (!s || !s.signal) return <span className="muted">–</span>
   const cls = s.signal === 'Buy' ? 'up' : s.signal === 'Sell' ? 'down' : 'muted'
@@ -159,7 +177,7 @@ export default function WeeklyForecast({ onSelectStock }) {
         <div className="metric-card">
           <div className="metric-label">下一週</div>
           <div className="metric-value sm">{run ? `${fmtDate(run.week1.start)} – ${fmtDate(run.week1.end)}` : '–'}</div>
-          <div className="metric-delta muted">LSTM 第 1~5 個交易日；振幅、成交量、跳空、籌碼、新聞</div>
+          <div className="metric-delta muted">LSTM 第 1~5 個交易日；振幅、成交量、跳空、籌碼、新聞、事件波動、語調</div>
         </div>
         <div className="metric-card">
           <div className="metric-label">下下週</div>
@@ -218,6 +236,9 @@ export default function WeeklyForecast({ onSelectStock }) {
                   {!isUs && <th style={{ textAlign: 'right' }}>量能 5 日</th>}
                   {!isUs && <th>籌碼 3 日</th>}
                   {!isUs && <th>新聞 3 日</th>}
+                  {!isUs && <th style={{ textAlign: 'right' }}>事件波動<div className="muted" style={{ fontSize: '0.7rem', fontWeight: 400 }}>次日振幅</div></th>}
+                  {!isUs && <th>營收漂移<div className="muted" style={{ fontSize: '0.7rem', fontWeight: 400 }}>20 日</div></th>}
+                  {!isUs && <th>新聞語調<div className="muted" style={{ fontSize: '0.7rem', fontWeight: 400 }}>3 日</div></th>}
                   <th style={{ textAlign: 'right' }}>{isUs ? '下一場跳空' : '次日跳空'}</th>
                 </tr>
               </thead>
@@ -281,6 +302,9 @@ export default function WeeklyForecast({ onSelectStock }) {
                         )}
                         {!isUs && <td><SignalCell s={r.m3_chip} /></td>}
                         {!isUs && <td><SignalCell s={r.m2_news} /></td>}
+                        {!isUs && <td style={{ textAlign: 'right' }}><NewsModelCell r={r.news_event_vol} short="event_vol" /></td>}
+                        {!isUs && <td><NewsModelCell r={r.news_drift} short="drift" /></td>}
+                        {!isUs && <td><NewsModelCell r={r.news_tone} short="tone" /></td>}
                         <td style={{ textAlign: 'right' }}>
                           {r.gap ? (
                             <span title={r.gap.caveat || (r.gap.target_session ? `場次 ${r.gap.target_session}` : '')}>
@@ -293,7 +317,7 @@ export default function WeeklyForecast({ onSelectStock }) {
                       </tr>
                       {isOpen && (
                         <tr key={`${key}-detail`}>
-                          <td colSpan={isUs ? 5 : 10} style={{ padding: 0, background: 'var(--surface)' }}>
+                          <td colSpan={isUs ? 5 : 13} style={{ padding: 0, background: 'var(--surface)' }}>
                             <LstmDetail row={r} run={run} />
                           </td>
                         </tr>
@@ -302,7 +326,7 @@ export default function WeeklyForecast({ onSelectStock }) {
                   )
                 })}
                 {rows.length === 0 && (
-                  <tr><td colSpan={10} className="muted">這個市場沒有結果</td></tr>
+                  <tr><td colSpan={13} className="muted">這個市場沒有結果</td></tr>
                 )}
               </tbody>
             </table>
@@ -337,7 +361,12 @@ export default function WeeklyForecast({ onSelectStock }) {
             它們回答的是「會不會震、押多少、吃不吃得下」，不是漲跌。
           </p>
           <p>
-            <strong>跳空欄的 ⚠。</strong> 2026-09-20 的準確度報告發現台股跳空模型線上餵的是當天的夜盤特徵，數字可能對應已發生的跳空；修好前照實標出。
+            <strong>跳空欄可能是空的。</strong> 台股跳空模型要用「下一個交易日早上 05:00 收的台指期夜盤」，週日 08:00 跑的時候週一的夜盤還沒開始，
+            所以這一欄多半是「–」；每天 06:20 的排程會另外算當天的跳空，投票頁與個股分析看得到。
+          </p>
+          <p>
+            <strong>新聞訊號三欄。</strong> 事件波動（次日振幅）、營收漂移（公布後 20 日方向）、新聞語調（有新聞日的 3 日方向）來自 Iteration 47；
+            只有通過訓練關卡的才有值，其餘顯示「未服役」。細節在「新聞訊號」頁。
           </p>
         </div>
       </div>

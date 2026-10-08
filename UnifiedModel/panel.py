@@ -187,6 +187,16 @@ def _attach_holding(panel):
     return f(panel)
 
 
+def _attach_news(panel):
+    from news_signal_features import attach_news as f
+    return f(panel)
+
+
+def _attach_event(panel):
+    from news_signal_features import attach_event as f
+    return f(panel)
+
+
 def _init():
     import sys, os
     here = os.path.dirname(os.path.abspath(__file__))
@@ -223,6 +233,17 @@ def _init():
         _register('intl', INTL_FEATURES, _attach_intl, 2015, 'KOSPI／Nikkei 開盤（早台股一小時）')
     except Exception as e:                                  # pragma: no cover
         logger.warning('[panel] intl 區塊不可用：%s', e)
+    # Iteration 47：新聞訊號的兩個區塊。新聞只有 2023-09 起，掛上就把樣本砍到三年——
+    # 這是方案文件說的實質代價；since_date 讓 align() 把更早的列（沒有新聞不是「沒新聞」，
+    # 是「還沒抓」）一併剔除，否則 2023 前的 ns_n_articles=0 全是假的。
+    try:
+        from news_signal_features import NEWS_FEATURES, EVENT_FEATURES, NEWS_SINCE
+        _register('news', NEWS_FEATURES, _attach_news, 2023,
+                  '媒體報導六維度：強度、異常注意力、情緒、新穎度、不確定性、MOPS', NEWS_SINCE)
+        _register('event', EVENT_FEATURES, _attach_event, 2023,
+                  '月營收事件：SUE、公布日 AR₀、距公布天數（Iteration 47）', NEWS_SINCE)
+    except Exception as e:                                  # pragma: no cover
+        logger.warning('[panel] news/event 區塊不可用：%s', e)
     try:
         from holding_features import HOLDING_FEATURES
         _register('holding', HOLDING_FEATURES, _attach_holding, 2012,

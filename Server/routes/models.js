@@ -30,7 +30,10 @@ router.get('/registry', async (_req, res) => {
              (SELECT COUNT(*) FROM model_predictions p
                WHERE p.model_version_id = v.id)                        AS pred_total,
              (SELECT COUNT(*) FROM model_predictions p
-               WHERE p.model_version_id = v.id AND p.actual_value IS NOT NULL) AS pred_resolved
+               WHERE p.model_version_id = v.id AND p.actual_value IS NOT NULL
+                 AND p.invalid_reason IS NULL)                             AS pred_resolved,
+             (SELECT COUNT(*) FROM model_predictions p
+               WHERE p.model_version_id = v.id AND p.invalid_reason IS NOT NULL) AS pred_invalid
         FROM model_versions v
        ORDER BY v.model_type, v.version DESC
     `)

@@ -7,6 +7,7 @@
  */
 const { Router } = require('express')
 const db = require('../db')
+const { proxyToFastAPI } = require('../lib/proxy')
 
 const router = Router()
 
@@ -21,6 +22,19 @@ async function checkOwner(req) {
   if (rows[0].user_id == null || rows[0].user_id !== req.user?.id) return { status: 403, detail: '只能修改或刪除自己提交的新聞' }
   return null
 }
+
+// ── 新聞訊號（Iteration 47）：代理到 FastAPI ────────────────────────────────
+// GET /news/signals[?stock_ids=2330,2303]  六個維度 + 三個模型（只有過關的模型才有值）
+// GET /news/signals/gates                   最近一次訓練的五道關卡
+const CRAWLER_DOWN = res => res.status(503).json({ detail: '爬蟲服務未啟動，請執行 python main.py --mode server' })
+router.get('/signals', (req, res) => {
+  const { stock_ids } = req.query
+  const qs = stock_ids ? `?stock_ids=${encodeURIComponent(stock_ids)}` : ''
+  proxyToFastAPI({ port: 8000, path: `/news/signals${qs}`, res, onError: () => CRAWLER_DOWN(res) })
+})
+router.get('/signals/gates', (_req, res) => {
+  proxyToFastAPI({ port: 8000, path: '/news/signals/gates', res, onError: () => CRAWLER_DOWN(res) })
+})
 
 // ── 取得新聞列表 ─────────────────────────────────────────────────────────────
 router.get('/', async (_req, res) => {

@@ -13,6 +13,7 @@ import BudgetSearch   from './pages/BudgetSearch'
 import StockAnalysis  from './pages/StockAnalysis'
 import NewsInput      from './pages/NewsInput'
 import NewsSentiment  from './pages/NewsSentiment'
+import NewsSignals    from './pages/NewsSignals'
 import Prediction          from './pages/Prediction'
 import PredictionCompare   from './pages/PredictionCompare'
 import QueryHistory        from './pages/QueryHistory'
@@ -30,6 +31,7 @@ const PAGE_TITLES = {
   stock:      '個股分析',
   news:       '新聞輸入',
   sentiment:  '新聞情緒',
+  signals:    '新聞訊號',
   prediction: '趨勢預測',
   compare:    '預測比對',
   weekly:     '每週全模型預測',
@@ -78,6 +80,7 @@ export default function App() {
           {page === 'stock'      && <StockAnalysis initStock={stock} />}
           {page === 'news'       && <NewsInput />}
           {page === 'sentiment'  && <NewsSentiment />}
+          {page === 'signals'    && <NewsSignals onSelectStock={goToStock} />}
           {page === 'prediction' && <Prediction />}
           {page === 'compare'    && <PredictionCompare />}
           {page === 'weekly'     && <WeeklyForecast onSelectStock={goToStock} />}

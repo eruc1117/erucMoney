@@ -1,4 +1,4 @@
-# 把排程器註冊成 Windows 工作排程器的常駐工作（Iteration 36）
+﻿# 把排程器註冊成 Windows 工作排程器的常駐工作（Iteration 36）
 #
 # 為什麼不用 NSSM／Windows Service：需要額外下載，而且服務帳號沒有使用者的
 # 環境（Python 路徑、DB 設定都在使用者層）。工作排程器內建、登入即啟動、

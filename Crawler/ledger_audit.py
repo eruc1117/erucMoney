@@ -25,6 +25,13 @@
 判斷「該寫」的依據是 `MODEL_TYPES[...]['logs_ledger']`，不是猜的——
 LSTM 那 10 個類型本來就不落台帳，猜的話會天天誤報。
 
+    3. 跳空模型的預測，是不是其實在描述「已經發生」的跳空？（2026-09-29 新增）
+
+第三題來自 2026-09-20 的準確度報告：跳空 v2 線上 230 筆的預測值與**預測當天已實現**的
+跳空相關 0.76、與目標日只有 −0.03——推論端把當天早上收的夜盤當成明天的。gate 只看
+「方向準確率沒過」，沒人分得出那是樣本不夠還是對齊錯。所以這裡直接量：預測值對
+predicted_on 當天已實現跳空的相關，超過 LEAK_CORR 就報問題。
+
 用法：
     python ledger_audit.py              # 印出稽核結果
     python ledger_audit.py --json
@@ -45,6 +52,33 @@ STALE_AFTER_DAYS = 2
 # 回填時才會校正成真正的交易日（見 resolve_predictions 的說明），
 # 故要留出推估誤差 + 遇到連假的緩衝。
 OVERDUE_GRACE_DAYS = 5
+
+# 洩漏／對齊自檢：預測值與「預測當天已實現」目標值的相關超過這個數就是在描述過去。
+# 真正的隔日跳空預測與當天跳空只剩一點自相關（走查裡 own_gap_ma5 的貢獻很小）。
+LEAK_CORR = 0.5
+LEAK_MIN_N = 30
+
+LEAK_SQL = """
+WITH px AS (
+    SELECT stock_id, trade_date,
+           open_price / NULLIF(LAG(close_price) OVER (PARTITION BY stock_id ORDER BY trade_date), 0) - 1
+               AS gap_today
+      FROM stock_daily_prices
+     WHERE trade_date >= %s
+)
+SELECT v.model_type, v.version,
+       corr(p.predicted_value::float, px.gap_today::float) AS r_today,
+       corr(p.predicted_value::float, p.actual_value::float)  AS r_target,
+       COUNT(*)
+  FROM model_predictions p
+  JOIN model_versions v ON v.id = p.model_version_id
+  JOIN px ON px.stock_id = p.stock_id AND px.trade_date = p.predicted_on
+ WHERE v.target_kind = 'gap'
+   AND p.actual_value IS NOT NULL
+   AND p.invalid_reason IS NULL
+ GROUP BY 1, 2
+ ORDER BY 1, 2
+"""
 
 
 def _market_last(cur):
@@ -152,6 +186,8 @@ def audit(as_of: date = None) -> dict:
                     f'{mt} v{ver["version"]}（{role}）台帳停在 {last}，'
                     f'落後基準日 {behind} 天')
 
+    leaks = _leak_check()
+
     from resolve_predictions import US_KINDS
     unresolved = []
     for mt, v, tgt, n, kind in overdue_raw:
@@ -167,14 +203,43 @@ def audit(as_of: date = None) -> dict:
         problems.append(f'{total} 筆預測到期逾 {OVERDUE_GRACE_DAYS} 天仍未結算'
                         f'（最舊 {unresolved[0]["target_date"]}）')
 
+    for lk in leaks:
+        if lk['n'] >= LEAK_MIN_N and lk['r_today'] is not None and lk['r_today'] > LEAK_CORR:
+            rg = '—' if lk['r_target'] is None else f'{lk["r_target"]:+.2f}'
+            problems.append(
+                f'{lk["model_type"]} v{lk["version"]}：預測值與預測當天已實現的跳空相關 '
+                f'{lk["r_today"]:+.2f}（與目標日 {rg}），在描述已發生的事——推論端對齊錯誤')
+
     return {
         'available': True,
         'market_last': market_last.isoformat(),
         'us_market_last': us_last.isoformat() if us_last else None,
         'coverage': coverage,
         'unresolved': unresolved,
+        'leak_checks': leaks,
         'problems': problems,
     }
+
+
+def _leak_check() -> list:
+    """跳空類版本：預測值對 predicted_on 當天已實現跳空的相關。查不到就回空（不擋稽核）。"""
+    from db.connection import get_conn
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT MIN(predicted_on) FROM model_predictions")
+                since = (cur.fetchone() or [None])[0]
+                if since is None:
+                    return []
+                cur.execute(LEAK_SQL, (since,))
+                return [{'model_type': mt, 'version': v,
+                         'r_today': float(rt) if rt is not None else None,
+                         'r_target': float(rg) if rg is not None else None,
+                         'n': int(n)}
+                        for mt, v, rt, rg, n in cur.fetchall()]
+    except Exception as e:
+        logger.warning('[audit] 對齊自檢失敗：%s', e)
+        return []
 
 
 if __name__ == '__main__':
@@ -197,6 +262,12 @@ if __name__ == '__main__':
                   f'{"服役" if c["is_serving"] else "影子":<6}'
                   f'{c["status"]:<9}{c["last_predicted_on"] or "—":<13}'
                   f'{c["rows_last"] or 0}')
+        if res.get('leak_checks'):
+            print('\n對齊自檢（預測值 vs 預測當天已實現跳空 / vs 目標日）：')
+            for lk in res['leak_checks']:
+                rt = '—' if lk['r_today'] is None else f'{lk["r_today"]:+.2f}'
+                rg = '—' if lk['r_target'] is None else f'{lk["r_target"]:+.2f}'
+                print(f'  {lk["model_type"]} v{lk["version"]}：{rt} / {rg}（{lk["n"]} 筆）')
         if res['unresolved']:
             print('\n到期未結算：')
             for u in res['unresolved']:

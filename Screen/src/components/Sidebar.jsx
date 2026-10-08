@@ -5,6 +5,7 @@ const NAV_ITEMS = [
   { key: 'institutional', icon: '🏦', label: '法人持股' },
   { key: 'news',       icon: '📝', label: '新聞輸入' },
   { key: 'sentiment',  icon: '📰', label: '新聞情緒' },
+  { key: 'signals',    icon: '📣', label: '新聞訊號' },
   { key: 'prediction', icon: '🤖', label: '趨勢預測' },
   { key: 'compare',    icon: '📊', label: '預測比對' },
   { key: 'weekly',     icon: '📅', label: '週預測' },

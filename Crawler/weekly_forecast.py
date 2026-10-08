@@ -182,14 +182,33 @@ def _batch_tw():
             out['gap'] = {p['stock_id']: {
                 'gap_pct': p['gap_pct'], 'direction': p['direction'],
                 'implied_open': p['implied_open'], 'covers': 'next_day',
-                # 2026-09-20 的準確度報告：線上推論的夜盤特徵沒換成最新一場，
-                # 這個值可能對應已發生的跳空。修好前照實標出來。
-                'caveat': '線上時序待修：此值可能對應已發生的跳空（見 AI/Doc/ModelAccuracy.md）',
+                # 只在次一交易日的夜盤收完後才有值（週日 08:00 通常沒有：週一的夜盤
+                # 要到週一 05:00 才收）；缺席會記在 errors，不會靜靜少一塊。
+                'night_date': g.get('night_date'),
             } for p in g['predictions']}
         else:
             errors.append(f"gap: {g.get('reason')}")
     except Exception as e:
         errors.append(f'gap: {e}')
+
+    try:
+        import news_models
+        ns = news_models.signals(None, log=False)
+        if ns.get('available'):
+            for r in ns['results']:
+                for key, short, covers in (('news_event_vol', 'event_vol', 'next_day'),
+                                           ('news_drift', 'drift', '20d'), ('news_tone', 'tone', '3d')):
+                    meta = ns['models'].get(key, {})
+                    out.setdefault(key, {})[r['stock_id']] = {
+                        'serving': bool(meta.get('serving')), 'credibility': meta.get('credibility'),
+                        'value': r.get(short), 'covers': covers}
+            for key, meta in ns['models'].items():
+                if not meta.get('serving'):
+                    errors.append(f"{key}: 未通過訓練關卡，不服役（只累積台帳）")
+        else:
+            errors.append(f"news_models: {ns.get('reason')}")
+    except Exception as e:
+        errors.append(f'news_models: {e}')
 
     try:
         import range_model
@@ -427,6 +446,8 @@ def latest() -> dict:
             'range': models.get('range'), 'volatility': models.get('volatility'),
             'volume': models.get('volume'), 'm3_chip': models.get('m3_chip'),
             'm2_news': models.get('m2_news'),
+            'news_event_vol': models.get('news_event_vol'), 'news_drift': models.get('news_drift'),
+            'news_tone': models.get('news_tone'),
         }
         markets[market].append(row)
     for m in markets:

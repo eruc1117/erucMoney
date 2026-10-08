@@ -34,7 +34,8 @@ def test_start_registers_every_job_with_expected_times(monkeypatch):
     assert fake.started
     by = {j['id']: j for j in fake.jobs}
     assert set(by) == {'job_stock', 'job_news', 'job_vote', 'job_freshness', 'job_exogenous_6', 'job_exogenous_19',
-                       'job_us_predict', 'job_weekly_forecast', 'job_model_review'}
+                       'job_gap_predict', 'job_us_predict', 'job_news_models', 'job_weekly_forecast', 'job_model_review',
+                       'job_market_daily'}
     f = lambda k: _fields(by[k]['trigger'])
     sc, vc, nc = SCHEDULE['stock_cron'], SCHEDULE['vote_cron'], SCHEDULE['news_cron']
     assert (f('job_stock')['hour'], f('job_stock')['minute']) == (str(sc['hour']), str(sc['minute']))
@@ -44,8 +45,14 @@ def test_start_registers_every_job_with_expected_times(monkeypatch):
     assert int(f('job_freshness')['hour']) < sc['hour']
     assert f('job_exogenous_6')['hour'] == '6' and f('job_exogenous_19')['hour'] == '19' and f('job_exogenous_19')['minute'] == '10'
     assert (f('job_us_predict')['hour'], f('job_us_predict')['minute']) == ('20', '0')
+    # 台股跳空：夜盤 05:00 收、06:10 抓進來之後、09:00 開盤之前
+    assert (f('job_gap_predict')['hour'], f('job_gap_predict')['minute']) == ('6', '20')
+    assert (6, 20) > (int(f('job_exogenous_6')['hour']), int(f('job_exogenous_6')['minute']))
     assert f('job_weekly_forecast')['day_of_week'] == 'sun' and (f('job_weekly_forecast')['hour'], f('job_weekly_forecast')['minute']) == ('8', '0')
+    assert (f('job_news_models')['hour'], f('job_news_models')['minute']) == ('20', '10')      # 投票之後、評估之前
     assert (f('job_model_review')['hour'], f('job_model_review')['minute']) == ('21', '0')
+    assert (f('job_market_daily')['hour'], f('job_market_daily')['minute']) == ('18', '30')     # 全市場日線在追蹤股之後
+    assert (18, 30) > (sc['hour'], sc['minute'])
     assert int(f('job_model_review')['hour']) > vc['hour']                                       # 評估在投票之後
     # 不重入：每個工作 max_instances=1，且都有 misfire 寬限
     assert all(j['max_instances'] == 1 and j['misfire_grace_time'] > 0 for j in fake.jobs)
@@ -58,12 +65,17 @@ def catch_up_env(monkeypatch, tmp_path):
     monkeypatch.setattr(scheduler, 'LOG_DIR', str(tmp_path))
     ran = []
     monkeypatch.setattr(scheduler, 'job_stock', lambda: ran.append('stock'))
+    monkeypatch.setattr(scheduler, 'job_market_daily', lambda: ran.append('market'))
     monkeypatch.setattr(scheduler, 'job_vote', lambda: ran.append('vote'))
     monkeypatch.setattr(scheduler, 'job_model_review', lambda: ran.append('model_review'))
+    monkeypatch.setattr(scheduler, 'job_news_models', lambda: ran.append('news_models'))
+    monkeypatch.setattr(scheduler, 'job_exogenous', lambda: ran.append('exogenous'))
+    monkeypatch.setattr(scheduler, 'job_gap_predict', lambda: ran.append('gap'))
+    monkeypatch.setattr(scheduler, '_gap_catch_up_due', lambda today: True)
     monkeypatch.setattr(scheduler, 'job_weekly_forecast', lambda trigger='schedule': ran.append(f'weekly:{trigger}'))
     monkeypatch.setattr(scheduler, '_catch_up_news', lambda: False)
     monkeypatch.setattr(weekly_forecast, 'due', lambda: False)
-    last = {'stock_daily_prices': None, 'voting_results': None}
+    last = {'stock_daily_prices': None, 'voting_results': None, 'market_daily_prices': None}
     monkeypatch.setattr(scheduler, '_max_trade_date', lambda table, col='trade_date': last[table])
     return ran, last, tmp_path
 
@@ -87,7 +99,16 @@ def test_catch_up_after_2100_runs_vote_then_review(catch_up_env):
     last['stock_daily_prices'] = '2026-09-25'      # 行情已是今天 → 不補股價
     last['voting_results'] = '2026-09-24'
     scheduler._catch_up()
-    assert ran == ['vote', 'model_review']           # 有補過才做模型評估
+    assert ran == ['vote', 'news_models', 'model_review']   # 投票之後順手寫新聞訊號台帳；有補過才做模型評估
+
+
+@freeze_time('2026-09-25 19:30:00')
+def test_catch_up_market_daily_when_stale(catch_up_env):
+    ran, last, _ = catch_up_env
+    last['stock_daily_prices'] = '2026-09-25'
+    last['market_daily_prices'] = '2026-09-24'    # 全市場日線停在昨天 → 18:30 已過，補
+    scheduler._catch_up()
+    assert ran == ['market']
 
 
 @freeze_time('2026-09-25 21:05:00')
@@ -141,3 +162,25 @@ def test_weekly_due_and_next_run_times():
     w = weekly_forecast.week_windows(date(2026, 9, 30))
     assert (w['week1_start'], w['week1_end']) == (date(2026, 9, 28), date(2026, 10, 2))
     assert (w['week2_start'], w['week2_end']) == (date(2026, 10, 5), date(2026, 10, 9))
+
+
+@freeze_time('2026-09-25 07:00:00')      # 週五清晨：夜盤已收、還沒開盤
+def test_catch_up_gap_before_open_runs_exogenous_then_gap(catch_up_env):
+    ran, _last, _tmp = catch_up_env
+    scheduler._catch_up()
+    assert ran == ['exogenous', 'gap']
+
+
+@freeze_time('2026-09-25 10:00:00')      # 開盤後：再寫就不是預測，不補
+def test_catch_up_gap_not_after_open(catch_up_env):
+    ran, _last, _tmp = catch_up_env
+    scheduler._catch_up()
+    assert 'gap' not in ran and 'exogenous' not in ran
+
+
+@freeze_time('2026-09-25 07:00:00')
+def test_catch_up_gap_skipped_when_today_already_logged(catch_up_env, monkeypatch):
+    ran, _last, _tmp = catch_up_env
+    monkeypatch.setattr(scheduler, '_gap_catch_up_due', lambda today: False)
+    scheduler._catch_up()
+    assert ran == []

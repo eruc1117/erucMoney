@@ -31,6 +31,13 @@ const DEFAULTS = {
     gap: { TSM: { predicted_gap_pct: 0.4 } },
   } }),
   'GET /us/gap':              ()    => ({ status: 200, body: { items: [] } }),
+  'GET /news/signals':        (req) => ({ status: 200, body: {
+    available: true, as_of: '2026-09-24', query: req.query,
+    models: { news_event_vol: { serving: true, credibility: 'proven' }, news_drift: { serving: false, credibility: 'none' } },
+    results: [{ stock_id: '2330', as_of: '2026-09-24', close: 2475, dims: { ns_has_news: 1, ns_sent: 0.3 },
+                event_vol: { range_pct: 1.2, is_elevated: false }, drift: null }],
+  } }),
+  'GET /news/signals/gates':  ()    => ({ status: 200, body: { models: { news_event_vol: { gates: { deploy: true } } } } }),
 }
 
 async function startFakeFastAPI() {

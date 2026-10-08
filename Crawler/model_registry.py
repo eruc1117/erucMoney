@@ -109,6 +109,29 @@ MODEL_TYPES = {
         'horizon_days': 1,
         'logs_ledger': True,
     },
+    # Iteration 47：新聞訊號三模型（UnifiedModel/train_news_models.py）。
+    # target_kind 沿用既有種類：range（h=1 就是次日振幅）與 signal（持有 h 日報酬），回填端不必改。
+    'news_event_vol': {
+        'label': '事件波動（次日振幅）',
+        'workspace': _p('UnifiedModel', 'saved_models', 'news_event_vol.joblib'),
+        'target_kind': 'range',
+        'horizon_days': 1,
+        'logs_ledger': True,
+    },
+    'news_drift': {
+        'label': '營收漂移（PEAD 覆蓋層）',
+        'workspace': _p('UnifiedModel', 'saved_models', 'news_drift.joblib'),
+        'target_kind': 'signal',
+        'horizon_days': 20,
+        'logs_ledger': True,
+    },
+    'news_tone': {
+        'label': '新聞語調（3 日）',
+        'workspace': _p('UnifiedModel', 'saved_models', 'news_tone.joblib'),
+        'target_kind': 'signal',
+        'horizon_days': 3,
+        'logs_ledger': True,
+    },
 }
 
 # LSTM：每個模型各自成為一個類型，artifact 是整個目錄（每檔股票一個 .keras）

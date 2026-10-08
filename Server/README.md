@@ -47,7 +47,7 @@ npm run test:coverage   # 加覆蓋率（只算 lib/、routes/、app.js）
 | 爬蟲與資料回填的 admin 代理 | `tests/http/admin-proxy.test.js` |
 | 美股報價代理 | `tests/http/us.test.js` |
 | helmet、CORS、限流、公開端點 | `tests/http/security.test.js` |
-| 18 個 SQL migration | `tests/db/migrations.test.js` |
+| 19 個 SQL migration | `tests/db/migrations.test.js` |
 
 CI：`.github/workflows/test.yml`（Postgres 16 service，`Server/` 有變動就跑）。
 

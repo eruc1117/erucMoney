@@ -305,6 +305,11 @@ export const getCatalog = ({ page, selectableOnly = false } = {}) =>
   })}`)
 
 // GET /voting/weekly-plan?stock_id= —— 本週 5 個交易日的每日動作
+// 新聞訊號（Iteration 47）：六個維度 + 三個模型；只有過關的模型才有值
+export const getNewsSignals = (stockIds = null) =>
+  request(`/news/signals${stockIds ? `?stock_ids=${encodeURIComponent(stockIds.join(','))}` : ''}`, { timeout: 120000 })
+export const getNewsSignalGates = () => request('/news/signals/gates')
+
 export const getWeeklyPlan = (stockId) =>
   request(`/voting/weekly-plan?stock_id=${encodeURIComponent(stockId)}`)
 

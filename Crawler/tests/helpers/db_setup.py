@@ -27,6 +27,7 @@ WRITABLE_TABLES = [
     'instrument_alias', 'trading_calendar', 'saved_predictions', 'user_holdings', 'user_trades',
     'us_daily_prices', 'us_tickers', 'futures_daily', 'index_daily_prices',
     'voting_results', 'weekly_forecast_runs', 'weekly_forecasts', 'users',
+    'market_universe', 'market_daily_prices',
 ]
 
 

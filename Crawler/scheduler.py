@@ -36,7 +36,20 @@ LOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs")
 RUN_WEEKLY = (8, 0)     # 每週日 08:00（與 weekly_forecast.RUN_HOUR 一致）
 
 
+def _ensure_std_streams():
+    """
+    pythonw（MoneyScheduler 常駐工作）沒有主控台，sys.stdout／sys.stderr 是 None。
+    FinMind 在 import 時做 `loguru.logger.add(sys.stderr)`，拿到 None 就丟
+    「Cannot log to objects of type 'NoneType'」——2026-09-29 第一次常駐就是這樣讓股價補跑中斷的。
+    這裡在任何工作 import 之前把兩個串流換成 devnull；檔案日誌走 RotatingFileHandler，不受影響。
+    """
+    for name in ('stdout', 'stderr'):
+        if getattr(sys, name, None) is None:
+            setattr(sys, name, open(os.devnull, 'w', encoding='utf-8'))
+
+
 def _setup_logging():
+    _ensure_std_streams()
     """檔案日誌一定有；主控台日誌只在有主控台時加（pythonw 沒有 stderr）。"""
     os.makedirs(LOG_DIR, exist_ok=True)
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -142,6 +155,30 @@ def job_stock():
                 len(ids), price_count, chip_count, hold_count)
 
     _refresh_adj_close(ids)
+
+
+def job_market_daily():
+    """每日 18:30：交易所官方檔更新全市場日線（market_daily_prices）與含息大盤（index_daily_prices.TAIEX_TR），
+    再補近兩週的除權息／減資事件，只重建有新事件股票的 adj_close（Iteration 48，打敗大盤計畫階段 1）。
+
+    不走 FinMind：全市場 1,800 檔逐檔查會吃掉整個免費額度；交易所檔一天兩次呼叫就是全市場。
+    與 job_stock 無關：追蹤股那條鏈完全不動。"""
+    import market_data
+
+    today = date.today()
+    r = market_data.update_day(today)
+    if r.get("holiday"):
+        logger.info("[排程/market] %s 休市，略過", today)
+        return
+    logger.info("[排程/market] %s：上市 %d、上櫃 %d 列，指數 %d，非股票池略過 %d",
+                today, r["twse"], r["tpex"], r["index"], r["dropped"])
+    try:
+        ev = market_data.refresh_events(today - timedelta(days=14), today)
+        if ev["stock_ids"]:
+            n = market_data.rebuild_adj(ev["stock_ids"])
+            logger.info("[排程/market] 近兩週公司行動 %d 檔，重建 adj_close %d 列", len(ev["stock_ids"]), n)
+    except Exception as e:
+        logger.warning("[排程/market] 公司行動更新失敗（日線已寫入，adj_close 用既有事件表）：%s", e)
 
 
 def job_news():
@@ -269,6 +306,44 @@ def job_us_predict():
                 ups, len(res['predictions']) - ups, res.get('tw_session'))
 
 
+def job_gap_predict():
+    """
+    每日 06:20：寫入台股次日開盤跳空預測（台股 09:00 開盤前）。
+
+    為什麼不是跟 20:00 的投票一起跑：跳空模型最強的特徵是台指期夜盤，而「明天開盤」
+    對應的夜盤 15:00 開、**翌日 05:00 才收**。20:00 手上只有今天早上收的那一場，
+    算出來的是今天已發生的跳空——8/7 ~ 9/22 台帳裡 230 筆就是這樣寫錯的
+    （AI/Doc/ModelAccuracy.md 第二節）。06:10 外生資料更新把夜盤抓進來後，才輪到這裡。
+    """
+    import gap_model
+
+    res = gap_model.predict_gaps()
+    if not res.get('available'):
+        logger.warning("[排程/跳空] 預測不可用：%s", res.get('reason'))
+        return
+    ups = sum(1 for p in res['predictions'] if p['gap_pct'] > 0)
+    logger.info("[排程/跳空] 基準 %s → 預測 %s 開盤（夜盤 %s、美股 %s）：%d 檔開高、%d 檔開低",
+                res['tw_last_date'], res['night_date'], res['night_date'], res['us_date'],
+                ups, len(res['predictions']) - ups)
+
+
+def job_news_models():
+    """
+    每日 20:10：新聞訊號三模型對全部追蹤股票寫台帳（Iteration 47）。
+
+    排在 20:00 投票之後、21:00 模型評估之前。三個模型不管關卡有沒有過都寫（影子），
+    不然沒過關的永遠沒有線上紀錄、也就永遠沒機會被平反或再否證。
+    """
+    import news_models
+
+    res = news_models.log_daily()
+    if not res.get('available'):
+        logger.warning("[排程/新聞訊號] 不可用")
+        return
+    logger.info("[排程/新聞訊號] 基準 %s：%d 檔寫入台帳；服役中：%s",
+                res.get('as_of'), res.get('n', 0), '、'.join(res.get('serving') or []) or '無')
+
+
 def job_weekly_forecast(trigger: str = "schedule"):
     """
     每週日 08:00：用所有可用模型對所有已有股票預測下一週與下下週，存表直接顯示。
@@ -327,6 +402,23 @@ def _max_trade_date(table: str, col: str = "trade_date"):
             cur.execute(f"SELECT max({col})::text FROM {table}")
             row = cur.fetchone()
     return row[0] if row and row[0] else None
+
+
+def _gap_catch_up_due(today) -> bool:
+    """今天的開盤（target_date = today）還沒有任何跳空台帳紀錄才算該補。查不到一律不補。"""
+    try:
+        from db.connection import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT COUNT(*) FROM model_predictions p
+                      JOIN model_versions v ON v.id = p.model_version_id
+                     WHERE v.model_type = 'gap' AND p.target_date = %s
+                """, (today,))
+                return cur.fetchone()[0] == 0
+    except Exception as e:
+        logger.warning("[排程/catch-up] 跳空台帳查詢失敗，不補：%s", e)
+        return False
 
 
 def _catch_up_news():
@@ -390,6 +482,16 @@ def _catch_up():
 
     ran = []
     try:
+        # 跳空：只在 06:20 ~ 09:00 之間補（開盤後再寫就不是預測了），且今天還沒寫過才補；
+        # 夜盤要先在庫裡，所以順手把 06:10 的外生更新一起補
+        if passed(6, 20) and not passed(9, 0) and _gap_catch_up_due(today):
+            logger.info("[排程/catch-up] 今日開盤前尚無跳空預測，補跑外生資料與跳空")
+            try:
+                job_exogenous()
+            except Exception as e:
+                logger.warning("[排程/catch-up] 外生資料補跑失敗：%s", e)
+            job_gap_predict(); ran.append("gap")
+
         sc = SCHEDULE["stock_cron"]
         if passed(sc["hour"], sc["minute"]):
             last = _max_trade_date("stock_daily_prices")
@@ -399,12 +501,22 @@ def _catch_up():
             else:
                 logger.info("[排程/catch-up] 行情已是 %s，股價更新不必補", last)
 
+        if passed(18, 30):
+            last = _max_trade_date("market_daily_prices")
+            if last and last < today.isoformat():
+                logger.info("[排程/catch-up] 全市場日線最後日 %s 早於今天，補跑", last)
+                job_market_daily(); ran.append("market")
+
         vc = SCHEDULE["vote_cron"]
         if passed(vc["hour"], vc["minute"]):
             last = _max_trade_date("voting_results", "vote_date")
             if not last or last < today.isoformat():
                 logger.info("[排程/catch-up] 投票最後日 %s，補跑投票", last)
                 job_vote(); ran.append("vote")
+                try:
+                    job_news_models(); ran.append("news_models")
+                except Exception as e:
+                    logger.warning("[排程/catch-up] 新聞訊號補跑失敗：%s", e)
 
         if passed(21, 0) and ran:
             job_model_review(); ran.append("model_review")
@@ -431,6 +543,14 @@ def start():
         trigger=CronTrigger(hour=stock_cron["hour"], minute=stock_cron["minute"], timezone="Asia/Taipei"),
         id="job_stock", name="股價+籌碼更新",
         max_instances=1, misfire_grace_time=600,
+    )
+
+    # 全市場日線（交易所檔）排在追蹤股更新之後：兩條鏈互不相干，只是把對外請求錯開
+    scheduler.add_job(
+        job_market_daily,
+        trigger=CronTrigger(hour=18, minute=30, timezone="Asia/Taipei"),
+        id="job_market_daily", name="全市場日線+含息大盤（交易所檔）",
+        max_instances=1, misfire_grace_time=3600,
     )
 
     news_cron = SCHEDULE["news_cron"]
@@ -474,6 +594,22 @@ def start():
         max_instances=1, misfire_grace_time=3600,
     )
 
+    # 台股跳空預測：夜盤 05:00 收、06:10 抓進來，再算明天的開盤；09:00 開盤前寫完台帳
+    scheduler.add_job(
+        job_gap_predict,
+        trigger=CronTrigger(hour=6, minute=20, timezone="Asia/Taipei"),
+        id="job_gap_predict", name="台股開盤跳空預測",
+        max_instances=1, misfire_grace_time=3600,
+    )
+
+    # 新聞訊號三模型：投票之後、評估之前寫台帳（Iteration 47）
+    scheduler.add_job(
+        job_news_models,
+        trigger=CronTrigger(hour=20, minute=10, timezone="Asia/Taipei"),
+        id="job_news_models", name="新聞訊號模型台帳",
+        max_instances=1, misfire_grace_time=1800,
+    )
+
     # 每週日 08:00：全模型預測下一週與下下週（Iteration 37）
     scheduler.add_job(
         job_weekly_forecast,
@@ -491,8 +627,9 @@ def start():
     )
 
     logger.info("排程器啟動：股價每日 %02d:%02d ／ 新聞每小時 :%02d ／ 投票每日 %02d:%02d"
-                " ／ 新鮮度每日 17:30 ／ 外生資料 06:10 與 19:10"
-                " ／ 美股跳空預測 20:00 ／ 模型評估每日 21:00 ／ 每週日 08:00 全模型預測（Ctrl+C 停止）",
+                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 外生資料 06:10 與 19:10"
+                " ／ 台股跳空預測 06:20 ／ 美股跳空預測 20:00 ／ 新聞訊號 20:10 ／ 模型評估每日 21:00"
+                " ／ 每週日 08:00 全模型預測（Ctrl+C 停止）",
                 stock_cron["hour"], stock_cron["minute"],
                 news_cron["minute"],
                 vote_cron["hour"], vote_cron["minute"])
