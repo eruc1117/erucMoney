@@ -316,6 +316,13 @@ export const getPortfolioRuns = () => request('/portfolio/runs')
 export const getPortfolioRun = (id, step = 1) => request(`/portfolio/runs/${id}?step=${step}`)
 export const getPortfolioPaper = () => request('/portfolio/paper')
 
+// ── 程式交易（Iteration 57）：清單 → 下單指令；執行紀錄 ──
+// GET /trading/plan?cash=&min_trade=
+export const getTradingPlan = (cash, minTrade = 1000) =>
+  request(`/trading/plan?cash=${encodeURIComponent(cash)}&min_trade=${encodeURIComponent(minTrade)}`)
+// GET /trading/log
+export const getTradingLog = () => request('/trading/log')
+
 // ── 工作進度（harness 狀態：交接筆記、驗證結果、hook 事件、迭代、git；admin）──
 // GET /progress
 export const getProgress = () => request('/progress')

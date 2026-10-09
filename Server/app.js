@@ -36,6 +36,7 @@ const usRouter          = require('./routes/us')
 const forecastRouter    = require('./routes/forecast')
 const portfolioRouter   = require('./routes/portfolio')
 const progressRouter    = require('./routes/progress')
+const tradingRouter     = require('./routes/trading')
 
 const app = express()
 // 對外（階段 3～4）：經 Cloudflare Tunnel 進來的請求帶 X-Forwarded-For，信任一層代理，rate-limit 才拿得到真實 IP
@@ -73,6 +74,7 @@ app.use('/catalog',     readPublic, catalogRouter)
 app.use('/us',          readPublic, usRouter)
 app.use('/forecast',    readPublic, forecastRouter)
 app.use('/portfolio',   readPublic, portfolioRouter)
+app.use('/trading',     requireUser, tradingRouter)   // 程式交易：清單 → 這個人的下單指令（個人資料）
 app.use('/progress',    requireUser, requireRole('admin'), progressRouter)   // 工作進度（harness 狀態，只讀檔案與 git）
 
 // 第一次啟動：admin 密碼從環境變數 ADMIN_PASSWORD 來；沒設就用 admin123 並警告。

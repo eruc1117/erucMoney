@@ -30,7 +30,7 @@ const STAGE_STYLE = {
   todo: { color: 'var(--dim)', bg: 'var(--dim-soft)', mark: '○', label: '未開始' },
 }
 function Stepper({ stages }) {
-  if (!stages?.length) return <div className="card-body muted">progress.md 沒有「## 階段」清單（- [x] 完成、- [~] 進行中、- [ ] 未開始）</div>
+  if (!stages?.length) return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>progress.md 沒有「## 階段」清單（- [x] 完成、- [~] 進行中、- [ ] 未開始）</div>
   return (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`, padding: '1.1rem 1rem .9rem', gap: 0 }}>
       {stages.map((s, i) => {
@@ -68,7 +68,7 @@ function NoteList({ title, items, tone, empty = '（無）' }) {
 const CHECK_STYLE = { pass: ['green', '通過'], fail: ['red', '失敗'], skip: ['yellow', '略過'] }
 function ChecksTable({ checks }) {
   const [open, setOpen] = useState(null)
-  if (!checks?.length) return <div className="card-body muted">還沒有驗證紀錄。跑測試時用 <code>node AI/harness/record_check.js --name jest --cwd Server -- npm test</code>，結果就會出現在這裡。</div>
+  if (!checks?.length) return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>還沒有驗證紀錄。跑測試時用 <code>node AI/harness/record_check.js --name jest --cwd Server -- npm test</code>，結果就會出現在這裡。</div>
   return (
     <table className="data-table">
       <thead><tr><th>檢查</th><th className="mid">結果</th><th>摘要</th><th className="num">時間</th></tr></thead>
@@ -116,7 +116,7 @@ const EVENT_ICON = {
   Notification: ['🔔', 'var(--yellow)'], check: ['✔', 'var(--green)'], SessionEnd: ['■', 'var(--dim)'],
 }
 function EventList({ events }) {
-  if (!events?.length) return <div className="card-body muted">還沒有事件。.claude/settings.json 的 hooks 會把 Claude Code 的每一步寫進 AI/progress/events.jsonl。</div>
+  if (!events?.length) return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>還沒有事件。.claude/settings.json 的 hooks 會把 Claude Code 的每一步寫進 AI/progress/events.jsonl。</div>
   return (
     <div style={{ maxHeight: 380, overflowY: 'auto' }}>
       {events.map((e, i) => {
@@ -271,7 +271,7 @@ export default function WorkProgress() {
                   <tr key={c.hash}><td style={{ fontFamily: 'ui-monospace, Consolas, monospace' }}>{c.hash}</td><td>{c.date}</td><td style={{ whiteSpace: 'normal' }}>{c.subject}</td></tr>
                 ))}</tbody>
               </table>
-            ) : <div className="card-body muted">讀不到 git log</div>}
+            ) : <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>讀不到 git log</div>}
           </div>
         </div>
       </div>

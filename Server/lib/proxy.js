@@ -59,4 +59,27 @@ function proxyToFastAPI({ path, method = 'GET', body = null, res, onError, port 
   req.end()
 }
 
-module.exports = { proxyToFastAPI }
+/**
+ * 向 FastAPI 取 JSON 回來給 Node 端用（不是轉給前端）。連不上或非 JSON 都 reject。
+ *   const data = await fetchFastAPI({ port: 8000, path: '/portfolio/candidate' })
+ */
+function fetchFastAPI({ path, port = 8000, timeout = 15000 }) {
+  return new Promise((resolve, reject) => {
+    const req = http.get({ hostname: process.env.FASTAPI_HOST || 'localhost',
+                           port: process.env.FASTAPI_PORT ? Number(process.env.FASTAPI_PORT) : port, path, timeout }, r => {
+      let data = ''
+      r.on('data', c => { data += c })
+      r.on('end', () => {
+        try {
+          const json = JSON.parse(data)
+          if ((r.statusCode || 500) >= 400) return reject(new Error(json.detail || `upstream ${r.statusCode}`))
+          resolve(json)
+        } catch { reject(new Error(`upstream ${r.statusCode}: ${String(data).slice(0, 120)}`)) }
+      })
+    })
+    req.on('timeout', () => req.destroy(new Error('upstream timeout')))
+    req.on('error', reject)
+  })
+}
+
+module.exports = { proxyToFastAPI, fetchFastAPI }
