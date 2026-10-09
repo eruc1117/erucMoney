@@ -35,6 +35,7 @@ const catalogRouter     = require('./routes/catalog')
 const usRouter          = require('./routes/us')
 const forecastRouter    = require('./routes/forecast')
 const portfolioRouter   = require('./routes/portfolio')
+const progressRouter    = require('./routes/progress')
 
 const app = express()
 // 對外（階段 3～4）：經 Cloudflare Tunnel 進來的請求帶 X-Forwarded-For，信任一層代理，rate-limit 才拿得到真實 IP
@@ -72,6 +73,7 @@ app.use('/catalog',     readPublic, catalogRouter)
 app.use('/us',          readPublic, usRouter)
 app.use('/forecast',    readPublic, forecastRouter)
 app.use('/portfolio',   readPublic, portfolioRouter)
+app.use('/progress',    requireUser, requireRole('admin'), progressRouter)   // 工作進度（harness 狀態，只讀檔案與 git）
 
 // 第一次啟動：admin 密碼從環境變數 ADMIN_PASSWORD 來；沒設就用 admin123 並警告。
 // 只在 password_hash 為空（migration 017 剛建的占位列）時寫入，之後改密碼走 /auth/change-password。

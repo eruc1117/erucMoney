@@ -31,6 +31,13 @@ describe('FastAPI 在線', () => {
     expect(r.body.thresholds.dsr).toBe(0.95)
     expect(r.body.holdout_opened).toBe(false)
   })
+  it('GET /portfolio/paper 回模擬帳戶檢討（匿名可讀）', async () => {
+    const r = await request(app).get('/portfolio/paper')
+    expect(r.status).toBe(200)
+    expect(fake.calls[0].path).toBe('/portfolio/paper')
+    expect(r.body.opened).toBe(true)
+    expect(r.body.review.active_return).toBe(0.005)
+  })
   it('GET /portfolio/runs 回全部實驗', async () => {
     const r = await request(app).get('/portfolio/runs').set(USER)
     expect(r.status).toBe(200)

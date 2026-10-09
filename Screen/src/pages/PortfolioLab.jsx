@@ -7,7 +7,7 @@
 // 月 Sharpe 0.16 這種程度純靠運氣也挑得到，所以「超越了」和「不是運氣」是兩件事。
 import { useEffect, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
-import { getPortfolioCandidate, getPortfolioRuns } from '../services/api'
+import { getPortfolioCandidate, getPortfolioRuns, getPortfolioPaper } from '../services/api'
 
 function num(v, d = 2) { return v === null || v === undefined || Number.isNaN(Number(v)) ? '–' : Number(v).toFixed(d) }
 function pct(v, d = 2) {
@@ -171,6 +171,72 @@ function Positions({ positions, last }) {
   )
 }
 
+function PaperCard({ paper }) {
+  if (!paper) return null
+  if (!paper.opened) return <div className="card-body muted">模擬帳戶還沒開（python portfolio_paper.py --start）</div>
+  const r = paper.review || {}
+  const st = r.state || {}
+  const exp = r.expected || {}
+  const series = r.series || []
+  const toPts = key => series.filter(p => p[key] !== null && p[key] !== undefined).map(p => [new Date(p.d).getTime(), Number(p[key])])
+  const chart = series.length > 1 ? {
+    data: [{ name: '模擬帳戶', data: toPts('nav') }, { name: '0050 含息', data: toPts('bench') }],
+    options: {
+      chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, background: 'transparent' },
+      stroke: { width: [2.5, 1.5], curve: 'straight', dashArray: [0, 4] }, colors: ['#27ae60', '#9aa4b2'],
+      xaxis: { type: 'datetime', labels: { datetimeUTC: false } }, yaxis: { labels: { formatter: v => v.toFixed(3) } },
+      tooltip: { x: { format: 'yyyy-MM-dd' }, y: { formatter: v => v.toFixed(4) } }, legend: { position: 'top' },
+      grid: { borderColor: 'rgba(128,128,128,0.2)' }, theme: { mode: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' },
+    },
+  } : null
+  const holdings = paper.holdings || []
+  const trades = (paper.trades || []).slice(0, 40)
+  return (
+    <>
+      <div className="card-body" style={{ paddingTop: 8 }}>
+        <div className="stat-grid">
+          <div className="stat-tile"><div className="k">起始</div><div className="v">{st.started_on || '–'}</div><div className="s">資金 {Number(st.start_capital || 0).toLocaleString()}</div></div>
+          <div className="stat-tile"><div className="k">淨值</div><div className="v">{r.nav ? Number(r.nav).toLocaleString() : '–'}</div><div className="s">現金 {r.cash ? Number(r.cash).toLocaleString() : '–'} · 持股 {r.n_holdings ?? 0} 檔</div></div>
+          <div className="stat-tile"><div className="k">模擬帳戶報酬</div><div className={`v ${tone(r.port_return)}`}>{pct(r.port_return)}</div><div className="s">{r.since || ''} ~ {r.as_of || ''}（{r.days ?? 0} 個交易日）</div></div>
+          <div className="stat-tile"><div className="k">0050 同期</div><div className={`v ${tone(r.bench_return)}`}>{pct(r.bench_return)}</div><div className="s">含息還原價</div></div>
+          <div className="stat-tile"><div className="k">主動報酬</div><div className={`v ${tone(r.active_return)}`}>{pct(r.active_return)}</div><div className="s">回測預期：每月約 {pct(exp.monthly_active_mean)}、月勝率 {exp.monthly_win_rate ? pct(exp.monthly_win_rate, 0).replace('+', '') : '–'}</div></div>
+          <div className="stat-tile"><div className="k">待成交清單</div><div className="v">{paper.pending?.length ? paper.pending.join('、') : '無'}</div><div className="s">訊號日次一交易日開盤成交</div></div>
+        </div>
+      </div>
+      {chart && <div className="chart-pad"><ReactApexChart type="line" series={chart.data} options={chart.options} height={240} /></div>}
+      {r.monthly?.length ? (
+        <div className="card-body" style={{ paddingTop: 0 }}>
+          <table className="data-table" style={{ maxWidth: 520 }}>
+            <thead><tr><th>月</th><th style={{ textAlign: 'right' }}>模擬帳戶</th><th style={{ textAlign: 'right' }}>0050</th><th style={{ textAlign: 'right' }}>主動</th><th style={{ textAlign: 'right' }}>回測預期（月均）</th></tr></thead>
+            <tbody>{r.monthly.map(m => (
+              <tr key={m.month}><td>{m.month}</td><td style={{ textAlign: 'right' }}>{pct(m.port)}</td><td style={{ textAlign: 'right' }}>{pct(m.bench)}</td>
+                <td style={{ textAlign: 'right' }}><span className={tone(m.active)}>{pct(m.active)}</span></td><td style={{ textAlign: 'right' }} className="muted">{pct(exp.monthly_active_mean)}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : null}
+      <div className="card-body" style={{ paddingTop: 0 }}>
+        <Sub>持股 {holdings.length} 檔：{holdings.map(h => `${h.stock_id}×${h.shares}`).join('、') || '全現金'}</Sub>
+        {trades.length ? (
+          <div style={{ overflowX: 'auto', marginTop: 8 }}>
+            <table className="data-table" style={{ fontSize: '0.82rem' }}>
+              <thead><tr><th>成交日</th><th>清單</th><th>代碼</th><th>買/賣</th><th style={{ textAlign: 'right' }}>股</th><th style={{ textAlign: 'right' }}>價</th><th style={{ textAlign: 'right' }}>金額</th><th style={{ textAlign: 'right' }}>費+稅</th><th>狀態</th></tr></thead>
+              <tbody>{trades.map((t, i) => (
+                <tr key={i}><td>{t.trade_date}</td><td className="muted">{t.rebalance_date}</td><td><strong>{t.stock_id}</strong></td>
+                  <td className={t.side === 'buy' ? 'up' : 'down'}>{t.side === 'buy' ? '買' : '賣'}</td>
+                  <td style={{ textAlign: 'right' }}>{t.shares.toLocaleString()}</td><td style={{ textAlign: 'right' }}>{num(t.price)}</td>
+                  <td style={{ textAlign: 'right' }}>{Math.round(t.gross).toLocaleString()}</td><td style={{ textAlign: 'right' }}>{Math.round(t.fee + t.tax).toLocaleString()}</td>
+                  <td>{t.filled ? <span className="up">成交</span> : <span className="down" title={t.note || ''}>未成交</span>}</td></tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <Sub>還沒有成交紀錄：第一份清單在本月 11 日起第一個交易日收盤算，次一交易日開盤成交。</Sub>}
+        <Sub>規則與回測相同：零股、單邊手續費 0.0855%、賣出稅 0.3%、一字鎖死不成交；每天 18:40 自動成交／結算，漏跑會補。這是階段 4 的紙上交易，不是真錢。</Sub>
+      </div>
+    </>
+  )
+}
+
 function RunLog({ runs, t }) {
   if (!runs?.length) return <div className="card-body muted">實驗日誌是空的</div>
   return (
@@ -208,6 +274,7 @@ function RunLog({ runs, t }) {
 export default function PortfolioLab() {
   const [cand, setCand] = useState(null)
   const [log, setLog] = useState(null)
+  const [paper, setPaper] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [showLog, setShowLog] = useState(false)
@@ -215,10 +282,10 @@ export default function PortfolioLab() {
   useEffect(() => {
     let alive = true
     setLoading(true)
-    Promise.all([getPortfolioCandidate(), getPortfolioRuns()]).then(([c, l]) => {
+    Promise.all([getPortfolioCandidate(), getPortfolioRuns(), getPortfolioPaper()]).then(([c, l, p]) => {
       if (!alive) return
       if (c.error) setError(c.error)
-      setCand(c.data); setLog(l.data); setLoading(false)
+      setCand(c.data); setLog(l.data); setPaper(p.data); setLoading(false)
     })
     return () => { alive = false }
   }, [])
@@ -255,6 +322,14 @@ export default function PortfolioLab() {
             </div>
           </>
         )}
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">紙上交易（階段 4）：候選策略的模擬帳戶對 0050</span>
+          <span className="muted" style={{ fontSize: '.82rem' }}>每月 11 日起第一個交易日收盤算清單 · 次一交易日開盤成交 · 每天結算</span>
+        </div>
+        <PaperCard paper={paper} />
       </div>
 
       {full && (

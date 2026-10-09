@@ -64,13 +64,33 @@ def live_list() -> Optional[dict]:
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""SELECT computed_at, run_id, rebalance_date, exec_date, stock_id, stock_name, rank, signal_value, target_weight, is_new
-                           FROM portfolio_live_list ORDER BY rank NULLS LAST, stock_id""")
+                           FROM portfolio_live_list WHERE rebalance_date = (SELECT max(rebalance_date) FROM portfolio_live_list)
+                           ORDER BY rank NULLS LAST, stock_id""")
             rows = cur.fetchall()
     if not rows:
         return None
     return {'computed_at': rows[0][0].isoformat(), 'run_id': rows[0][1], 'rebalance_date': str(rows[0][2]), 'exec_date': str(rows[0][3]) if rows[0][3] else None,
             'items': [{'stock_id': s, 'stock_name': nm, 'rank': rk, 'signal_value': float(sv) if sv is not None else None,
                        'target_weight': float(w), 'is_new': bool(new)} for _, _, _, _, s, nm, rk, sv, w, new in rows]}
+
+
+def paper() -> dict:
+    """紙上交易：狀態、檢討、最近成交。"""
+    import portfolio_paper
+    r = portfolio_paper.review()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT rebalance_date, trade_date, stock_id, side, shares, price, gross, fee, tax, filled, note
+                           FROM portfolio_paper_trades WHERE stock_id <> '-' ORDER BY trade_date DESC, side, stock_id LIMIT 200""")
+            trades = [{'rebalance_date': str(a), 'trade_date': str(b), 'stock_id': c, 'side': d, 'shares': e, 'price': float(f), 'gross': float(g),
+                       'fee': float(h), 'tax': float(i), 'filled': j, 'note': k} for a, b, c, d, e, f, g, h, i, j, k in cur.fetchall()]
+            cur.execute("""SELECT stock_id, SUM(CASE WHEN side = 'buy' THEN shares ELSE -shares END) FROM portfolio_paper_trades
+                           WHERE filled AND stock_id <> '-' GROUP BY 1 HAVING SUM(CASE WHEN side = 'buy' THEN shares ELSE -shares END) <> 0 ORDER BY 1""")
+            held = [{'stock_id': s, 'shares': int(n)} for s, n in cur.fetchall()]
+    if r and r.get('state'):
+        r['state']['started_on'] = str(r['state']['started_on'])
+    return {'opened': r is not None, 'review': r, 'trades': trades, 'holdings': held,
+            'pending': [str(d) for d in portfolio_paper.pending_lists(__import__('datetime').date.today() + __import__('datetime').timedelta(days=1))]}
 
 
 def candidates() -> dict:

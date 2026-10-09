@@ -301,7 +301,8 @@ def attach_series(run_id: int) -> dict:
 
 def current_list(run_id: int, as_of: Optional[date] = None) -> dict:
     """
-    用候選那一列的參數，從它的 period_start 一路算到 as_of（預設今天），只取最後一次調倉的目標持股寫進 portfolio_live_list。
+    用候選那一列的參數，從它的 period_start 一路算到 as_of（預設今天），只取最後一次調倉的目標持股寫進 portfolio_live_list
+    （同一訊號日重算就覆蓋，不同月份各自保留；紙上交易每月的清單都在這張表）。
     保留期（2024-10 起）的淨值與指標在這裡**不算、不存、不印**——這個函式的輸出只有名單。
     """
     as_of = as_of or date.today()
@@ -330,7 +331,7 @@ def current_list(run_id: int, as_of: Optional[date] = None) -> dict:
             cur.execute("SELECT stock_id, stock_name FROM market_universe")
             names = dict(cur.fetchall())
             names.setdefault(ps.TSMC, '台積電')
-            cur.execute("DELETE FROM portfolio_live_list")
+            cur.execute("DELETE FROM portfolio_live_list WHERE rebalance_date = %s", (last,))   # 留歷史：只覆蓋同一訊號日
             from psycopg2.extras import execute_values
             execute_values(cur, """INSERT INTO portfolio_live_list (run_id, rebalance_date, exec_date, stock_id, stock_name, rank, signal_value, target_weight, is_new)
                                    VALUES %s""",

@@ -48,6 +48,7 @@ const DEFAULTS = {
             series: [{ d: '2018-01-12', nav: 1, bench: 1 }, { d: '2024-09-30', nav: 4.6, bench: 2.9 }], positions: [{ stock_id: '2330', rank: null, target_weight: 0.49, filled: true }], last_rebalance: '2024-09-11' },
     n_total: 44, thresholds: { ann_active: 0.03, info_ratio: 0.5, dsr: 0.95, turnover_min: 3, turnover_max: 6 }, holdout_opened: false,
   } }),
+  'GET /portfolio/paper':     ()    => ({ status: 200, body: { opened: true, review: { days: 3, port_return: 0.01, bench_return: 0.005, active_return: 0.005, monthly: [] }, trades: [], holdings: [], pending: [] } }),
   'GET /portfolio/runs':      ()    => ({ status: 200, body: { n_total: 2, thresholds: { dsr: 0.95 },
     runs: [{ id: 1, experiment_n: 1, name: 'sue-dev-top20', segment: 'dev', tag: null, metrics: { ann_active: -0.0733 } },
            { id: 2, experiment_n: 2, name: 'win3+mom-t3-tsmcest-dev', segment: 'dev', tag: 'candidate', metrics: { ann_active: 0.0864 } }] } }),

@@ -314,6 +314,7 @@ export const getNewsSignalGates = () => request('/news/signals/gates')
 export const getPortfolioCandidate = () => request('/portfolio/candidate')
 export const getPortfolioRuns = () => request('/portfolio/runs')
 export const getPortfolioRun = (id, step = 1) => request(`/portfolio/runs/${id}?step=${step}`)
+export const getPortfolioPaper = () => request('/portfolio/paper')
 
 export const getWeeklyPlan = (stockId) =>
   request(`/voting/weekly-plan?stock_id=${encodeURIComponent(stockId)}`)

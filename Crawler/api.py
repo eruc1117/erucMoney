@@ -456,6 +456,13 @@ def get_portfolio_candidate():
     return portfolio_api.candidates()
 
 
+@app.get("/portfolio/paper")
+def get_portfolio_paper():
+    """紙上交易（階段 4）：模擬帳戶狀態、對 0050 的檢討、逐月主動報酬、成交紀錄、目前持股。"""
+    import portfolio_api
+    return portfolio_api.paper()
+
+
 @app.get("/portfolio/runs")
 def get_portfolio_runs():
     """實驗日誌全部：每一次回測一列，N 只增不減（失敗的也在）。"""

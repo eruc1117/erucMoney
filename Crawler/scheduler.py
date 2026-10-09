@@ -181,6 +181,17 @@ def job_market_daily():
         logger.warning("[排程/market] 公司行動更新失敗（日線已寫入，adj_close 用既有事件表）：%s", e)
 
 
+def job_portfolio_paper():
+    """每日 18:40（全市場日線 18:30 之後）：紙上交易——成交上一個清單、結算今天淨值、訊號日算新清單（Iteration 54，階段 4）。
+    漏跑會在下次補齊（每一步以日期判斷）。模擬帳戶沒開就略過。"""
+    import portfolio_paper
+    r = portfolio_paper.run_daily(date.today())
+    if r.get('skipped'):
+        logger.info("[排程/paper] 略過：%s", r['skipped'])
+        return
+    logger.info("[排程/paper] 成交 %d 份清單、結算 %d 日、新清單 %s", len(r['filled']), r['marked'], r['new_list'])
+
+
 def job_news():
     """每小時：爬取公開 RSS／鉅亨網 API 新聞（含 22 檔個股定向），寫入 user_news，
     並對每檔追蹤股票計算情緒特徵落地 news_features（model2 內建 upsert）。
@@ -507,6 +518,12 @@ def _catch_up():
                 logger.info("[排程/catch-up] 全市場日線最後日 %s 早於今天，補跑", last)
                 job_market_daily(); ran.append("market")
 
+        if passed(18, 40):
+            last = _max_trade_date("portfolio_paper_nav")
+            if last and last < today.isoformat():
+                logger.info("[排程/catch-up] 紙上交易結算最後日 %s 早於今天，補跑", last)
+                job_portfolio_paper(); ran.append("paper")
+
         vc = SCHEDULE["vote_cron"]
         if passed(vc["hour"], vc["minute"]):
             last = _max_trade_date("voting_results", "vote_date")
@@ -550,6 +567,14 @@ def start():
         job_market_daily,
         trigger=CronTrigger(hour=18, minute=30, timezone="Asia/Taipei"),
         id="job_market_daily", name="全市場日線+含息大盤（交易所檔）",
+        max_instances=1, misfire_grace_time=3600,
+    )
+
+    # 紙上交易（階段 4）：日線進來之後成交、結算、訊號日算清單
+    scheduler.add_job(
+        job_portfolio_paper,
+        trigger=CronTrigger(hour=18, minute=40, timezone="Asia/Taipei"),
+        id="job_portfolio_paper", name="紙上交易：成交/結算/月清單",
         max_instances=1, misfire_grace_time=3600,
     )
 
@@ -627,7 +652,7 @@ def start():
     )
 
     logger.info("排程器啟動：股價每日 %02d:%02d ／ 新聞每小時 :%02d ／ 投票每日 %02d:%02d"
-                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 外生資料 06:10 與 19:10"
+                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 紙上交易 18:40 ／ 外生資料 06:10 與 19:10"
                 " ／ 台股跳空預測 06:20 ／ 美股跳空預測 20:00 ／ 新聞訊號 20:10 ／ 模型評估每日 21:00"
                 " ／ 每週日 08:00 全模型預測（Ctrl+C 停止）",
                 stock_cron["hour"], stock_cron["minute"],

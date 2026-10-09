@@ -41,3 +41,7 @@ Crawler/logs/
 # jest 覆蓋率輸出
 Server/coverage/
 !Server/.env.test
+
+# Claude Code harness 的執行紀錄（hook 事件、驗證結果；儀表板「工作進度」頁讀）
+AI/progress/events.jsonl
+AI/progress/checks.json

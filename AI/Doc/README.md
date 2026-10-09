@@ -60,6 +60,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-54.md](./Iterations/Iteration-54.md) | **階段 4 紙上交易**：模擬帳戶三張表（migration 025，不混 user_trades）、2026-10-09 開戶 100 萬零股；每日 18:40 `job_portfolio_paper` 成交／結算／訊號日算清單（可補跑）；`/portfolio/paper` 與月調倉頁「紙上交易」卡（對 0050、逐月對回測預期）；第一份清單 10/13 算、10/14 成交 |
 | [Iteration-53.md](./Iterations/Iteration-53.md) | 第二批策略家族（N 45~66）：營收加速、連續成長、低波動、52 週高點、反轉、異常成交量；**跨段一致的只有「動能＋營收類＋持台積電」**（rev_accel+mom 11.1%/8.5%、win3+mom+rev_streak 9.9%/15.2%），單獨基本面與反轉不行，52 週高點是期間效應；候選不換 |
 | [Iteration-52.md](./Iterations/Iteration-52.md) | 月調倉頁頁首「現在該買哪些」（候選算到最近訊號日的 21 檔目標持股，migration 023，保留期績效不算不存）；**分析頁免登入**：erucMoney 路由分公開讀取／個人／管理三種（`optionalAuth`、`readPublic`、`requireUser`），行事曆代理匿名只轉非個人 GET，前端 /stock 離開受保護路由、持股與閒置資金標 🔒 |
 | [Iteration-51.md](./Iterations/Iteration-51.md) | 打敗大盤：候選三列標記 `candidate`、淨值曲線補存（migration 022，`--attach-series` 重算與日誌一字不差）；FastAPI `/portfolio/*` → Node 代理 → 新頁「月調倉」（候選對門檻、淨值對 0050、逐年、最後持股、實驗日誌）；meeting_front_end 同步 |
