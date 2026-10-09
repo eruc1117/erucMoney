@@ -18,8 +18,11 @@ describe('公開與受保護端點', () => {
     expect(r.body.ok).toBe(true)
     expect(r.body.time).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
-  it('其餘沒 token 一律 401', async () => {
-    for (const p of ['/stocks?tracked=true', '/holdings', '/news', '/catalog', '/forecast/weekly', '/voting', '/crawler/status/2330', '/models']) {
+  it('分析類 GET 免登入；個人與管理端點沒 token 401（Iteration 52）', async () => {
+    for (const p of ['/stocks?tracked=true', '/news', '/catalog', '/forecast/weekly', '/voting']) {
+      expect((await request(app).get(p)).status).not.toBe(401)
+    }
+    for (const p of ['/holdings', '/crawler/status/2330', '/models']) {
       expect((await request(app).get(p)).status).toBe(401)
     }
   })

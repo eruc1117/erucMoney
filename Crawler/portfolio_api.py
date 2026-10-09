@@ -59,6 +59,20 @@ def get_run(run_id: int, step: int = 1) -> Optional[dict]:
             'thresholds': THRESHOLDS}
 
 
+def live_list() -> Optional[dict]:
+    """portfolio_live_list：候選策略算到最近訊號日的目標持股（現在該買哪些）。"""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""SELECT computed_at, run_id, rebalance_date, exec_date, stock_id, stock_name, rank, signal_value, target_weight, is_new
+                           FROM portfolio_live_list ORDER BY rank NULLS LAST, stock_id""")
+            rows = cur.fetchall()
+    if not rows:
+        return None
+    return {'computed_at': rows[0][0].isoformat(), 'run_id': rows[0][1], 'rebalance_date': str(rows[0][2]), 'exec_date': str(rows[0][3]) if rows[0][3] else None,
+            'items': [{'stock_id': s, 'stock_name': nm, 'rank': rk, 'signal_value': float(sv) if sv is not None else None,
+                       'target_weight': float(w), 'is_new': bool(new)} for _, _, _, _, s, nm, rk, sv, w, new in rows]}
+
+
 def candidates() -> dict:
     """tag = 'candidate' 的列（開發期、驗證期、全期間），加上全期間那列的最後持股。"""
     with get_conn() as conn:
@@ -72,4 +86,5 @@ def candidates() -> dict:
     full = min(runs, key=lambda r: (r['period_end'].replace('-', '') * -1 if False else -int(r['period_end'].replace('-', '')), r['period_start'])) if runs else None   # 結束日最晚、起點最早的那列 = 全期間
     detail = get_run(full['id'], step=5) if full else None
     return {'candidates': runs, 'full': detail, 'n_total': n_total, 'thresholds': THRESHOLDS,
-            'holdout_opened': any(r['segment'] == 'holdout' for r in list_runs()['runs'])}
+            'holdout_opened': any(r['segment'] == 'holdout' for r in list_runs()['runs']),
+            'current_list': live_list()}

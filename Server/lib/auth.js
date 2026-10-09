@@ -111,6 +111,29 @@ async function requireAuth(req, res, next) {
   }
 }
 
+/**
+ * 公開讀取（Iteration 52）：沒帶 token 就當匿名放行；帶了 token 就照 requireAuth 驗（壞的、過期的仍回 401，
+ * 前端才知道要清掉登入狀態）。掛在最外層，之後各路由用 req.user 判斷有沒有人。
+ */
+async function optionalAuth(req, res, next) {
+  if (!readToken(req)) return next()
+  return requireAuth(req, res, next)
+}
+
+/** GET／HEAD 不用登入；其他方法（寫入）一律要登入。給非個人資料的路由用。 */
+function readPublic(req, res, next) {
+  if (req.method === 'GET' || req.method === 'HEAD') return next()
+  if (req.user) return next()
+  return res.status(401).json({ detail: '未登入', code: 'NO_TOKEN' })
+}
+
+/** 個人資料與寫入：一律要登入（optionalAuth 已經解析過 token，這裡只看有沒有人）。 */
+function requireUser(req, res, next) {
+  if (req.user) return next()
+  return res.status(401).json({ detail: '未登入', code: 'NO_TOKEN' })
+}
+
+
 function requireRole(role) {
   return (req, res, next) => {
     if (!req.user) return res.status(401).json({ detail: '未登入' })
@@ -119,4 +142,4 @@ function requireRole(role) {
   }
 }
 
-module.exports = { signToken, requireAuth, requireRole, resolveExternalUser }
+module.exports = { signToken, requireAuth, requireRole, resolveExternalUser, optionalAuth, readPublic, requireUser }

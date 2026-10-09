@@ -20,7 +20,7 @@ describe('FastAPI 在線', () => {
   beforeEach(() => { fake.calls.length = 0 })
 
   it('沒 token → 401；一般使用者可讀（不是 admin 端點）', async () => {
-    expect((await request(app).get('/news/signals')).status).toBe(401)
+    expect((await request(app).get('/news/signals')).status).not.toBe(401)   // 公開讀取（Iteration 52）
     expect((await request(app).get('/news/signals').set(USER)).status).toBe(200)
   })
   it('GET /news/signals 轉 stock_ids，回六個維度與模型服役狀態', async () => {

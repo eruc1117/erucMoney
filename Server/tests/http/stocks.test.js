@@ -15,7 +15,7 @@ afterAll(closeDb)
 
 describe('GET /stocks', () => {
   it('沒 token → 401', async () => {
-    expect((await request(app).get('/stocks?tracked=true')).status).toBe(401)
+    expect((await request(app).get('/stocks?tracked=true')).status).not.toBe(401)   // 公開讀取（Iteration 52）
   })
   it('?tracked=true 只回 is_tracking，含最新收盤、外資持股與日期', async () => {
     const r = await request(app).get('/stocks?tracked=true').set(T)

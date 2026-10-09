@@ -17,7 +17,7 @@ const rateLimit    = require('express-rate-limit')
 const bcrypt       = require('bcryptjs')
 const db           = require('./db')
 const runMigrations = require('./lib/migrate')
-const { requireAuth, requireRole } = require('./lib/auth')
+const { requireAuth, requireRole, optionalAuth, readPublic, requireUser } = require('./lib/auth')
 const authRouter   = require('./routes/auth')
 
 const stocksRouter      = require('./routes/stocks')
@@ -49,25 +49,29 @@ const perMin = Number(process.env.RATE_LIMIT_PER_MIN || 0)
 if (perMin > 0) app.use(rateLimit({ windowMs: 60 * 1000, limit: perMin, standardHeaders: true, legacyHeaders: false }))
 app.use(express.json({ limit: '1mb' }))
 
-// ── 階段 1（多使用者）：/auth 與 /health 公開，其餘全部要登入；管理端點要 admin ──
+// ── 權限（Iteration 52）：三種路由 ──
+//   公開讀取  readPublic   行情、預測、投票、新聞、美股、月調倉…的 GET 不用登入（和個人無關的分析頁）；寫入（POST／PUT／DELETE）要登入
+//   個人      requireUser  持股、閒置資金：全部要登入，資料只有自己的
+//   管理      requireUser + requireRole('admin')  爬蟲、資料回填、模型版本
+// optionalAuth 掛最外層：有 token 就解析（壞的回 401 讓前端清登入），沒有就匿名。
 app.get('/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }))
 app.use('/auth',        authRouter)
-app.use(requireAuth)
-app.use('/stocks',      stocksRouter)
-app.use('/crawler',    requireRole('admin'), crawlerRouter)
-app.use('/news',       newsRouter)
-app.use('/model',      modelRouter)
-app.use('/predictions', predictionsRouter)
-app.use('/voting',      votingRouter)
-app.use('/gap',         gapRouter)
-app.use('/models',      requireRole('admin'), modelsRouter)
-app.use('/holdings',    holdingsRouter)
-app.use('/cash',        cashRouter)
-app.use('/data',        requireRole('admin'), dataRouter)
-app.use('/catalog',     catalogRouter)
-app.use('/us',          usRouter)
-app.use('/forecast',    forecastRouter)
-app.use('/portfolio',   portfolioRouter)
+app.use(optionalAuth)
+app.use('/stocks',      readPublic, stocksRouter)
+app.use('/crawler',     requireUser, requireRole('admin'), crawlerRouter)
+app.use('/news',        readPublic, newsRouter)
+app.use('/model',       readPublic, modelRouter)
+app.use('/predictions', readPublic, predictionsRouter)
+app.use('/voting',      readPublic, votingRouter)
+app.use('/gap',         readPublic, gapRouter)
+app.use('/models',      requireUser, requireRole('admin'), modelsRouter)
+app.use('/holdings',    requireUser, holdingsRouter)
+app.use('/cash',        requireUser, cashRouter)
+app.use('/data',        requireUser, requireRole('admin'), dataRouter)
+app.use('/catalog',     readPublic, catalogRouter)
+app.use('/us',          readPublic, usRouter)
+app.use('/forecast',    readPublic, forecastRouter)
+app.use('/portfolio',   readPublic, portfolioRouter)
 
 // 第一次啟動：admin 密碼從環境變數 ADMIN_PASSWORD 來；沒設就用 admin123 並警告。
 // 只在 password_hash 為空（migration 017 剛建的占位列）時寫入，之後改密碼走 /auth/change-password。

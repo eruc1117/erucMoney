@@ -299,6 +299,49 @@ def attach_series(run_id: int) -> dict:
             'drift': round(drift, 6)}
 
 
+def current_list(run_id: int, as_of: Optional[date] = None) -> dict:
+    """
+    用候選那一列的參數，從它的 period_start 一路算到 as_of（預設今天），只取最後一次調倉的目標持股寫進 portfolio_live_list。
+    保留期（2024-10 起）的淨值與指標在這裡**不算、不存、不印**——這個函式的輸出只有名單。
+    """
+    as_of = as_of or date.today()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT signal, period_start, params FROM portfolio_runs WHERE id = %s", (run_id,))
+            row = cur.fetchone()
+    if not row:
+        raise ValueError(f'run {run_id} 不存在')
+    signal, start, params = row
+    prices = ps.load_prices(start, as_of)
+    mkt = ps.Market(prices, ps.load_universe_meta())
+    sur = ps.surprises(ps.load_revenue(start))
+    sim = simulate(mkt, sur, signal, start, as_of, params.get('top_n', 20), params.get('buffer', 40), params.get('universe_n', 300),
+                   params.get('excl_limit_pct', 0.10), params.get('tsmc_weight'), params.get('costs', COSTS),
+                   params.get('tranches', 1), params.get('weighting', 'equal'))
+    pos = sim['positions']
+    if not len(pos):
+        raise RuntimeError('沒有任何調倉')
+    last = pos['rebalance_date'].max()
+    cur_rows = pos[pos['rebalance_date'] == last]
+    prev_dates = sorted(pos['rebalance_date'].unique())
+    prev = set(pos[pos['rebalance_date'] == prev_dates[-2]]['stock_id']) if len(prev_dates) > 1 else set()
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT stock_id, stock_name FROM market_universe")
+            names = dict(cur.fetchall())
+            names.setdefault(ps.TSMC, '台積電')
+            cur.execute("DELETE FROM portfolio_live_list")
+            from psycopg2.extras import execute_values
+            execute_values(cur, """INSERT INTO portfolio_live_list (run_id, rebalance_date, exec_date, stock_id, stock_name, rank, signal_value, target_weight, is_new)
+                                   VALUES %s""",
+                           [(run_id, r.rebalance_date, r.exec_date, r.stock_id, names.get(r.stock_id), None if pd.isna(r.rank) else int(r.rank),
+                             None if pd.isna(r.signal_value) else float(r.signal_value), float(r.target_weight), r.stock_id not in prev)
+                            for r in cur_rows.itertuples(index=False)])
+        conn.commit()
+    return {'run_id': run_id, 'rebalance_date': str(last), 'exec_date': str(cur_rows['exec_date'].iloc[0]), 'n': int(len(cur_rows)),
+            'new': sorted(set(cur_rows['stock_id']) - prev)}
+
+
 def tag_run(run_id: int, tag: Optional[str]) -> None:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -410,6 +453,7 @@ def main():
     ap.add_argument('--list', action='store_true')
     ap.add_argument('--attach-series', type=int, metavar='RUN_ID', help='用日誌裡的參數重算、補存淨值曲線（不算新實驗）')
     ap.add_argument('--tag', nargs=2, metavar=('RUN_ID', 'TAG'), help="標記一列，例如 44 candidate；TAG 給 none 清掉")
+    ap.add_argument('--current-list', type=int, metavar='RUN_ID', help='用候選參數算到今天的目標持股，寫 portfolio_live_list（不算保留期績效）')
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
     if a.attach_series:
@@ -418,6 +462,9 @@ def main():
     if a.tag:
         tag_run(int(a.tag[0]), None if a.tag[1] == 'none' else a.tag[1])
         print('tagged', a.tag)
+        return
+    if a.current_list:
+        print(current_list(a.current_list))
         return
     if a.list:
         log = experiment_log()

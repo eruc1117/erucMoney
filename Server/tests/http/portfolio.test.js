@@ -19,7 +19,7 @@ describe('FastAPI 在線', () => {
   beforeEach(() => { fake.calls.length = 0 })
 
   it('沒 token → 401；一般使用者可讀', async () => {
-    expect((await request(app).get('/portfolio/candidate')).status).toBe(401)
+    expect((await request(app).get('/portfolio/candidate')).status).not.toBe(401)   // 公開讀取（Iteration 52）
     expect((await request(app).get('/portfolio/candidate').set(USER)).status).toBe(200)
   })
   it('GET /portfolio/candidate 回候選三列、全期間曲線與門檻', async () => {

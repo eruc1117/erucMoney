@@ -16,7 +16,7 @@ afterAll(closeDb)
 describe('/news', () => {
   let id
   it('沒 token → 401', async () => {
-    expect((await request(app).get('/news')).status).toBe(401)
+    expect((await request(app).get('/news')).status).not.toBe(401)   // 公開讀取（Iteration 52）
   })
   it('POST 存下來並記 user_id；tickers / keywords 是陣列', async () => {
     const r = await request(app).post('/news').set(A)

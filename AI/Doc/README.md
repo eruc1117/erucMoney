@@ -60,6 +60,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-52.md](./Iterations/Iteration-52.md) | 月調倉頁頁首「現在該買哪些」（候選算到最近訊號日的 21 檔目標持股，migration 023，保留期績效不算不存）；**分析頁免登入**：erucMoney 路由分公開讀取／個人／管理三種（`optionalAuth`、`readPublic`、`requireUser`），行事曆代理匿名只轉非個人 GET，前端 /stock 離開受保護路由、持股與閒置資金標 🔒 |
 | [Iteration-51.md](./Iterations/Iteration-51.md) | 打敗大盤：候選三列標記 `candidate`、淨值曲線補存（migration 022，`--attach-series` 重算與日誌一字不差）；FastAPI `/portfolio/*` → Node 代理 → 新頁「月調倉」（候選對門檻、淨值對 0050、逐年、最後持股、實驗日誌）；meeting_front_end 同步 |
 | [Iteration-50.md](./Iterations/Iteration-50.md) | **打敗大盤：44 次實驗的網格搜尋**（分批輪動、緩衝、股票池、動能／組合訊號、成交金額權重、台積電權重滾動迴歸估計）；轉折是**固定持有台積電**（追蹤誤差 20%→12%）；候選 `win3+mom-t3-tsmcest` 開發期 +8.6%、驗證期 +15.7%（IR 1.09）、全期間 +7.1%／年七年六正，**但 DSR 0.13**——下一步是紙上交易與保留期，不是再搜 |
 | [Iteration-49.md](./Iterations/Iteration-49.md) | **打敗大盤階段 2**：月調倉回測引擎（股票池、sue／ar0／win 三訊號、成本、未成交、DSR、實驗日誌 migration 021）；前四次實驗**都沒打敗 0050**（換手 13~20 倍、成本吃 5~8%）；**發現公告日早一個月的 bug**（鉅亨／MOPS 來源寫到所屬月列，配到上一期營收）已修並搬正 11,442 列，第 39／47 結論待重跑 |

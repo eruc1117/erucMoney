@@ -115,6 +115,39 @@ function YearlyTable({ yearly }) {
   )
 }
 
+function CurrentList({ list }) {
+  if (!list?.items?.length) return <div className="card-body muted">還沒算本月清單（portfolio_backtest.py --current-list 44）</div>
+  const items = list.items
+  const tsmc = items.find(i => i.stock_id === '2330')
+  const picks = items.filter(i => i.stock_id !== '2330')   // rank 空的是上幾批進場、本月沒進排名但還沒到期的續抱
+  return (
+    <div className="card-body" style={{ paddingTop: 8 }}>
+      <div className="muted" style={{ fontSize: '0.82rem', marginBottom: 8 }}>
+        訊號日 <strong>{list.rebalance_date}</strong> 收盤算，{list.exec_date} 開盤以限價單成交；共 {items.length} 檔。
+        {tsmc ? <> 台積電固定 <strong>{pct(tsmc.target_weight, 1).replace('+', '')}</strong>（0050 權重估計），其餘 {picks.length} 檔各 {pct(picks[0]?.target_weight, 1).replace('+', '')}。</> : null}
+        <span className="up"> ★</span> 是這個月新進場的一批（分三批輪動，每月只換三分之一）。
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 8 }}>
+        {tsmc ? (
+          <div className="stat-tile" title="台積電不參與排名，固定持 0050 的台積電權重">
+            <div className="k">固定</div>
+            <div className="v">{tsmc.stock_id} {tsmc.stock_name || ''}</div>
+            <div className="s">{pct(tsmc.target_weight, 1).replace('+', '')}</div>
+          </div>
+        ) : null}
+        {picks.map(p => (
+          <div key={p.stock_id} className="stat-tile" title={p.rank === null || p.rank === undefined ? '上幾批進場、本月未進排名的續抱（到期才賣）' : `本月排名 ${p.rank}，訊號值 ${p.signal_value === null ? '–' : num(p.signal_value, 3)}`}>
+            <div className="k">{p.rank === null || p.rank === undefined ? '續抱' : `#${p.rank}`}{p.is_new ? <span className="up"> ★</span> : null}</div>
+            <div className="v">{p.stock_id} {p.stock_name || ''}</div>
+            <div className="s">{pct(p.target_weight, 1).replace('+', '')}</div>
+          </div>
+        ))}
+      </div>
+      <Sub>算到 {String(list.computed_at).slice(0, 16).replace('T', ' ')}；這是候選策略的目標清單，不是投資建議。保留期（2024-10 起）的績效沒有算、沒有存。</Sub>
+    </div>
+  )
+}
+
 function Positions({ positions, last }) {
   if (!positions?.length) return <div className="card-body muted">沒有持股紀錄</div>
   return (
@@ -124,7 +157,7 @@ function Positions({ positions, last }) {
         <tbody>
           {positions.map(p => (
             <tr key={p.stock_id}>
-              <td>{p.rank ?? <span className="muted" title="台積電不參與排名，固定持 0050 權重">固定</span>}</td>
+              <td>{p.stock_id === '2330' ? <span className="muted" title="台積電不參與排名，固定持 0050 權重">固定</span> : (p.rank ?? <span className="muted" title="上幾批進場、該月未進排名的續抱">續抱</span>)}</td>
               <td><strong>{p.stock_id}</strong></td>
               <td style={{ textAlign: 'right' }}>{p.signal_value === null ? '–' : num(p.signal_value, 3)}</td>
               <td style={{ textAlign: 'right' }}>{pct(p.target_weight, 1).replace('+', '')}</td>
@@ -211,6 +244,10 @@ export default function PortfolioLab() {
               <RuleLine p={full?.run?.params || cand?.candidates?.[0]?.params} />
             </div>
             <CandidateTable rows={cand?.candidates} t={t} />
+            <div className="card-header" style={{ borderTop: '1px solid rgba(128,128,128,0.2)' }}>
+              <span className="card-title">現在該買哪些：最近一次訊號日的目標持股</span>
+            </div>
+            <CurrentList list={cand?.current_list} />
             <div className="card-body muted" style={{ fontSize: '0.8rem', lineHeight: 1.7 }}>
               三列是同一組參數：開發期（2018~2021）找到、驗證期（2022~2024-09）參數不動確認、全期間逐年檢視。
               年化主動報酬與資訊比率過了門檻，<strong>DSR 沒過</strong>：N 次嘗試後挑最好的，這個月 Sharpe 純靠運氣也挑得到（SR* 是「純運氣的最佳 Sharpe」）。
