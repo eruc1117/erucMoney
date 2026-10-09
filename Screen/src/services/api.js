@@ -310,6 +310,11 @@ export const getNewsSignals = (stockIds = null) =>
   request(`/news/signals${stockIds ? `?stock_ids=${encodeURIComponent(stockIds.join(','))}` : ''}`, { timeout: 120000 })
 export const getNewsSignalGates = () => request('/news/signals/gates')
 
+// ── 月調倉（打敗大盤計畫，Iteration 51）────────────────────────────────────
+export const getPortfolioCandidate = () => request('/portfolio/candidate')
+export const getPortfolioRuns = () => request('/portfolio/runs')
+export const getPortfolioRun = (id, step = 1) => request(`/portfolio/runs/${id}?step=${step}`)
+
 export const getWeeklyPlan = (stockId) =>
   request(`/voting/weekly-plan?stock_id=${encodeURIComponent(stockId)}`)
 

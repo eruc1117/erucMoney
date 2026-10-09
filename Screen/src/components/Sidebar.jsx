@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { key: 'prediction', icon: '🤖', label: '趨勢預測' },
   { key: 'compare',    icon: '📊', label: '預測比對' },
   { key: 'weekly',     icon: '📅', label: '週預測' },
+  { key: 'portfolio',  icon: '🏆', label: '月調倉' },
   { key: 'history',    icon: '📋', label: '查詢紀錄' },
   { key: 'holdings',   icon: '💼', label: '我的持股' },
   { key: 'cash',       icon: '💵', label: '閒置資金' },

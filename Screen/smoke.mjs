@@ -14,7 +14,7 @@ import { createServer } from 'vite'
 const PAGES = process.argv.slice(2).length ? process.argv.slice(2) : [
   'Overview', 'BudgetSearch', 'StockAnalysis', 'NewsInput', 'NewsSentiment',
   'Prediction', 'PredictionCompare', 'QueryHistory', 'VotingDashboard',
-  'ModelVersions', 'Holdings', 'IdleCash', 'WeeklyForecast', 'NewsSignals',
+  'ModelVersions', 'Holdings', 'IdleCash', 'WeeklyForecast', 'NewsSignals', 'PortfolioLab',
 ]
 
 const dom = new JSDOM('<!doctype html><html><head></head><body><div id="root"></div></body></html>', {

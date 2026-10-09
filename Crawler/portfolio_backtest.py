@@ -216,6 +216,7 @@ def metrics(nav: pd.Series, bench: pd.Series, sim: dict) -> dict:
         'tsmc_weight_mean': (round(float(np.mean([w for _, w in sim.get('tsmc_log', []) if w is not None])), 3)
                              if any(w is not None for _, w in sim.get('tsmc_log', [])) else None),
         'total_return_port': round(float(n.iloc[-1] - 1), 4), 'total_return_bench': round(float(b.iloc[-1] - 1), 4),
+        'yearly_active': {str(y): round(float((1 + g).prod() - 1), 4) for y, g in m_act.groupby(m_act.index.year)},
     }, m_act
 
 
@@ -236,8 +237,24 @@ def next_n_and_var() -> tuple:
     return n, var
 
 
+def series_frame(nav: pd.Series, bench: pd.Series) -> pd.DataFrame:
+    b = bench.reindex(nav.index).ffill()
+    return pd.DataFrame({'nav': nav / nav.iloc[0], 'bench': b / b.iloc[0]})
+
+
+def save_series(run_id: int, series: pd.DataFrame) -> int:
+    from psycopg2.extras import execute_values
+    rows = [(run_id, d.date(), round(float(r.nav), 6), round(float(r.bench), 6)) for d, r in series.iterrows()]
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM portfolio_run_series WHERE run_id = %s", (run_id,))
+            execute_values(cur, "INSERT INTO portfolio_run_series (run_id, trade_date, nav, bench) VALUES %s", rows, page_size=2000)
+        conn.commit()
+    return len(rows)
+
+
 def save_run(n: int, name: str, signal: str, segment: str, start: date, end: date, params: dict, met: dict,
-             positions: pd.DataFrame, notes: str) -> int:
+             positions: pd.DataFrame, notes: str, series: Optional[pd.DataFrame] = None) -> int:
     from psycopg2.extras import execute_values
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -253,7 +270,40 @@ def save_run(n: int, name: str, signal: str, segment: str, start: date, end: dat
                                  None if pd.isna(r.signal_value) else float(r.signal_value), float(r.target_weight), bool(r.filled))
                                 for r in positions.itertuples(index=False)], page_size=1000)
         conn.commit()
+    if series is not None:
+        save_series(run_id, series)
     return run_id
+
+
+def attach_series(run_id: int) -> dict:
+    """用日誌裡存的參數重算一次，把淨值曲線與 yearly_active 補到那一列。不是新的實驗，N 不動。"""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT signal, segment, period_start, period_end, params, metrics FROM portfolio_runs WHERE id = %s", (run_id,))
+            row = cur.fetchone()
+    if not row:
+        raise ValueError(f'run {run_id} 不存在')
+    signal, segment, ps, pe, params, met_old = row
+    res = run(signal, segment, ps, pe, params.get('top_n', 20), params.get('buffer', 40), params.get('universe_n', 300),
+              params.get('excl_limit_pct', 0.10), params.get('tsmc_weight'), params.get('costs', COSTS), save=False,
+              tranches=params.get('tranches', 1), weighting=params.get('weighting', 'equal'))
+    n = save_series(run_id, series_frame(res['nav'], res['bench']))
+    met_old = dict(met_old or {})
+    met_old['yearly_active'] = res['metrics']['yearly_active']
+    drift = abs(float(met_old.get('ann_active', 0)) - res['metrics']['ann_active'])
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE portfolio_runs SET metrics = %s WHERE id = %s", (json.dumps(met_old, ensure_ascii=False), run_id))
+        conn.commit()
+    return {'run_id': run_id, 'points': n, 'recomputed_ann_active': res['metrics']['ann_active'], 'logged_ann_active': met_old.get('ann_active'),
+            'drift': round(drift, 6)}
+
+
+def tag_run(run_id: int, tag: Optional[str]) -> None:
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE portfolio_runs SET tag = %s WHERE id = %s", (tag, run_id))
+        conn.commit()
 
 
 # ── 入口 ──────────────────────────────────────────────────────────────────────
@@ -289,7 +339,8 @@ def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Op
     params = {'signal': signal, 'top_n': top_n, 'buffer': buffer, 'universe_n': universe_n, 'excl_limit_pct': excl_limit_pct,
               'tsmc_weight': tsmc_weight, 'costs': costs, 'segment': segment, 'tranches': tranches, 'weighting': weighting}
     name = name or f'{signal}-{segment}-top{top_n}' + (f'-t{tranches}' if tranches > 1 else f'-b{buffer}') + (f'-u{universe_n}' if universe_n != 300 else '') + ('-liq' if weighting == 'liq' else '') + (f'-tsmc{tsmc_weight}' if tsmc_weight else '')
-    run_id = save_run(n, name, signal, segment, start, met_end(met), params, met, sim['positions'], notes) if save else None
+    run_id = save_run(n, name, signal, segment, start, met_end(met), params, met, sim['positions'], notes,
+                      series=series_frame(sim['nav'], bench)) if save else None
     logger.info('[backtest] #%d %s：主動報酬 %+.2f%%/年、IR %s、DSR %.3f、換手 %.1f 倍、成本 %.2f%%/年（%.0f 秒）',
                 n, name, met['ann_active'] * 100, met['info_ratio'], met['dsr'], met['turnover_annual'], met['cost_drag_annual'] * 100,
                 (datetime.now() - t0).total_seconds())
@@ -357,8 +408,17 @@ def main():
     ap.add_argument('--no-save', action='store_true')
     ap.add_argument('--holdout-once', action='store_true', help='保留期只能看一次：沒有這個旗標不跑 holdout')
     ap.add_argument('--list', action='store_true')
+    ap.add_argument('--attach-series', type=int, metavar='RUN_ID', help='用日誌裡的參數重算、補存淨值曲線（不算新實驗）')
+    ap.add_argument('--tag', nargs=2, metavar=('RUN_ID', 'TAG'), help="標記一列，例如 44 candidate；TAG 給 none 清掉")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+    if a.attach_series:
+        print(attach_series(a.attach_series))
+        return
+    if a.tag:
+        tag_run(int(a.tag[0]), None if a.tag[1] == 'none' else a.tag[1])
+        print('tagged', a.tag)
+        return
     if a.list:
         log = experiment_log()
         for r in log.itertuples(index=False):

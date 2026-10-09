@@ -38,6 +38,20 @@ const DEFAULTS = {
                 event_vol: { range_pct: 1.2, is_elevated: false }, drift: null }],
   } }),
   'GET /news/signals/gates':  ()    => ({ status: 200, body: { models: { news_event_vol: { gates: { deploy: true } } } } }),
+  'GET /portfolio/candidate': ()    => ({ status: 200, body: {
+    candidates: [
+      { id: 30, experiment_n: 30, segment: 'dev', segment_label: '開發期', period_start: '2018-01-01', period_end: '2021-12-30', tag: 'candidate', metrics: { ann_active: 0.0864, info_ratio: 0.67, dsr: 0.377 } },
+      { id: 38, experiment_n: 38, segment: 'valid', segment_label: '驗證期', period_start: '2022-01-01', period_end: '2024-09-30', tag: 'candidate', metrics: { ann_active: 0.1571, info_ratio: 1.085, dsr: 0.588 } },
+      { id: 44, experiment_n: 44, segment: 'dev', segment_label: '開發期', name: 'win3+mom-t3-tsmcest-dev+valid', period_start: '2018-01-01', period_end: '2024-09-30', tag: 'candidate', metrics: { ann_active: 0.0705, info_ratio: 0.564, dsr: 0.129 } },
+    ],
+    full: { run: { id: 44, params: { signal: 'win3+mom', tranches: 3, universe_n: 300, top_n: 20, tsmc_weight: 'est' }, metrics: { yearly_active: { 2018: 0.117 } } },
+            series: [{ d: '2018-01-12', nav: 1, bench: 1 }, { d: '2024-09-30', nav: 4.6, bench: 2.9 }], positions: [{ stock_id: '2330', rank: null, target_weight: 0.49, filled: true }], last_rebalance: '2024-09-11' },
+    n_total: 44, thresholds: { ann_active: 0.03, info_ratio: 0.5, dsr: 0.95, turnover_min: 3, turnover_max: 6 }, holdout_opened: false,
+  } }),
+  'GET /portfolio/runs':      ()    => ({ status: 200, body: { n_total: 2, thresholds: { dsr: 0.95 },
+    runs: [{ id: 1, experiment_n: 1, name: 'sue-dev-top20', segment: 'dev', tag: null, metrics: { ann_active: -0.0733 } },
+           { id: 2, experiment_n: 2, name: 'win3+mom-t3-tsmcest-dev', segment: 'dev', tag: 'candidate', metrics: { ann_active: 0.0864 } }] } }),
+  'GET /portfolio/runs/:id':  (req) => ({ status: 200, body: { run: { id: Number(req.params.id) }, series: [], positions: [], query: req.query } }),
 }
 
 async function startFakeFastAPI() {

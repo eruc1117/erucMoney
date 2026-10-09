@@ -448,6 +448,31 @@ def get_news_signal_gates():
     return {'models': news_models.gates_summary()}
 
 
+# ── 月調倉實驗日誌（Iteration 51，打敗大盤計畫）──────────────────────────────
+@app.get("/portfolio/candidate")
+def get_portfolio_candidate():
+    """tag = candidate 的實驗（開發期、驗證期、全期間）、全期間淨值曲線（每 5 日一點）與最後持股、門檻。"""
+    import portfolio_api
+    return portfolio_api.candidates()
+
+
+@app.get("/portfolio/runs")
+def get_portfolio_runs():
+    """實驗日誌全部：每一次回測一列，N 只增不減（失敗的也在）。"""
+    import portfolio_api
+    return portfolio_api.list_runs()
+
+
+@app.get("/portfolio/runs/{run_id}")
+def get_portfolio_run(run_id: int, step: int = 1):
+    """單一 run：指標、參數、淨值曲線（每 step 日一點）、最後一次持股。"""
+    import portfolio_api
+    out = portfolio_api.get_run(run_id, step)
+    if out is None:
+        raise HTTPException(status_code=404, detail=f'run {run_id} 不存在')
+    return out
+
+
 # ── 美股（Iteration 32）──────────────────────────────────────────────────────
 @app.get("/us/overview")
 def get_us_overview(days: int = 60):

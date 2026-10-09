@@ -1,0 +1,266 @@
+// 月調倉（打敗大盤計畫）頁（Iteration 51）
+// ───────────────────────────────────────────────────────────────────────────
+// 顯示實驗日誌裡「標記為候選」的設定：開發期、驗證期、全期間三列的指標對門檻，
+// 全期間的淨值曲線對 0050、逐年主動報酬、最後一次持股，以及全部實驗（N 只增不減）。
+//
+// 這一頁刻意把 DSR 放在和主動報酬一樣大的位置：44 次嘗試後挑最好的，
+// 月 Sharpe 0.16 這種程度純靠運氣也挑得到，所以「超越了」和「不是運氣」是兩件事。
+import { useEffect, useState } from 'react'
+import ReactApexChart from 'react-apexcharts'
+import { getPortfolioCandidate, getPortfolioRuns } from '../services/api'
+
+function num(v, d = 2) { return v === null || v === undefined || Number.isNaN(Number(v)) ? '–' : Number(v).toFixed(d) }
+function pct(v, d = 2) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '–'
+  const n = Number(v) * 100
+  return `${n > 0 ? '+' : ''}${n.toFixed(d)}%`
+}
+function tone(v) { return v === null || v === undefined ? 'muted' : Number(v) > 0 ? 'up' : Number(v) < 0 ? 'down' : 'muted' }
+function Sub({ children }) { return <div className="muted" style={{ fontSize: '0.72rem' }}>{children}</div> }
+function Pass({ ok }) { return ok === null || ok === undefined ? <span className="muted">–</span> : ok ? <span className="up">通過</span> : <span className="down">未過</span> }
+
+function gatesOf(m, t) {
+  if (!m || !t) return {}
+  return {
+    ann_active: m.ann_active >= t.ann_active,
+    info_ratio: m.info_ratio !== null && m.info_ratio >= t.info_ratio,
+    dsr: m.dsr >= t.dsr,
+    turnover: m.turnover_annual >= t.turnover_min && m.turnover_annual <= t.turnover_max,
+  }
+}
+
+function RuleLine({ p }) {
+  if (!p) return null
+  const bits = [
+    `訊號 ${p.signal}`,
+    p.tranches > 1 ? `分 ${p.tranches} 批輪動（每月換 1/${p.tranches}）` : `緩衝 ${p.buffer} 名`,
+    `流動性前 ${p.universe_n}`, `前 ${p.top_n} 檔${p.weighting === 'liq' ? '成交金額加權' : '等權'}`,
+    p.tsmc_weight ? `台積電固定持 0050 權重（${p.tsmc_weight === 'est' ? '滾動迴歸估' : p.tsmc_weight}）` : '不持台積電',
+  ]
+  return <Sub>{bits.join(' · ')}</Sub>
+}
+
+function CandidateTable({ rows, t }) {
+  if (!rows?.length) return <div className="card-body muted">還沒有標記為候選的實驗（portfolio_backtest.py --tag）</div>
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>期間</th>
+            <th style={{ textAlign: 'right' }}>年化主動報酬<Sub>門檻 ≥ {pct(t.ann_active, 0)}</Sub></th>
+            <th style={{ textAlign: 'right' }}>資訊比率<Sub>≥ {t.info_ratio}</Sub></th>
+            <th style={{ textAlign: 'right' }}>DSR<Sub>≥ {t.dsr}</Sub></th>
+            <th style={{ textAlign: 'right' }}>月勝率</th>
+            <th style={{ textAlign: 'right' }}>追蹤誤差</th>
+            <th style={{ textAlign: 'right' }}>相對最大落後</th>
+            <th style={{ textAlign: 'right' }}>年換手<Sub>{t.turnover_min}~{t.turnover_max} 倍</Sub></th>
+            <th style={{ textAlign: 'right' }}>成本/年</th>
+            <th style={{ textAlign: 'right' }}>組合 / 0050</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => {
+            const m = r.metrics || {}; const g = gatesOf(m, t)
+            return (
+              <tr key={r.id}>
+                <td style={{ whiteSpace: 'nowrap' }}>
+                  <strong>{r.segment_label}{r.name?.includes('dev+valid') ? '＋驗證期' : ''}</strong>
+                  <Sub>#{r.experiment_n} · {r.period_start} ~ {r.period_end} · {m.months} 個月</Sub>
+                </td>
+                <td style={{ textAlign: 'right' }}><strong className={tone(m.ann_active)}>{pct(m.ann_active)}</strong><Sub><Pass ok={g.ann_active} /></Sub></td>
+                <td style={{ textAlign: 'right' }}>{num(m.info_ratio)}<Sub><Pass ok={g.info_ratio} /></Sub></td>
+                <td style={{ textAlign: 'right' }}><strong className={g.dsr ? 'up' : 'down'}>{num(m.dsr, 2)}</strong><Sub>N = {m.experiment_n}，SR* {num(m.sr_star_m)}</Sub></td>
+                <td style={{ textAlign: 'right' }}>{pct(m.monthly_win_rate, 0).replace('+', '')}</td>
+                <td style={{ textAlign: 'right' }}>{pct(m.tracking_error, 1).replace('+', '')}</td>
+                <td style={{ textAlign: 'right' }}><span className="down">{pct(m.rel_mdd, 1)}</span></td>
+                <td style={{ textAlign: 'right' }}>{num(m.turnover_annual, 1)}<Sub><Pass ok={g.turnover} /></Sub></td>
+                <td style={{ textAlign: 'right' }}>{pct(m.cost_drag_annual).replace('+', '')}</td>
+                <td style={{ textAlign: 'right' }}>{pct(m.cagr_port, 1)} / {pct(m.cagr_bench, 1)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function NavChart({ series }) {
+  if (!series?.length) return <div className="card-body muted">這個 run 沒有淨值曲線（portfolio_backtest.py --attach-series 補上）</div>
+  const toPts = key => series.map(p => [new Date(p.d).getTime(), Number(p[key])])
+  const data = [{ name: '組合', data: toPts('nav') }, { name: '0050 含息', data: toPts('bench') }]
+  const options = {
+    chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, background: 'transparent' },
+    stroke: { width: [2.5, 1.5], curve: 'straight', dashArray: [0, 4] },
+    colors: ['#2f80ed', '#9aa4b2'],
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+    yaxis: { labels: { formatter: v => v.toFixed(2) }, title: { text: '淨值（起點 1）' } },
+    tooltip: { x: { format: 'yyyy-MM-dd' }, y: { formatter: v => v.toFixed(3) } },
+    legend: { position: 'top' },
+    grid: { borderColor: 'rgba(128,128,128,0.2)' },
+    theme: { mode: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' },
+  }
+  return <div className="chart-pad"><ReactApexChart type="line" series={data} options={options} height={320} /></div>
+}
+
+function YearlyTable({ yearly }) {
+  const ys = Object.keys(yearly || {}).sort()
+  if (!ys.length) return null
+  return (
+    <table className="data-table" style={{ maxWidth: 420 }}>
+      <thead><tr><th>年</th><th style={{ textAlign: 'right' }}>主動報酬</th></tr></thead>
+      <tbody>{ys.map(y => <tr key={y}><td>{y}</td><td style={{ textAlign: 'right' }}><span className={tone(yearly[y])}>{pct(yearly[y])}</span></td></tr>)}</tbody>
+    </table>
+  )
+}
+
+function Positions({ positions, last }) {
+  if (!positions?.length) return <div className="card-body muted">沒有持股紀錄</div>
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="data-table">
+        <thead><tr><th>排名</th><th>代碼</th><th style={{ textAlign: 'right' }}>訊號值</th><th style={{ textAlign: 'right' }}>權重</th><th>成交</th></tr></thead>
+        <tbody>
+          {positions.map(p => (
+            <tr key={p.stock_id}>
+              <td>{p.rank ?? <span className="muted" title="台積電不參與排名，固定持 0050 權重">固定</span>}</td>
+              <td><strong>{p.stock_id}</strong></td>
+              <td style={{ textAlign: 'right' }}>{p.signal_value === null ? '–' : num(p.signal_value, 3)}</td>
+              <td style={{ textAlign: 'right' }}>{pct(p.target_weight, 1).replace('+', '')}</td>
+              <td>{p.filled ? <span className="up">是</span> : <span className="down" title="成交日一字鎖漲跌停，視為未成交">未成交</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Sub>訊號日 {last}，次一交易日開盤成交；這是回測期最後一次調倉，不是今天的清單（紙上交易上線後才會每月出新清單）</Sub>
+    </div>
+  )
+}
+
+function RunLog({ runs, t }) {
+  if (!runs?.length) return <div className="card-body muted">實驗日誌是空的</div>
+  return (
+    <div style={{ overflowX: 'auto' }}>
+      <table className="data-table" style={{ fontSize: '0.84rem' }}>
+        <thead>
+          <tr><th>N</th><th>設定</th><th>段</th><th>期間</th><th style={{ textAlign: 'right' }}>年化主動</th><th style={{ textAlign: 'right' }}>IR</th>
+            <th style={{ textAlign: 'right' }}>DSR</th><th style={{ textAlign: 'right' }}>換手</th><th style={{ textAlign: 'right' }}>成本/年</th><th>備註</th></tr>
+        </thead>
+        <tbody>
+          {runs.map(r => {
+            const m = r.metrics || {}
+            const cand = r.tag === 'candidate'
+            return (
+              <tr key={r.id} style={cand ? { background: 'rgba(47,128,237,0.08)' } : undefined}>
+                <td>{r.experiment_n}{cand ? <span className="up" title="候選"> ★</span> : null}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{r.name}</td>
+                <td>{r.segment_label}</td>
+                <td style={{ whiteSpace: 'nowrap' }}><Sub>{r.period_start} ~ {r.period_end}</Sub></td>
+                <td style={{ textAlign: 'right' }}><span className={tone(m.ann_active)}>{pct(m.ann_active)}</span></td>
+                <td style={{ textAlign: 'right' }}>{num(m.info_ratio)}</td>
+                <td style={{ textAlign: 'right' }}><span className={m.dsr >= t.dsr ? 'up' : ''}>{num(m.dsr, 2)}</span></td>
+                <td style={{ textAlign: 'right' }}>{num(m.turnover_annual, 1)}</td>
+                <td style={{ textAlign: 'right' }}>{pct(m.cost_drag_annual).replace('+', '')}</td>
+                <td className="muted" style={{ maxWidth: 360, fontSize: '0.78rem' }}>{r.notes}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+export default function PortfolioLab() {
+  const [cand, setCand] = useState(null)
+  const [log, setLog] = useState(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [showLog, setShowLog] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    Promise.all([getPortfolioCandidate(), getPortfolioRuns()]).then(([c, l]) => {
+      if (!alive) return
+      if (c.error) setError(c.error)
+      setCand(c.data); setLog(l.data); setLoading(false)
+    })
+    return () => { alive = false }
+  }, [])
+
+  const t = cand?.thresholds || log?.thresholds || { ann_active: 0.03, info_ratio: 0.5, dsr: 0.95, turnover_min: 3, turnover_max: 6 }
+  const full = cand?.full
+  const fm = full?.run?.metrics
+
+  return (
+    <>
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">打敗大盤：目前候選對門檻</span>
+          <span className="muted" style={{ fontSize: '.82rem' }}>
+            對手 0050 含息 · 實驗日誌 N = {cand?.n_total ?? log?.n_total ?? '–'} · 保留期（2024-10 起）{cand?.holdout_opened ? '已開' : '未開'}
+          </span>
+        </div>
+        {loading && <div className="card-body muted">載入中…</div>}
+        {error && <div className="card-body" style={{ color: 'var(--orange)' }}>{error}</div>}
+        {!loading && !error && (
+          <>
+            <div className="card-body" style={{ paddingBottom: 0 }}>
+              <RuleLine p={full?.run?.params || cand?.candidates?.[0]?.params} />
+            </div>
+            <CandidateTable rows={cand?.candidates} t={t} />
+            <div className="card-body muted" style={{ fontSize: '0.8rem', lineHeight: 1.7 }}>
+              三列是同一組參數：開發期（2018~2021）找到、驗證期（2022~2024-09）參數不動確認、全期間逐年檢視。
+              年化主動報酬與資訊比率過了門檻，<strong>DSR 沒過</strong>：N 次嘗試後挑最好的，這個月 Sharpe 純靠運氣也挑得到（SR* 是「純運氣的最佳 Sharpe」）。
+              要讓 DSR 過，只能用沒碰過的資料——紙上交易，與只能開一次的保留期。
+            </div>
+          </>
+        )}
+      </div>
+
+      {full && (
+        <div className="two-col">
+          <div className="card">
+            <div className="card-header">
+              <span className="card-title">淨值曲線：組合 vs 0050（{full.run.period_start} ~ {full.run.period_end}）</span>
+              {fm && <span className="muted" style={{ fontSize: '.82rem' }}>年化 {pct(fm.cagr_port, 1)} 對 {pct(fm.cagr_bench, 1)} · 最大回撤 {pct(fm.mdd_port, 1)} 對 {pct(fm.mdd_bench, 1)}</span>}
+            </div>
+            <NavChart series={full.series} />
+          </div>
+          <div className="card">
+            <div className="card-header"><span className="card-title">逐年主動報酬</span></div>
+            <div className="card-body"><YearlyTable yearly={fm?.yearly_active} /></div>
+          </div>
+        </div>
+      )}
+
+      {full && (
+        <div className="card">
+          <div className="card-header"><span className="card-title">最後一次持股（回測期末）</span><span className="muted" style={{ fontSize: '.82rem' }}>台積電平均權重 {num(fm?.tsmc_weight_mean)}</span></div>
+          <Positions positions={full.positions} last={full.last_rebalance} />
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">實驗日誌（每一次回測一列，N 只增不減）</span>
+          <button className="btn-secondary" onClick={() => setShowLog(v => !v)}>{showLog ? '收起' : `展開 ${log?.n_total ?? ''} 次`}</button>
+        </div>
+        {showLog ? <RunLog runs={log?.runs} t={t} /> : <div className="card-body muted" style={{ fontSize: '0.8rem' }}>
+          失敗的也在裡面——DSR 的 N 就是這張表的長度，刪掉失敗的 N 就是假的。★ 是候選。
+        </div>}
+      </div>
+
+      <div className="card">
+        <div className="card-header"><span className="card-title">怎麼讀這一頁</span></div>
+        <div className="card-body" style={{ lineHeight: 1.8 }}>
+          <p><strong>規則。</strong> 每月 11 日收盤後算訊號，次一交易日開盤以限價單成交；一字鎖漲跌停的單不成交；成本單邊手續費 0.0855%、賣出稅 0.3%、滑價 0.15%（小型股 0.3%）；股利用還原價含息再投入，與 0050 同一基準。</p>
+          <p><strong>訊號。</strong> 「公告窗口反應」是當月 1 日到訊號日的累積異常報酬（市場對本月營收的反應），win3 是最近三個窗口相加；mom 是 12-1 個月動能；組合是兩者在候選池內的百分位排名平均。</p>
+          <p><strong>轉折是持台積電。</strong> 不持台積電而對手是 0050（台積電佔一半），追蹤誤差 20%、相對落後 40%，等於在賭小型股對台積電；固定持有後八個設定全部轉正。0050 真實持股權重表還沒有，暫用滾動迴歸估（2018 約 0.38、近兩年 0.55）。</p>
+        </div>
+      </div>
+    </>
+  )
+}

@@ -24,6 +24,7 @@ import IdleCash           from './pages/IdleCash'
 import USMarket           from './pages/USMarket'
 import InstitutionalHoldings from './pages/InstitutionalHoldings'
 import WeeklyForecast     from './pages/WeeklyForecast'
+import PortfolioLab       from './pages/PortfolioLab'
 
 const PAGE_TITLES = {
   overview:   '市場總覽',
@@ -35,6 +36,7 @@ const PAGE_TITLES = {
   prediction: '趨勢預測',
   compare:    '預測比對',
   weekly:     '每週全模型預測',
+  portfolio:  '月調倉（打敗大盤）',
   history:    '查詢紀錄',
   voting:     '投票決策',
   models:     '模型版本',
@@ -84,6 +86,7 @@ export default function App() {
           {page === 'prediction' && <Prediction />}
           {page === 'compare'    && <PredictionCompare />}
           {page === 'weekly'     && <WeeklyForecast onSelectStock={goToStock} />}
+          {page === 'portfolio'  && <PortfolioLab />}
           {page === 'history'    && <QueryHistory onSelectStock={goToStock} />}
           {page === 'voting'     && <VotingDashboard />}
           {page === 'models'     && <ModelVersions />}
