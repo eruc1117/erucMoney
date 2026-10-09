@@ -61,6 +61,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-61.md](./Iterations/Iteration-61.md) | **條件 → 觸發買賣**：`trading_strategy.py` 十四種條件（價格、均線穿越／狀態、RSI、N 日報酬、停損停利、每月固定日、指定日期），收盤判斷隔天開盤成交，`max_times`／`only_if_flat`／`cooldown`；公開 `POST /sim/rules`；頁面 `RuleBuilder`（條件下拉、四個模板、觸發紀錄），自訂指令分頁三種模式 |
 | [Iteration-60.md](./Iterations/Iteration-60.md) | **交易模擬開放給未登入者**：`trading_sim.py` 自訂交易指令（一行一筆「日期 買/賣 代號 數量」，當天開盤市價、順延、金額換股、全部賣出）設期間與資金跑實際日線給收益對 0050；公開路由 `/sim/replay`、`/sim/run`（只讀、不登入）；頁面「交易模擬」（自訂指令／歷史回放），統一前端放「預測」群組匿名可用；回放分頁抽成 `ReplayPanel` |
 | [Iteration-59.md](./Iterations/Iteration-59.md) | **程式交易回放**：規則抽成純函式 `trading_rules.py`（引擎與回放同一份），`trading_replay.py` 把限價／重掛／停損／守門套在候選期間（2018-11～2024-09，68 份清單）的實際日線上對照「照單全收」；**停損 15%／25%／35% 都輸、限價 ±0.5% 少賺 1.9%／年、±2% 只差 0.5%**；`/trading/engine/replay` 與頁面「歷史模擬」分頁 |
 | [Iteration-58.md](./Iterations/Iteration-58.md) | **程式交易引擎**：規則（候選清單、11 日調倉、停損 15%、相對回撤守門 10%、零股限價 ±0.5% 重掛 3 次）寫成 `Crawler/trading_engine.py`，委託單生命週期與事件（migration 026），券商介面 `brokers/`（紙上成交寫同一本模擬帳戶；凱基 `kgiapp` 接口留好未接）；排程 18:40 引擎開著就接手；頁面四分頁：引擎／預測（1～12 個月主動報酬期望、95% 區間、贏 0050 機率、預期帶對實際）／觀察（停損監看、事件、委託）／手動指令 |

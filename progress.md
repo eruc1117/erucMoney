@@ -4,9 +4,13 @@
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-引擎已啟動（2026-10-09，紙上、停損 0、限價 ±2%、run 44）；Iteration 60 交易模擬已提交 eaabe7c 並推上 GitHub。等今晚 18:40 排程第一次真的跑、10/13 第一份清單
+Iteration 61：交易模擬的條件規則（條件 → 觸發買賣）——未提交。引擎已啟動（紙上、停損 0、限價 ±2%），等今晚 18:40 排程第一次真的跑、10/13 第一份清單
 
 ## 產出
+- Crawler/trading_strategy.py、tests/test_trading_strategy.py（3 項）、rules_anon_evidence.py；api.py `POST /trading/sim/rules`；Server/routes/sim.js `/sim/rules`、sim.test.js（7 項）
+- Screen/src/components/RuleBuilder.jsx、TradingSim.jsx（條件規則／日期指令／進階三種模式）、api.js runRules；meeting_front_end 同步
+- AI/Doc/Iterations/Iteration-61.md、AI/Doc/README.md、Server/README.md
+（以下為 60，已提交）
 - Crawler/trading_sim.py、Crawler/tests/test_trading_sim.py（3 項）、Crawler/sim_anon_evidence.py；Crawler/api.py `POST /trading/sim`
 - Server/routes/sim.js（公開，掛 /sim）、Server/tests/http/sim.test.js（6 項）、Server/app.js、fastapi-mock
 - Screen/src/components/ReplayPanel.jsx（從 AlgoTrading 抽出）、Screen/src/pages/TradingSim.jsx（側欄「交易模擬」）、api.js、App.jsx、Sidebar.jsx；meeting_front_end 同一份＋ nav.js「預測」群組 simulate（匿名）
@@ -35,7 +39,8 @@
 - 2026-10-09：使用者決定**啟動引擎（紙上）**，規則改成停損 0（關閉）、限價 ±2%——依回放結果；RULES_DEFAULT 程式預設仍是 15%／0.5%，實際生效的是 trading_engine_state.rules
 
 ## 未解
-- 未提交：引擎啟動的小改（停損 0 顯示「關閉」、engine_enable_evidence.py）、交易模擬簡易模式（TradingSim.jsx 兩個 repo）、progress.md
+- Iteration 61 未提交（本 repo 與 meeting_front_end）；pytest 218、jest 184、兩個 build、匿名 rules-anon 都過
+- 條件規則沒做：AND／OR 組合、對 0050 的相對強弱、成交量條件、部位比例動作、規則送進引擎實際執行
 - 引擎第一次 run_daily（2026-10-09 15:42）因當天日線未進而略過；要看 18:40 之後 trading_events 有沒有 signal／orders（10/13 訊號日才會有清單）
 - 開了引擎之後，紙上交易的成交方式從「照單全收」變成「限價 ±2%」，和回測的對照會差約 0.5%／年（回放估）
 - 公開模擬沒做：匯入 CSV、盤後零股集合競價模型、分享連結、多次模擬比較

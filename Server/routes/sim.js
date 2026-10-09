@@ -5,6 +5,8 @@
  *        歷史回放（引擎規則 vs 照單全收，候選期間）——同 /trading/engine/replay，只是不要登入
  *   POST /sim/run   { text, start, end, capital }
  *        自訂交易指令：使用者寫幾行「日期 買/賣 代號 數量」，設定期間與資金，跑完給收益對 0050
+ *   POST /sim/rules { rules:[{stock_id, when:{type,…}, then:{side,qty,unit}, max_times?, only_if_flat?, cooldown?}], start, end, capital }
+ *        條件規則：條件 → 買／賣，逐日判斷、觸發隔天開盤成交（Iteration 61）
  *
  * 兩個都只讀資料庫、不寫；算一次約 1～3 秒，所以設了輸入上限（文字 4000 字、期間 8 年）並靠全域 rate-limit 擋濫用。
  */
@@ -33,6 +35,16 @@ router.post('/run', (req, res) => {
   const cap = capital == null || capital === '' ? 1000000 : Number(capital)
   if (!(cap > 0) || cap > 1e12) return res.status(400).json({ detail: 'capital 要是 > 0 的數字' })
   proxyToFastAPI({ port: 8000, path: '/trading/sim', method: 'POST', body: { text, start, end, capital: cap }, res, onError: () => CRAWLER_DOWN(res) })
+})
+
+router.post('/rules', (req, res) => {
+  const { rules, start, end, capital } = req.body ?? {}
+  if (!Array.isArray(rules) || !rules.length) return res.status(400).json({ detail: 'rules 要是非空陣列' })
+  if (rules.length > 50) return res.status(400).json({ detail: '規則最多 50 條' })
+  if (!DATE.test(String(start || '')) || !DATE.test(String(end || ''))) return res.status(400).json({ detail: 'start／end 要是 YYYY-MM-DD' })
+  const cap = capital == null || capital === '' ? 1000000 : Number(capital)
+  if (!(cap > 0) || cap > 1e12) return res.status(400).json({ detail: 'capital 要是 > 0 的數字' })
+  proxyToFastAPI({ port: 8000, path: '/trading/sim/rules', method: 'POST', body: { rules, start, end, capital: cap }, res, onError: () => CRAWLER_DOWN(res) })
 })
 
 module.exports = router

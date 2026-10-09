@@ -528,6 +528,29 @@ def post_trading_sim(body: SimRequest):
     return trading_sim.run_text(body.text, s, e, body.capital)
 
 
+class RulesRequest(BaseModel):
+    rules: list
+    start: str
+    end: str
+    capital: float = 1_000_000
+
+
+@app.post("/trading/sim/rules")
+def post_trading_sim_rules(body: RulesRequest):
+    """條件規則模擬（公開、只讀）：規則 = 條件 → 買／賣，逐日判斷、觸發隔天開盤成交，給收益對 0050。"""
+    import trading_strategy
+    try:
+        s, e = date.fromisoformat(body.start), date.fromisoformat(body.end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='start／end 要是 YYYY-MM-DD')
+    if body.capital <= 0:
+        raise HTTPException(status_code=400, detail='capital 要 > 0')
+    errs = trading_strategy.validate_rules(body.rules)
+    if errs:
+        raise HTTPException(status_code=400, detail='；'.join(errs[:5]))
+    return trading_strategy.simulate_rules(body.rules, s, e, body.capital)
+
+
 class EngineConfig(BaseModel):
     enabled: Optional[bool] = None
     mode: Optional[str] = None

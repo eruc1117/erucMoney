@@ -2,13 +2,15 @@
 // ───────────────────────────────────────────────────────────────────────────
 // 兩種模擬，都只讀資料庫、不動任何帳戶：
 //   自訂指令：你自己寫「哪天買賣哪檔多少」，設期間與資金，用實際日線跑完，給收益對 0050
-//     簡易模式（Iteration 61）：用表單一筆一筆加、或套模板（買進持有／定期定額／進出一次），文字自動產生；進階模式直接寫文字
+//     條件規則（Iteration 61）：「條件 → 買／賣」模組化輸入，逐日判斷、觸發隔天開盤成交（RuleBuilder）
+//     簡易模式：用表單一筆一筆加、或套模板（買進持有／定期定額／進出一次），文字自動產生；進階模式直接寫文字
 //   歷史回放：候選策略的月清單套上引擎規則（限價、重掛、停損、守門），和「照單全收」對照（Iteration 59 的面板）
 // 統一前端（erucmoney.com）放在「預測」群組，匿名可用；儀表板這邊登入後也看得到。
 import { useEffect, useMemo, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
-import { getSimReplay, runSim, getTrackedStocks } from '../services/api'
+import { getSimReplay, runSim, runRules, getTrackedStocks } from '../services/api'
 import ReplayPanel from '../components/ReplayPanel'
+import RuleBuilder from '../components/RuleBuilder'
 
 const TAB_KEY = 'sim_tab'
 const TEXT_KEY = 'sim_text'
@@ -150,7 +152,7 @@ function SimpleBuilder({ rows, setRows, form, stocks }) {
 }
 
 function InstructionsTab() {
-  const [mode, setMode] = useState(() => readLS(MODE_KEY, 'simple'))
+  const [mode, setMode] = useState(() => readLS(MODE_KEY, 'rules'))
   const [rows, setRows] = useState(() => readJSON(ROWS_KEY, []))
   const [text, setText] = useState(() => readLS(TEXT_KEY, EXAMPLE))
   const [form, setForm] = useState(() => ({ ...DEFAULT_FORM, ...readJSON(FORM_KEY, {}) }))
@@ -180,15 +182,15 @@ function InstructionsTab() {
   return (
     <>
       <div style={{ padding: '1rem 1.25rem .4rem', display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div className="btn-group"><button className={`btn-period${mode === 'simple' ? ' active' : ''}`} onClick={() => switchMode('simple')}>簡易（表單／模板）</button><button className={`btn-period${mode === 'text' ? ' active' : ''}`} onClick={() => switchMode('text')}>進階（文字）</button></div>
+        <div className="btn-group"><button className={`btn-period${mode === 'rules' ? ' active' : ''}`} onClick={() => switchMode('rules')}>條件規則</button><button className={`btn-period${mode === 'simple' ? ' active' : ''}`} onClick={() => switchMode('simple')}>日期指令（表單）</button><button className={`btn-period${mode === 'text' ? ' active' : ''}`} onClick={() => switchMode('text')}>進階（文字）</button></div>
         <div className="ctrl-group"><div className="ctrl-label">起</div><input type="date" className="ctrl-select" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} /></div>
         <div className="ctrl-group"><div className="ctrl-label">迄</div><input type="date" className="ctrl-select" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} /></div>
         <div className="ctrl-group"><div className="ctrl-label">資金（NT$）</div><input type="number" className="ctrl-select" style={{ width: 130, textAlign: 'right' }} step={100000} value={form.capital} onChange={e => setForm({ ...form, capital: Number(e.target.value) })} /></div>
-        <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button>
-        {mode === 'text' ? <><button className="btn-secondary" onClick={() => setText(EXAMPLE)}>放範例</button><button className="btn-secondary" onClick={() => setText('')}>清空</button></> : <button className="btn-secondary" onClick={() => setRows([])}>清空清單</button>}
+        {mode !== 'rules' ? <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button> : null}
+        {mode === 'rules' ? null : mode === 'text' ? <><button className="btn-secondary" onClick={() => setText(EXAMPLE)}>放範例</button><button className="btn-secondary" onClick={() => setText('')}>清空</button></> : <button className="btn-secondary" onClick={() => setRows([])}>清空清單</button>}
       </div>
       <div style={{ padding: '.4rem 1.25rem 1rem' }}>
-        {mode === 'simple' ? <SimpleBuilder rows={rows} setRows={setRows} form={form} stocks={stocks} /> : (
+        {mode === 'rules' ? <RuleBuilder form={form} stocks={stocks} runRules={runRules} /> : mode === 'simple' ? <SimpleBuilder rows={rows} setRows={setRows} form={form} stocks={stocks} /> : (
           <>
             <textarea className="form-textarea" rows={9} value={text} onChange={e => setText(e.target.value)} spellCheck={false}
                       style={{ width: '100%', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '.86rem', lineHeight: 1.6 }} />
@@ -199,7 +201,7 @@ function InstructionsTab() {
         {error ? <div className="down" style={{ fontSize: '.86rem', marginTop: '.4rem' }}>{error}</div> : null}
       </div>
 
-      {r ? (
+      {r && mode !== 'rules' ? (
         <>
           {r.errors?.length ? <div className="note-box" style={{ color: 'var(--orange)' }}>看不懂、已略過的行：{r.errors.map(e => `第 ${e.line} 行「${e.text.trim()}」（${e.reason}）`).join('；')}</div> : null}
           <div className="stat-grid">

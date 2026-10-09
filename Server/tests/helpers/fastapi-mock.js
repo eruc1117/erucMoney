@@ -61,6 +61,8 @@ const DEFAULTS = {
     variants: { engine: { metrics: { total_return: 0.5 }, stats: { stop_loss: 3 } }, plain: { metrics: { total_return: 0.55 }, stats: { stop_loss: 0 } } }, engine_minus_plain: { total_return: -0.05 } } }),
   'POST /trading/sim':            (req) => ({ status: 200, body: { available: true, start: req.body?.start, end: req.body?.end, capital: req.body?.capital, n_instructions: String(req.body?.text || '').split('\n').filter(Boolean).length,
     metrics: { total_return: 0.12, bench_return: 0.1, active_return: 0.018 }, trades: [], skipped: [], errors: [], series: [] } }),
+  'POST /trading/sim/rules':      (req) => ({ status: 200, body: { available: true, n_rules: (req.body?.rules || []).length, start: req.body?.start, end: req.body?.end, capital: req.body?.capital,
+    metrics: { total_return: 0.2 }, trades: [], triggers: [], rules: [] } }),
   'POST /trading/engine/config':  (req) => ({ status: 200, body: { enabled: req.body?.enabled ?? null, mode: req.body?.mode ?? 'paper' } }),
   'POST /trading/engine/run':     () => ({ status: 200, body: { sent: [], marked: 0, stop_loss: [], orders: [] } }),
   'GET /portfolio/runs':      ()    => ({ status: 200, body: { n_total: 2, thresholds: { dsr: 0.95 },

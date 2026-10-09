@@ -28,6 +28,18 @@ describe('匿名可用', () => {
   })
 })
 
+describe('條件規則 /sim/rules（Iteration 61）', () => {
+  it('匿名 POST → 200，rules 原樣轉；空陣列與超過 50 條 400', async () => {
+    const rules = [{ stock_id: '2330', when: { type: 'cross_below_ma', n: 20 }, then: { side: 'sell', unit: '全部' } }]
+    const r = await request(app).post('/sim/rules').send({ rules, start: '2024-01-02', end: '2024-09-30' })
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ available: true, n_rules: 1, capital: 1000000 })
+    expect(fake.calls.find(c => c.path === '/trading/sim/rules').body.rules).toEqual(rules)
+    expect((await request(app).post('/sim/rules').send({ rules: [], start: '2024-01-02', end: '2024-09-30' })).status).toBe(400)
+    expect((await request(app).post('/sim/rules').send({ rules: Array(51).fill(rules[0]), start: '2024-01-02', end: '2024-09-30' })).status).toBe(400)
+  })
+})
+
 describe('參數驗證（不打 FastAPI）', () => {
   it.each([
     [{ start: '2024-01-02', end: '2024-09-30' }, 'text'],
