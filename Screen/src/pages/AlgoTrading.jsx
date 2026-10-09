@@ -1,71 +1,299 @@
-// 程式交易（Iteration 57）
+// 程式交易（Iteration 57 手動指令 → Iteration 58 引擎）
 // ───────────────────────────────────────────────────────────────────────────
-// 把候選策略的月清單（目標權重）和你的實際持股、可投入現金，變成一張可以拿去券商 App 下的指令表；
-// 執行完勾選「已執行」登記進交易台帳（note 以 [程式交易] 開頭），下次再算就會對帳出還差多少。
-//
-// 沒有券商 API：這一頁「算」，人「做」。零股用限價單（盤中或盤後），參考價是最新收盤，成交價自己填回來。
-// 策略範圍只包含清單裡的股票和以前用這一頁登記過的股票；你自己買的其他持股一律不動（另列出來）。
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getTradingPlan, getTradingLog, addTrade, getPortfolioPaper } from '../services/api'
+// 程式交易 = 選股、進出場、停損、下單規則寫成程式，由電腦每天跑完整個流程；人看兩件事：
+//   預測：如果回測成立，接下來 1／3／6／12 個月會長怎樣（期望、95% 區間、贏 0050 的機率），實際走勢有沒有在帶子裡
+//   觀察：引擎今天做了什麼（委託、成交、未成交重掛、停損、守門）、每檔離停損還有多遠、下一個訊號日
+//   歷史模擬：把整套規則套在候選期間的歷史清單與實際日線上，和「照單全收」對照——接上之後會賺還是賠，先在過去看一遍
+// 券商：紙上（模擬帳戶）先跑，凱基接口已留（brokers/kgi.py），接上後切 live。
+// 「手動指令」分頁留著：引擎沒開、或想用自己的帳戶照清單下單時用（Iteration 57）。
+import { useCallback, useEffect, useState } from 'react'
+import ReactApexChart from 'react-apexcharts'
+import {
+  getTradingPlan, getTradingLog, addTrade, getPortfolioPaper,
+  getEngineStatus, getEngineOrders, getEngineEvents, getEngineForecast, setEngineConfig, runEngineDay, getEngineReplay,
+} from '../services/api'
 import { formatShares } from '../components/Shares'
+import { isAdmin } from '../services/auth'
 
+const TAB_KEY = 'algo_tab'
 const CASH_KEY = 'algo_cash'
 const MIN_KEY = 'algo_min_trade'
 const QUICK = [100000, 300000, 500000, 1000000]
 
 const money = v => (v == null ? '–' : Number(v).toLocaleString('zh-TW', { maximumFractionDigits: 0 }))
 const pct = (v, d = 1) => (v == null ? '–' : `${(Number(v) * 100).toFixed(d)}%`)
+const spct = (v, d = 2) => (v == null ? '–' : `${Number(v) > 0 ? '+' : ''}${(Number(v) * 100).toFixed(d)}%`)
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const hhmm = ts => (ts ? new Date(ts).toLocaleString('zh-TW', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–')
 function Sub({ children }) { return <div className="muted" style={{ fontSize: '0.74rem' }}>{children}</div> }
+function Empty({ children }) { return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>{children}</div> }
 function readLS(k, fallback) { try { const v = localStorage.getItem(k); return v == null ? fallback : v } catch { return fallback } }
 function writeLS(k, v) { try { localStorage.setItem(k, String(v)) } catch { /* 隱私模式 */ } }
+const dark = () => document.documentElement.dataset.theme === 'dark'
 
+const ORDER_STATUS = { pending: ['yellow', '待成交'], filled: ['green', '已成交'], unfilled: ['yellow', '未成交'], cancelled: ['', '已取消'], rejected: ['red', '拒絕'] }
+const ORDER_REASON = { rebalance: '調倉', exit: '退出清單', stop_loss: '停損' }
+const EVENT_KIND = {
+  signal: ['📋', '訊號日：算新清單'], orders: ['🧾', '產生委託'], fill: ['✅', '成交'], unfilled: ['↻', '未成交，重掛'], cancelled: ['✖', '重掛到上限，取消'],
+  rejected: ['⛔', '券商拒絕'], stop_loss: ['🛑', '觸發停損'], guard: ['🛡', '相對回撤守門：暫停買單'], error: ['⚠', '錯誤'], config: ['⚙', '設定變更'], no_quote: ['？', '沒行情'],
+}
+
+// ═══════════════════════════════════════ 引擎 ═══════════════════════════════════════
+function EngineTab({ status, reload }) {
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState('')
+  const admin = isAdmin()
+  const e = status?.engine
+  const rules = e?.rules || {}
+  const [draft, setDraft] = useState(null)
+  useEffect(() => { setDraft(e ? { stop_loss_pct: rules.stop_loss_pct, rel_dd_guard: rules.rel_dd_guard, limit_slip: rules.limit_slip, max_attempts: rules.max_attempts } : null) }, [status]) // eslint-disable-line
+
+  async function act(label, fn) {
+    setBusy(label); setMsg('')
+    const { data, error } = await fn()
+    setBusy('')
+    setMsg(error ? `${label}失敗：${error}` : `${label}完成${data?.sent ? `：送單 ${data.sent.length} 日、結算 ${data.marked} 日、停損 ${data.stop_loss?.length || 0}、調倉單 ${data.orders?.length || 0}` : data?.skipped ? `（略過：${data.skipped}）` : ''}`)
+    reload()
+  }
+
+  if (!status) return <Empty>讀不到引擎狀態（爬蟲服務要在跑）。</Empty>
+  return (
+    <>
+      <div className="stat-grid">
+        <div className="stat-tile"><div className="k">引擎</div><div className="v"><span className={e?.enabled ? 'up' : 'muted'}>{e?.enabled ? '執行中' : '關閉'}</span></div><div className="s">{e?.mode === 'live' ? '實單（凱基）' : '紙上（模擬帳戶）'} · 候選 run #{e?.run_id ?? status.account?.run_id ?? '–'}</div></div>
+        <div className="stat-tile"><div className="k">券商</div><div className="v"><span className={status.broker_ready ? 'up' : 'down'}>{status.broker_ready ? '就緒' : '未就緒'}</span></div><div className="s" title={status.broker_note}>{status.broker_note || e?.broker}</div></div>
+        <div className="stat-tile"><div className="k">下一個訊號日</div><div className="v" style={{ fontSize: '1.05rem' }}>{status.next_signal_date || '–'}</div><div className="s">最近清單 {status.last_list || '–'}</div></div>
+        <div className="stat-tile"><div className="k">委託</div><div className="v">{(status.pending || []).length} 待成交</div><div className="s">{Object.entries(status.orders || {}).map(([k, v]) => `${ORDER_STATUS[k]?.[1] || k} ${v}`).join(' · ') || '還沒有委託'}</div></div>
+        <div className="stat-tile"><div className="k">最後執行</div><div className="v" style={{ fontSize: '1.05rem' }}>{hhmm(e?.last_run_at)}</div><div className="s" style={{ color: e?.last_error ? 'var(--red)' : undefined }} title={e?.last_error || ''}>{e?.last_error ? `錯誤：${e.last_error}` : '每日 18:40 排程（日線進來之後）'}</div></div>
+        <div className="stat-tile"><div className="k">模擬帳戶</div><div className="v" style={{ fontSize: '1.05rem' }}>{status.account ? money(status.account.cash) : '未開'}</div><div className="s">{status.account ? `現金 · ${status.account.started_on} 起 ${money(status.account.start_capital)}` : 'python portfolio_paper.py --start'}</div></div>
+      </div>
+
+      <div style={{ padding: '.9rem 1.25rem', borderTop: '1px solid var(--border-soft)' }}>
+        <div style={{ fontSize: '.74rem', fontWeight: 700, color: 'var(--dim)', letterSpacing: '.04em', marginBottom: '.4rem' }}>規則（寫成程式的部分）</div>
+        <table className="data-table" style={{ fontSize: '.86rem' }}>
+          <tbody>{Object.entries(status.rules_text || {}).map(([k, v]) => <tr key={k}><td style={{ width: '6rem', fontWeight: 700 }}>{k}</td><td style={{ whiteSpace: 'normal' }}>{v}</td></tr>)}</tbody>
+        </table>
+      </div>
+
+      {admin ? (
+        <div style={{ padding: '.9rem 1.25rem', borderTop: '1px solid var(--border-soft)', display: 'flex', gap: '.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <button className={e?.enabled ? 'btn-danger' : 'btn-primary'} disabled={!!busy} onClick={() => act(e?.enabled ? '關閉引擎' : '啟動引擎', () => setEngineConfig({ enabled: !e?.enabled, mode: e?.mode || 'paper' }))}>{e?.enabled ? '關閉引擎' : '啟動引擎（紙上）'}</button>
+          <button className="btn-secondary" disabled={!!busy || !e?.enabled} onClick={() => act('手動跑今天', () => runEngineDay())}>手動跑今天</button>
+          <button className="btn-secondary" disabled={!!busy} title="凱基 API 要先申請並填 KGI_* 環境變數；沒設好引擎會停下來記錯誤，不會送單" onClick={() => act(e?.mode === 'live' ? '切回紙上' : '切到實單', () => setEngineConfig({ mode: e?.mode === 'live' ? 'paper' : 'live' }))}>{e?.mode === 'live' ? '切回紙上' : '切到實單（凱基）'}</button>
+          {draft ? (
+            <>
+              {[['stop_loss_pct', '停損 %', 100], ['rel_dd_guard', '相對回撤守門 %', 100], ['limit_slip', '限價 ±%', 100], ['max_attempts', '重掛上限', 1]].map(([k, label, mul]) => (
+                <div className="ctrl-group" key={k}>
+                  <div className="ctrl-label">{label}</div>
+                  <input type="number" className="ctrl-select" style={{ width: 92, textAlign: 'right' }} step={mul === 1 ? 1 : 0.1}
+                         value={draft[k] == null ? '' : +(draft[k] * mul).toFixed(3)} onChange={ev => setDraft({ ...draft, [k]: Number(ev.target.value) / mul })} />
+                </div>
+              ))}
+              <button className="btn-secondary" disabled={!!busy} onClick={() => act('儲存規則', () => setEngineConfig({ rules: draft }))}>儲存規則</button>
+            </>
+          ) : null}
+          {busy ? <span className="muted" style={{ fontSize: '.8rem' }}>{busy}中…</span> : msg ? <span className="muted" style={{ fontSize: '.8rem' }}>{msg}</span> : null}
+        </div>
+      ) : <Empty>開關與規則只有 admin 能改。</Empty>}
+    </>
+  )
+}
+
+// ═══════════════════════════════════════ 預測 ═══════════════════════════════════════
+function ForecastChart({ forecast, paper }) {
+  const band = forecast?.band || []
+  const series = paper?.review?.series || []
+  if (!band.length) return null
+  const start = new Date(forecast.started_on + 'T00:00:00')
+  const monthTs = k => { const d = new Date(start); d.setMonth(d.getMonth() + k); return d.getTime() }
+  const data = [
+    { name: '預期（中位）', type: 'line', data: band.map(b => [monthTs(b.month), b.mid]) },
+    { name: '95% 上緣', type: 'line', data: band.map(b => [monthTs(b.month), b.hi]) },
+    { name: '95% 下緣', type: 'line', data: band.map(b => [monthTs(b.month), b.lo]) },
+    { name: '實際（對 0050 的相對淨值）', type: 'line', data: series.filter(p => p.bench).map(p => [new Date(p.d).getTime(), +(p.nav / p.bench).toFixed(4)]) },
+  ]
+  const options = {
+    chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, background: 'transparent' },
+    stroke: { width: [2, 1.2, 1.2, 2.5], curve: 'straight', dashArray: [0, 5, 5, 0] },
+    colors: [dark() ? '#9aa4b2' : '#6b7280', '#35c76a', '#ff5f57', dark() ? '#5b9dff' : '#1d6ff2'],
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+    yaxis: { labels: { formatter: v => v.toFixed(2) }, title: { text: '相對 0050（起點 1）' } },
+    tooltip: { x: { format: 'yyyy-MM-dd' }, y: { formatter: v => v?.toFixed(3) } },
+    legend: { position: 'top' },
+    grid: { borderColor: 'rgba(128,128,128,0.18)' },
+    theme: { mode: dark() ? 'dark' : 'light' },
+  }
+  return <div className="chart-pad"><ReactApexChart type="line" series={data} options={options} height={300} /></div>
+}
+
+function ForecastTab({ forecast, paper }) {
+  if (!forecast) return <Empty>讀不到預測。</Empty>
+  if (!forecast.available) return <Empty>沒辦法預測：{forecast.reason}</Empty>
+  const a = forecast.actual
+  const inp = forecast.inputs
+  return (
+    <>
+      <div className="stat-grid">
+        <div className="stat-tile"><div className="k">依據</div><div className="v" style={{ fontSize: '1rem' }}>run #{forecast.run_id}</div><div className="s">{forecast.run_name}</div></div>
+        <div className="stat-tile"><div className="k">年化主動報酬（回測）</div><div className="v"><span className={inp.ann_active > 0 ? 'up' : 'down'}>{spct(inp.ann_active)}</span></div><div className="s">追蹤誤差 {pct(inp.tracking_error)} · IR {inp.info_ratio}</div></div>
+        <div className="stat-tile"><div className="k">月勝率（回測）</div><div className="v">{pct(inp.monthly_win_rate, 0)}</div><div className="s">DSR {inp.dsr}（≥ 0.95 才算不是運氣）</div></div>
+        <div className="stat-tile"><div className="k">實際 vs 預期</div><div className="v">{a ? <span className={a.active_return >= 0 ? 'up' : 'down'}>{spct(a.active_return)}</span> : '–'}</div><div className="s">{a ? `${a.days} 個交易日（約 ${a.months} 個月）· 預期 ${spct(a.expected)} ± ${pct(a.sd)} · z = ${a.z}${a.within_band ? '，在帶內' : '，出帶'}` : '模擬帳戶還沒有結算'}</div></div>
+      </div>
+      <div style={{ padding: '.9rem 1.25rem', borderTop: '1px solid var(--border-soft)' }}>
+        <div style={{ fontSize: '.74rem', fontWeight: 700, color: 'var(--dim)', letterSpacing: '.04em', marginBottom: '.4rem' }}>接下來會長怎樣（如果回測成立）</div>
+        <table className="data-table">
+          <thead><tr><th>期間</th><th className="num">預期主動報酬</th><th className="num">95% 區間</th><th className="num">贏過 0050 的機率</th></tr></thead>
+          <tbody>{forecast.horizons.map(h => (
+            <tr key={h.months}><td>{h.months} 個月</td><td className="num"><strong className={h.expected_active > 0 ? 'up' : 'down'}>{spct(h.expected_active)}</strong></td>
+              <td className="num">{spct(h.lo95)} ～ {spct(h.hi95)}</td><td className="num">{h.p_beat == null ? '–' : pct(h.p_beat, 0)}</td></tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <ForecastChart forecast={forecast} paper={paper} />
+      <div className="note-box">{forecast.caveat}</div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════ 觀察 ═══════════════════════════════════════
+function OrdersTable({ orders }) {
+  if (!orders?.length) return <Empty>還沒有委託。引擎在訊號日收盤後產生調倉單，隔天開盤送出。</Empty>
+  return (
+    <div style={{ overflowX: 'auto', maxHeight: 420, overflowY: 'auto' }}>
+      <table className="data-table">
+        <thead><tr><th>下單日</th><th>清單</th><th>動作</th><th>股票</th><th className="num">股數</th><th className="num">限價</th><th>原因</th><th className="mid">狀態</th><th className="num">成交</th><th>備註</th></tr></thead>
+        <tbody>{orders.map(o => {
+          const [cls, label] = ORDER_STATUS[o.status] || ['', o.status]
+          return (
+            <tr key={o.id}>
+              <td>{o.order_date}</td><td>{o.rebalance_date || '–'}</td>
+              <td><strong className={o.side === 'buy' ? 'up' : 'down'}>{o.side === 'buy' ? '買' : '賣'}</strong></td>
+              <td><strong>{o.stock_id}</strong> {o.stock_name || ''}</td>
+              <td className="num">{o.shares?.toLocaleString()}<Sub>{formatShares(o.shares || 0)}</Sub></td>
+              <td className="num">{o.limit_price ?? '市價'}</td>
+              <td>{ORDER_REASON[o.reason] || o.reason}</td>
+              <td className="mid"><span className={`tag ${cls}`}>{label}</span>{o.attempts > 1 ? <Sub>第 {o.attempts} 次</Sub> : null}</td>
+              <td className="num">{o.status === 'filled' ? <>{o.filled_shares?.toLocaleString()} @ {o.filled_price}<Sub>{o.filled_at}</Sub></> : '–'}</td>
+              <td className="muted" style={{ whiteSpace: 'normal', maxWidth: 260, fontSize: '.78rem' }}>{o.note || ''}</td>
+            </tr>
+          )
+        })}</tbody>
+      </table>
+    </div>
+  )
+}
+
+function WatchTable({ watch }) {
+  if (!watch?.length) return <Empty>模擬帳戶沒有持股。</Empty>
+  return (
+    <table className="data-table">
+      <thead><tr><th>股票</th><th className="num">股數</th><th className="num">成本</th><th className="num">最後收盤</th><th className="num">損益</th><th className="num">停損價</th><th className="num">距停損</th></tr></thead>
+      <tbody>{watch.map(w => (
+        <tr key={w.stock_id} style={{ background: w.to_stop_pct != null && w.to_stop_pct < 0.03 ? 'var(--red-soft)' : undefined }}>
+          <td><strong>{w.stock_id}</strong></td><td className="num">{w.shares.toLocaleString()}</td><td className="num">{w.cost ?? '–'}</td><td className="num">{w.last ?? '–'}</td>
+          <td className="num"><span className={w.pnl_pct > 0 ? 'up' : w.pnl_pct < 0 ? 'down' : 'muted'}>{spct(w.pnl_pct)}</span></td>
+          <td className="num">{w.stop ?? '–'}</td><td className="num">{w.to_stop_pct == null ? '–' : <span className={w.to_stop_pct < 0.03 ? 'down' : ''}>{pct(w.to_stop_pct)}</span>}</td>
+        </tr>
+      ))}</tbody>
+    </table>
+  )
+}
+
+function EventList({ events }) {
+  if (!events?.length) return <Empty>還沒有事件。</Empty>
+  return (
+    <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+      {events.map(ev => {
+        const [icon, label] = EVENT_KIND[ev.kind] || ['·', ev.kind]
+        const d = ev.detail || {}
+        const text = ev.kind === 'fill' ? `${d.side === 'buy' ? '買' : '賣'} ${d.shares} 股 @ ${d.price}（${ORDER_REASON[d.reason] || d.reason}）`
+          : ev.kind === 'orders' ? `清單 ${d.rebalance_date}：${d.n} 張（賣 ${d.sell}、買 ${d.buy}）${d.guard ? '，守門擋掉買單' : ''}`
+          : ev.kind === 'signal' ? `清單 ${d.rebalance_date}：${d.n} 檔，新進 ${(d.new || []).join('、') || '無'}`
+          : ev.kind === 'stop_loss' ? `收盤 ${d.close} ≤ 成本 ${d.cost}，${d.shares} 股隔天賣`
+          : ev.kind === 'unfilled' ? `${d.note}；新限價 ${d.new_limit}`
+          : ev.kind === 'error' ? d.msg : ev.kind === 'guard' ? `清單 ${d.rebalance_date}：擋掉 ${d.skipped_buys} 張買單`
+          : ev.kind === 'config' ? Object.entries(d).filter(([, v]) => v != null).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' ') : JSON.stringify(d)
+        return (
+          <div key={ev.id} style={{ display: 'grid', gridTemplateColumns: '1.4rem 7rem 1fr', gap: '.5rem', alignItems: 'baseline', padding: '.42rem 1.25rem', borderBottom: '1px solid var(--border-soft)', fontSize: '.84rem', background: ev.kind === 'error' ? 'var(--red-soft)' : undefined }}>
+            <span>{icon}</span>
+            <span className="muted" style={{ fontSize: '.74rem', fontVariantNumeric: 'tabular-nums' }}>{hhmm(ev.ts)}</span>
+            <span><strong style={{ marginRight: '.4rem' }}>{label}</strong>{ev.stock_id ? <strong style={{ marginRight: '.3rem' }}>{ev.stock_id}</strong> : null}{text}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function ObserveTab({ status, orders, events, paper }) {
+  const [filter, setFilter] = useState('')
+  const shown = filter ? (orders || []).filter(o => o.status === filter) : orders
+  const r = paper?.review
+  const nearest = [...(status?.watch || [])].filter(x => x.to_stop_pct != null).sort((a, b) => a.to_stop_pct - b.to_stop_pct)[0]
+  return (
+    <>
+      <div className="stat-grid">
+        <div className="stat-tile"><div className="k">模擬帳戶對 0050</div><div className="v">{r?.days ? <span className={r.active_return > 0 ? 'up' : 'down'}>{spct(r.active_return)}</span> : '–'}</div><div className="s">{r?.days ? `${r.since} ～ ${r.as_of}，${r.days} 個交易日 · 組合 ${spct(r.port_return)} / 0050 ${spct(r.bench_return)}` : '尚未結算'}</div></div>
+        <div className="stat-tile"><div className="k">淨值</div><div className="v">{r?.nav ? money(r.nav) : '–'}</div><div className="s">{r?.nav ? `現金 ${money(r.cash)} · ${r.n_holdings} 檔` : ''}</div></div>
+        <div className="stat-tile"><div className="k">待成交</div><div className="v">{(status?.pending || []).length}</div><div className="s">{(status?.pending || []).slice(0, 4).map(p => `${p.side === 'buy' ? '買' : '賣'} ${p.stock_id}`).join('、')}</div></div>
+        <div className="stat-tile"><div className="k">最接近停損</div>{nearest ? <><div className="v"><span className={nearest.to_stop_pct < 0.03 ? 'down' : ''}>{nearest.stock_id}</span></div><div className="s">距停損 {pct(nearest.to_stop_pct)} · 損益 {spct(nearest.pnl_pct)}</div></> : <><div className="v">–</div><div className="s">沒有持股</div></>}</div>
+      </div>
+      <div className="two-col" style={{ padding: '1rem 1.25rem 0', gap: '1.1rem' }}>
+        <div className="card">
+          <div className="card-header"><div className="card-title">停損監看</div><Sub>收盤 ≤ 成本 × (1 − {pct(status?.engine?.rules?.stop_loss_pct ?? 0.15, 0)}) 隔天賣</Sub></div>
+          <WatchTable watch={status?.watch} />
+        </div>
+        <div className="card">
+          <div className="card-header"><div className="card-title">引擎事件</div><Sub>最近 {events?.length || 0} 筆</Sub></div>
+          <EventList events={events} />
+        </div>
+      </div>
+      <div style={{ padding: '1rem 1.25rem' }}>
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">委託單</div>
+            <div className="btn-group">{[['', '全部'], ['pending', '待成交'], ['filled', '已成交'], ['cancelled', '取消'], ['rejected', '拒絕']].map(([k, l]) => <button key={k} className={`btn-period${filter === k ? ' active' : ''}`} onClick={() => setFilter(k)}>{l}</button>)}</div>
+          </div>
+          <OrdersTable orders={shown} />
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════ 手動指令（Iteration 57） ═══════════════════════════════════════
 const REASON = { new: ['新進場', 'green'], exit: ['退出清單', 'red'], rebalance: ['調整權重', 'blue'] }
 
-// ── 指令表：勾選 → 登記 ────────────────────────────────────────────────────
-function OrdersTable({ plan, onRegistered }) {
+function ManualOrders({ plan, onRegistered }) {
   const [checked, setChecked] = useState({})
-  const [fills, setFills] = useState({})        // stock_id → 實際成交價（可改）
+  const [fills, setFills] = useState({})
   const [date, setDate] = useState(today())
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
-
   useEffect(() => { setChecked({}); setFills({}) }, [plan?.list?.rebalance_date, plan?.summary?.cash])
-
   const orders = plan.orders
   const picked = orders.filter(o => checked[o.stock_id])
-  const allOn = orders.length > 0 && picked.length === orders.length
-
   async function register() {
     if (!picked.length) return
     setBusy(true); setMsg('')
     let ok = 0; const errs = []
     for (const o of picked) {
-      const price = Number(fills[o.stock_id] ?? o.price)
-      const { error } = await addTrade({ stock_id: o.stock_id, trade_date: date, side: o.side, shares: o.shares, price, note: plan.note })
+      const { error } = await addTrade({ stock_id: o.stock_id, trade_date: date, side: o.side, shares: o.shares, price: Number(fills[o.stock_id] ?? o.price), note: plan.note })
       if (error) errs.push(`${o.stock_id}：${error}`); else ok++
     }
-    setBusy(false)
+    setBusy(false); setChecked({})
     setMsg(errs.length ? `登記 ${ok} 筆，失敗 ${errs.length} 筆：${errs.join('；')}` : `已登記 ${ok} 筆進交易台帳（${plan.note}）`)
-    setChecked({})
     onRegistered()
   }
-
   function copyText() {
-    const lines = orders.map(o => `${o.side === 'Buy' ? '買' : '賣'} ${o.stock_id} ${o.stock_name || ''} ${o.shares} 股 @${o.price}（約 ${money(o.gross)}）`)
-    const text = `${plan.note}\n${lines.join('\n')}`
+    const text = `${plan.note}\n${orders.map(o => `${o.side === 'Buy' ? '買' : '賣'} ${o.stock_id} ${o.stock_name || ''} ${o.shares} 股 @${o.price}（約 ${money(o.gross)}）`).join('\n')}`
     try { navigator.clipboard.writeText(text); setMsg('指令已複製到剪貼簿') } catch { setMsg('瀏覽器不讓複製，請手動選取') }
   }
-
-  if (!orders.length) {
-    return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>依目前持股與現金，沒有需要下的單（偏離 {pct(plan.summary.drift_before)}，每筆調整都小於 NT${money(plan.summary.min_trade)}）。</div>
-  }
+  if (!orders.length) return <Empty>依目前持股與現金，沒有需要下的單（偏離 {pct(plan.summary.drift_before)}，每筆調整都小於 NT${money(plan.summary.min_trade)}）。</Empty>
   return (
     <>
       <div style={{ display: 'flex', gap: '.6rem', alignItems: 'center', flexWrap: 'wrap', padding: '.7rem 1.25rem', borderBottom: '1px solid var(--border-soft)' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem', fontSize: '.84rem' }}>
-          <input type="checkbox" checked={allOn} onChange={e => setChecked(e.target.checked ? Object.fromEntries(orders.map(o => [o.stock_id, true])) : {})} /> 全選
-        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '.35rem', fontSize: '.84rem' }}><input type="checkbox" checked={orders.length > 0 && picked.length === orders.length} onChange={e => setChecked(e.target.checked ? Object.fromEntries(orders.map(o => [o.stock_id, true])) : {})} /> 全選</label>
         <label style={{ fontSize: '.84rem' }}>成交日 <input type="date" className="ctrl-select" value={date} onChange={e => setDate(e.target.value)} /></label>
         <button className="btn-primary" disabled={!picked.length || busy} onClick={register}>{busy ? '登記中…' : `登記已執行的 ${picked.length} 筆`}</button>
         <button className="btn-secondary" onClick={copyText}>複製指令文字</button>
@@ -73,199 +301,247 @@ function OrdersTable({ plan, onRegistered }) {
       </div>
       <div style={{ overflowX: 'auto' }}>
         <table className="data-table">
-          <thead>
-            <tr>
-              <th className="mid">已執行</th><th>動作</th><th>股票</th><th className="num">股數</th><th className="num">參考價</th>
-              <th className="num">成交價<Sub>可改</Sub></th><th className="num">金額</th><th className="num">費用<Sub>手續費＋稅</Sub></th>
-              <th className="num">權重<Sub>現在 → 目標</Sub></th><th>原因</th>
-            </tr>
-          </thead>
-          <tbody>
-            {orders.map(o => {
-              const [label, cls] = REASON[o.reason] || [o.reason, '']
-              return (
-                <tr key={o.stock_id} style={{ background: checked[o.stock_id] ? 'var(--blue-soft)' : undefined }}>
-                  <td className="mid"><input type="checkbox" checked={!!checked[o.stock_id]} onChange={e => setChecked({ ...checked, [o.stock_id]: e.target.checked })} /></td>
-                  <td><strong className={o.side === 'Buy' ? 'up' : 'down'}>{o.side === 'Buy' ? '買進' : '賣出'}</strong></td>
-                  <td><strong>{o.stock_id}</strong> {o.stock_name || ''}</td>
-                  <td className="num"><strong>{o.shares.toLocaleString()}</strong> 股<Sub>{formatShares(o.shares)}</Sub></td>
-                  <td className="num">{o.price}</td>
-                  <td className="num"><input type="number" step="0.01" className="ctrl-select" style={{ width: 96, textAlign: 'right' }} value={fills[o.stock_id] ?? o.price} onChange={e => setFills({ ...fills, [o.stock_id]: e.target.value })} /></td>
-                  <td className="num">{money(o.gross)}</td>
-                  <td className="num">{money(o.fee + o.tax)}</td>
-                  <td className="num">{pct(o.weight_now)} → {pct(o.weight_target)}<Sub>{o.shares_now.toLocaleString()} → {o.shares_target.toLocaleString()} 股</Sub></td>
-                  <td><span className={`tag ${cls}`}>{label}</span></td>
-                </tr>
-              )
-            })}
-          </tbody>
+          <thead><tr><th className="mid">已執行</th><th>動作</th><th>股票</th><th className="num">股數</th><th className="num">參考價</th><th className="num">成交價<Sub>可改</Sub></th><th className="num">金額</th><th className="num">費用</th><th className="num">權重<Sub>現在 → 目標</Sub></th><th>原因</th></tr></thead>
+          <tbody>{orders.map(o => { const [label, cls] = REASON[o.reason] || [o.reason, '']; return (
+            <tr key={o.stock_id} style={{ background: checked[o.stock_id] ? 'var(--blue-soft)' : undefined }}>
+              <td className="mid"><input type="checkbox" checked={!!checked[o.stock_id]} onChange={e => setChecked({ ...checked, [o.stock_id]: e.target.checked })} /></td>
+              <td><strong className={o.side === 'Buy' ? 'up' : 'down'}>{o.side === 'Buy' ? '買進' : '賣出'}</strong></td>
+              <td><strong>{o.stock_id}</strong> {o.stock_name || ''}</td>
+              <td className="num"><strong>{o.shares.toLocaleString()}</strong> 股<Sub>{formatShares(o.shares)}</Sub></td>
+              <td className="num">{o.price}</td>
+              <td className="num"><input type="number" step="0.01" className="ctrl-select" style={{ width: 96, textAlign: 'right' }} value={fills[o.stock_id] ?? o.price} onChange={e => setFills({ ...fills, [o.stock_id]: e.target.value })} /></td>
+              <td className="num">{money(o.gross)}</td><td className="num">{money(o.fee + o.tax)}</td>
+              <td className="num">{pct(o.weight_now)} → {pct(o.weight_target)}<Sub>{o.shares_now.toLocaleString()} → {o.shares_target.toLocaleString()} 股</Sub></td>
+              <td><span className={`tag ${cls}`}>{label}</span></td>
+            </tr>) })}</tbody>
         </table>
       </div>
     </>
   )
 }
 
-function PositionsTable({ positions }) {
-  if (!positions?.length) return null
-  return (
-    <div style={{ overflowX: 'auto' }}>
-      <table className="data-table">
-        <thead><tr><th>股票</th><th className="num">排名</th><th className="num">持有</th><th className="num">目標</th><th className="num">權重 現在</th><th className="num">目標</th><th className="num">參考價</th><th>本次</th></tr></thead>
-        <tbody>
-          {positions.map(p => (
-            <tr key={p.stock_id}>
-              <td><strong>{p.stock_id}</strong> {p.stock_name || ''}{p.is_new ? <span className="up"> ★</span> : null}</td>
-              <td className="num">{p.rank == null ? (p.weight_target > 0 ? '固定/續抱' : '退出') : `#${p.rank}`}</td>
-              <td className="num">{p.shares_now.toLocaleString()}</td>
-              <td className="num">{p.shares_target.toLocaleString()}</td>
-              <td className="num">{pct(p.weight_now)}</td>
-              <td className="num">{pct(p.weight_target)}</td>
-              <td className="num">{p.price}</td>
-              <td>{p.side ? <span className={p.side === 'Buy' ? 'up' : 'down'}>{p.side === 'Buy' ? '買' : '賣'} {p.shares.toLocaleString()}</span> : <span className="muted">不動</span>}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
-function LogTable({ log }) {
-  if (!log?.items?.length) return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>還沒有用程式交易登記過的交易。登記後這裡按清單分批，對得出每一批買了多少、賣了多少、花了多少費用。</div>
-  return (
-    <>
-      <div className="stat-grid">
-        {log.batches.slice(0, 4).map(b => (
-          <div className="stat-tile" key={b.batch}>
-            <div className="k">清單 {b.batch}</div>
-            <div className="v">{b.n} 筆</div>
-            <div className="s">買 {money(b.buy)} · 賣 {money(b.sell)} · 費用 {money(b.fees)} · {b.first}{b.last !== b.first ? `～${b.last}` : ''}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ maxHeight: 360, overflowY: 'auto' }}>
-        <table className="data-table">
-          <thead><tr><th>成交日</th><th>清單</th><th>動作</th><th>股票</th><th className="num">股數</th><th className="num">價格</th><th className="num">金額</th><th className="num">費用</th><th className="num">之後持有</th><th className="num">已實現</th></tr></thead>
-          <tbody>
-            {log.items.map(t => (
-              <tr key={t.id}>
-                <td>{t.trade_date}</td><td>{t.batch || '–'}</td>
-                <td><span className={t.side === 'Buy' ? 'up' : 'down'}>{t.side === 'Buy' ? '買' : '賣'}</span></td>
-                <td><strong>{t.stock_id}</strong> {t.stock_name || ''}</td>
-                <td className="num">{t.shares?.toLocaleString()}</td><td className="num">{t.price}</td><td className="num">{money(t.gross)}</td>
-                <td className="num">{money((t.fee || 0) + (t.tax || 0))}</td><td className="num">{t.shares_after?.toLocaleString() ?? '–'}</td>
-                <td className="num">{t.realized_pnl != null ? <span className={t.realized_pnl > 0 ? 'up' : t.realized_pnl < 0 ? 'down' : 'muted'}>{money(t.realized_pnl)}</span> : '–'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </>
-  )
-}
-
-export default function AlgoTrading() {
+function ManualTab() {
   const [cash, setCash] = useState(() => Number(readLS(CASH_KEY, 300000)))
   const [minTrade, setMinTrade] = useState(() => Number(readLS(MIN_KEY, 1000)))
   const [plan, setPlan] = useState(null)
   const [log, setLog] = useState(null)
-  const [paper, setPaper] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-
   const load = useCallback(async (c = cash, m = minTrade) => {
     setLoading(true)
-    const [p, l, pp] = await Promise.all([getTradingPlan(c, m), getTradingLog(), getPortfolioPaper()])
+    const [p, l] = await Promise.all([getTradingPlan(c, m), getTradingLog()])
     if (p.error) { setError(p.error); setPlan(null) } else { setError(''); setPlan(p.data) }
-    setLog(l.data); setPaper(pp.data)
-    setLoading(false)
+    setLog(l.data); setLoading(false)
   }, [cash, minTrade])
-
-  useEffect(() => { load() }, [])   // eslint-disable-line react-hooks/exhaustive-deps
-  function run() { writeLS(CASH_KEY, cash); writeLS(MIN_KEY, minTrade); load(cash, minTrade) }
-
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const s = plan?.summary
-  const review = paper?.review
-  const managedValue = useMemo(() => s ? s.position_value : null, [s])
-
   return (
     <>
-      {/* 控制列 */}
+      <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '.9rem 1.25rem', borderBottom: '1px solid var(--border-soft)' }}>
+        <Sub>{plan?.list ? <>清單訊號日 <strong>{plan.list.rebalance_date}</strong> · {plan.list.n} 檔 · 參考價至 {plan.list.price_date || '–'}</> : '清單讀取中'}</Sub>
+        <div className="ctrl-group"><div className="ctrl-label">可投入現金（NT$）</div><input type="number" className="ctrl-select" style={{ width: 140, textAlign: 'right' }} value={cash} min={0} step={10000} onChange={e => setCash(Number(e.target.value))} /></div>
+        <div className="btn-group">{QUICK.map(q => <button key={q} className={`btn-period${cash === q ? ' active' : ''}`} onClick={() => setCash(q)}>{q / 10000} 萬</button>)}</div>
+        <div className="ctrl-group"><div className="ctrl-label">最小下單金額</div><input type="number" className="ctrl-select" style={{ width: 96, textAlign: 'right' }} value={minTrade} min={0} step={500} onChange={e => setMinTrade(Number(e.target.value))} /></div>
+        <button className="btn-primary" onClick={() => { writeLS(CASH_KEY, cash); writeLS(MIN_KEY, minTrade); load(cash, minTrade) }} disabled={loading}>{loading ? '計算中…' : '產生指令'}</button>
+      </div>
+      {error ? <div className="down" style={{ padding: '1rem 1.25rem' }}>{error}</div> : null}
+      {s ? (
+        <div className="stat-grid">
+          <div className="stat-tile"><div className="k">總資產（範圍內）</div><div className="v">{money(s.total)}</div><div className="s">現金 {money(s.cash)} ＋ 策略持股 {money(s.position_value)}</div></div>
+          <div className="stat-tile"><div className="k">指令</div><div className="v"><span className="down">{s.n_sell} 賣</span> / <span className="up">{s.n_buy} 買</span></div><div className="s">賣出淨入 {money(s.sell_net)} · 買進成本 {money(s.buy_cost)}</div></div>
+          <div className="stat-tile"><div className="k">執行後現金</div><div className="v">{money(s.cash_after)}</div><div className="s">費用合計 {money(s.fees)}</div></div>
+          <div className="stat-tile"><div className="k">權重偏離</div><div className="v">{pct(s.drift_before)} → {pct(s.drift_after)}</div><div className="s">不動的其他持股 {plan.untouched.length} 檔</div></div>
+        </div>
+      ) : null}
+      {plan?.warnings?.length ? <div className="note-box" style={{ color: 'var(--orange)' }}>{plan.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}</div> : null}
+      {plan ? <ManualOrders plan={plan} onRegistered={() => load(cash, minTrade)} /> : null}
+      <div className="card-header" style={{ borderTop: '1px solid var(--border-soft)' }}><div className="card-title">執行紀錄</div><Sub>台帳裡 note 以 [程式交易] 開頭的交易，按清單分批</Sub></div>
+      {log?.items?.length ? (
+        <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+          <table className="data-table">
+            <thead><tr><th>成交日</th><th>清單</th><th>動作</th><th>股票</th><th className="num">股數</th><th className="num">價格</th><th className="num">金額</th><th className="num">費用</th><th className="num">之後持有</th><th className="num">已實現</th></tr></thead>
+            <tbody>{log.items.map(t => (
+              <tr key={t.id}><td>{t.trade_date}</td><td>{t.batch || '–'}</td><td><span className={t.side === 'Buy' ? 'up' : 'down'}>{t.side === 'Buy' ? '買' : '賣'}</span></td><td><strong>{t.stock_id}</strong> {t.stock_name || ''}</td>
+                <td className="num">{t.shares?.toLocaleString()}</td><td className="num">{t.price}</td><td className="num">{money(t.gross)}</td><td className="num">{money((t.fee || 0) + (t.tax || 0))}</td><td className="num">{t.shares_after?.toLocaleString() ?? '–'}</td>
+                <td className="num">{t.realized_pnl != null ? <span className={t.realized_pnl > 0 ? 'up' : t.realized_pnl < 0 ? 'down' : 'muted'}>{money(t.realized_pnl)}</span> : '–'}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : <Empty>還沒有用手動指令登記過的交易。</Empty>}
+      <div className="note-box">沒接券商時的手動路徑：這裡算指令，你到券商 App 用零股限價單下，成交價填回再登記；台帳會重算均價與已實現損益。手續費 0.1425%（零股最低 1 元），賣出另有 0.3% 證交稅。</div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════ 歷史模擬（Iteration 59） ═══════════════════════════════════════
+const REPLAY_KEY = 'algo_replay'
+const REPLAY_DEFAULT = { start: '2018-11-12', end: '2024-09-30', capital: 1000000, stop_loss_pct: 0.15, rel_dd_guard: 0.10, limit_slip: 0.005, max_attempts: 3 }
+
+function ReplayChart({ r }) {
+  const e = r.variants.engine.series, p = r.variants.plain.series
+  if (!e?.length) return null
+  const toPts = (arr, k) => arr.map(x => [new Date(x.d).getTime(), x[k]])
+  const data = [
+    { name: '引擎規則（限價＋重掛＋停損＋守門）', data: toPts(e, 'nav') },
+    { name: '照單全收（紙上原本的方式）', data: toPts(p, 'nav') },
+    { name: '0050 含息', data: toPts(e, 'bench') },
+  ]
+  const options = {
+    chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, background: 'transparent' },
+    stroke: { width: [2.5, 2, 1.5], curve: 'straight', dashArray: [0, 0, 4] },
+    colors: [dark() ? '#5b9dff' : '#1d6ff2', '#f2c14e', '#9aa4b2'],
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+    yaxis: { labels: { formatter: v => v.toFixed(2) }, title: { text: '淨值（起點 1）' }, logarithmic: false },
+    tooltip: { x: { format: 'yyyy-MM-dd' }, y: { formatter: v => v?.toFixed(3) } },
+    legend: { position: 'top' },
+    grid: { borderColor: 'rgba(128,128,128,0.18)' },
+    theme: { mode: dark() ? 'dark' : 'light' },
+  }
+  return <div className="chart-pad"><ReactApexChart type="line" series={data} options={options} height={320} /></div>
+}
+
+function ReplayMetricsTable({ r }) {
+  const e = r.variants.engine, p = r.variants.plain
+  const rows = [
+    ['總報酬', 'total_return', spct], ['0050 含息', 'bench_return', spct], ['主動報酬（期末）', 'active_return', spct], ['年化主動報酬', 'ann_active', spct],
+    ['追蹤誤差', 'tracking_error', v => pct(v)], ['資訊比率', 'info_ratio', v => v ?? '–'], ['月勝率', 'monthly_win_rate', v => pct(v, 0)],
+    ['相對最大落後', 'rel_mdd', v => pct(v)], ['最大回撤', 'mdd_port', v => pct(v)], ['年換手', 'turnover_annual', v => v ?? '–'], ['成本／年', 'cost_drag_annual', v => pct(v, 2)],
+    ['期末淨值', 'final_nav', money],
+  ]
+  return (
+    <table className="data-table">
+      <thead><tr><th>指標</th><th className="num">引擎規則</th><th className="num">照單全收</th><th className="num">引擎 − 照單</th></tr></thead>
+      <tbody>
+        {rows.map(([label, k, f]) => {
+          const a = e.metrics[k], b = p.metrics[k]
+          const d = (typeof a === 'number' && typeof b === 'number') ? a - b : null
+          return <tr key={k}><td>{label}</td><td className="num">{f(a)}</td><td className="num">{f(b)}</td><td className="num">{d == null ? '–' : <span className={d > 0 ? 'up' : d < 0 ? 'down' : 'muted'}>{k === 'final_nav' ? money(d) : k === 'info_ratio' || k === 'turnover_annual' ? d.toFixed(2) : spct(d)}</span>}</td></tr>
+        })}
+        {[['委託', 'orders'], ['成交', 'filled'], ['未成交重掛', 'unfilled'], ['取消', 'cancelled'], ['拒絕', 'rejected'], ['停損觸發', 'stop_loss'], ['守門擋買單的清單', 'guard_days']].map(([label, k]) => (
+          <tr key={k}><td className="muted">{label}</td><td className="num">{e.stats[k]}</td><td className="num">{p.stats[k]}</td><td className="num muted">{e.stats[k] - p.stats[k]}</td></tr>
+        ))}
+        <tr><td className="muted">停損的已實現損益合計</td><td className="num"><span className={e.stop_loss_pnl < 0 ? 'down' : 'up'}>{money(e.stop_loss_pnl)}</span></td><td className="num">–</td><td className="num">–</td></tr>
+      </tbody>
+    </table>
+  )
+}
+
+function ReplayTab({ rules }) {
+  const [form, setForm] = useState(() => { try { return { ...REPLAY_DEFAULT, ...(JSON.parse(readLS(REPLAY_KEY, 'null')) || {}) } } catch { return REPLAY_DEFAULT } })
+  const [r, setR] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => { if (rules && !readLS(REPLAY_KEY, null)) setForm(f => ({ ...f, stop_loss_pct: rules.stop_loss_pct, rel_dd_guard: rules.rel_dd_guard, limit_slip: rules.limit_slip, max_attempts: rules.max_attempts })) }, [rules])
+  async function run() {
+    setBusy(true); setError('')
+    writeLS(REPLAY_KEY, JSON.stringify(form))
+    const { data, error } = await getEngineReplay(form)
+    setBusy(false)
+    if (error) { setError(error); return }
+    if (!data.available) { setError(`沒辦法回放：${data.reason}${data.notes?.length ? `（${data.notes.join('；')}）` : ''}`); setR(null); return }
+    setR(data)
+  }
+  const F = (k, label, props = {}) => (
+    <div className="ctrl-group"><div className="ctrl-label">{label}</div>
+      <input className="ctrl-select" style={{ width: props.width || 110, textAlign: props.type === 'date' ? 'left' : 'right' }} type={props.type || 'number'} step={props.step}
+             value={form[k] ?? ''} onChange={e => setForm({ ...form, [k]: props.type === 'date' ? e.target.value : Number(e.target.value) })} />
+    </div>
+  )
+  const yrs = r ? Object.keys({ ...r.variants.engine.metrics.yearly_active, ...r.variants.plain.metrics.yearly_active }).sort() : []
+  return (
+    <>
+      <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap', padding: '.9rem 1.25rem', borderBottom: '1px solid var(--border-soft)' }}>
+        {F('start', '起', { type: 'date', width: 140 })}{F('end', '迄', { type: 'date', width: 140 })}{F('capital', '資金', { step: 100000, width: 120 })}
+        <div className="ctrl-group"><div className="ctrl-label">停損（0 = 關）</div><input className="ctrl-select" style={{ width: 80, textAlign: 'right' }} type="number" step={0.01} value={form.stop_loss_pct} onChange={e => setForm({ ...form, stop_loss_pct: Number(e.target.value) })} /></div>
+        {F('rel_dd_guard', '相對回撤守門', { step: 0.01, width: 90 })}{F('limit_slip', '限價 ±', { step: 0.001, width: 90 })}{F('max_attempts', '重掛上限', { step: 1, width: 80 })}
+        <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '回放中…' : '回放'}</button>
+        <div className="btn-group">
+          {[['停損 15%', { stop_loss_pct: 0.15 }], ['停損 25%', { stop_loss_pct: 0.25 }], ['不停損', { stop_loss_pct: 0 }], ['限價 ±1%', { limit_slip: 0.01 }]].map(([l, patch]) => (
+            <button key={l} className="btn-period" onClick={() => setForm({ ...form, ...patch })}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {error ? <div className="down" style={{ padding: '1rem 1.25rem' }}>{error}</div> : null}
+      {!r && !error ? <Empty>選期間與規則按「回放」：把引擎的整套規則套在候選期間的歷史清單與實際日線上，和「照單全收」對照。候選清單從 2018-11-12 起到 2024-09-11；保留期（2024-10 起）沒有清單、不在這裡開。</Empty> : null}
+      {r ? (
+        <>
+          {r.notes?.length ? <div className="note-box" style={{ color: 'var(--orange)' }}>{r.notes.map((n, i) => <div key={i}>⚠ {n}</div>)}</div> : null}
+          <div className="stat-grid">
+            <div className="stat-tile"><div className="k">期間</div><div className="v" style={{ fontSize: '1rem' }}>{r.start} ～ {r.end}</div><div className="s">{r.n_lists} 份清單 · {r.n_days} 個交易日 · {r.n_stocks} 檔 · run #{r.run_id}{r.cached ? ' · 快取' : ` · ${r.computed_in_s}s`}</div></div>
+            <div className="stat-tile"><div className="k">引擎規則</div><div className="v"><span className={r.variants.engine.metrics.total_return > 0 ? 'up' : 'down'}>{spct(r.variants.engine.metrics.total_return, 1)}</span></div><div className="s">年化主動 {spct(r.variants.engine.metrics.ann_active)} · IR {r.variants.engine.metrics.info_ratio ?? '–'}</div></div>
+            <div className="stat-tile"><div className="k">照單全收</div><div className="v"><span className={r.variants.plain.metrics.total_return > 0 ? 'up' : 'down'}>{spct(r.variants.plain.metrics.total_return, 1)}</span></div><div className="s">年化主動 {spct(r.variants.plain.metrics.ann_active)} · IR {r.variants.plain.metrics.info_ratio ?? '–'}</div></div>
+            <div className="stat-tile"><div className="k">0050 含息</div><div className="v">{spct(r.variants.engine.metrics.bench_return, 1)}</div><div className="s">年化 {spct(r.variants.engine.metrics.cagr_bench)}</div></div>
+            <div className="stat-tile"><div className="k">規則的代價／好處</div><div className="v"><span className={r.engine_minus_plain.total_return > 0 ? 'up' : 'down'}>{spct(r.engine_minus_plain.total_return, 1)}</span></div><div className="s">停損 {r.variants.engine.stats.stop_loss} 次（損益 {money(r.variants.engine.stop_loss_pnl)}）· 重掛 {r.variants.engine.stats.unfilled} · 取消 {r.variants.engine.stats.cancelled}</div></div>
+          </div>
+          <ReplayChart r={r} />
+          <div className="two-col" style={{ padding: '0 1.25rem 1rem', gap: '1.1rem' }}>
+            <div className="card"><div className="card-header"><div className="card-title">指標對照</div></div><ReplayMetricsTable r={r} /></div>
+            <div className="card">
+              <div className="card-header"><div className="card-title">逐年主動報酬</div><Sub>對 0050</Sub></div>
+              <table className="data-table">
+                <thead><tr><th>年</th><th className="num">引擎規則</th><th className="num">照單全收</th></tr></thead>
+                <tbody>{yrs.map(y => <tr key={y}><td>{y}</td><td className="num"><span className={(r.variants.engine.metrics.yearly_active[y] ?? 0) > 0 ? 'up' : 'down'}>{spct(r.variants.engine.metrics.yearly_active[y])}</span></td><td className="num"><span className={(r.variants.plain.metrics.yearly_active[y] ?? 0) > 0 ? 'up' : 'down'}>{spct(r.variants.plain.metrics.yearly_active[y])}</span></td></tr>)}</tbody>
+              </table>
+              <div className="card-header" style={{ borderTop: '1px solid var(--border-soft)' }}><div className="card-title">停損紀錄</div><Sub>最近 {r.variants.engine.stop_losses.length} 筆</Sub></div>
+              {r.variants.engine.stop_losses.length ? (
+                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <table className="data-table">
+                    <thead><tr><th>賣出日</th><th>股票</th><th className="num">股數</th><th className="num">成本</th><th className="num">觸發收盤</th><th className="num">賣價</th><th className="num">損益</th></tr></thead>
+                    <tbody>{[...r.variants.engine.stop_losses].reverse().map((s, i) => <tr key={i}><td>{s.date}</td><td><strong>{s.stock_id}</strong></td><td className="num">{s.shares}</td><td className="num">{s.cost}</td><td className="num">{s.trigger_close}</td><td className="num">{s.sold}</td><td className="num"><span className={s.pnl > 0 ? 'up' : 'down'}>{money(s.pnl)}</span></td></tr>)}</tbody>
+                  </table>
+                </div>
+              ) : <Empty>這組規則沒有觸發停損。</Empty>}
+            </div>
+          </div>
+          <div className="note-box">{r.caveat}</div>
+        </>
+      ) : null}
+    </>
+  )
+}
+
+// ═══════════════════════════════════════ 頁 ═══════════════════════════════════════
+const TABS = [['engine', '引擎'], ['forecast', '預測'], ['observe', '觀察'], ['replay', '歷史模擬'], ['manual', '手動指令']]
+
+export default function AlgoTrading() {
+  const [tab, setTab] = useState(() => readLS(TAB_KEY, 'engine'))
+  const [status, setStatus] = useState(null)
+  const [orders, setOrders] = useState(null)
+  const [events, setEvents] = useState(null)
+  const [forecast, setForecast] = useState(null)
+  const [paper, setPaper] = useState(null)
+  const [error, setError] = useState('')
+
+  const load = useCallback(async () => {
+    const [s, o, ev, f, p] = await Promise.all([getEngineStatus(), getEngineOrders(null, 300), getEngineEvents(120), getEngineForecast(), getPortfolioPaper()])
+    setError(s.error || '')
+    setStatus(s.data); setOrders(o.data?.orders || null); setEvents(ev.data?.events || null); setForecast(f.data); setPaper(p.data)
+  }, [])
+  useEffect(() => { load(); const t = setInterval(load, 60_000); return () => clearInterval(t) }, [load])
+  function pick(k) { setTab(k); writeLS(TAB_KEY, k) }
+
+  const e = status?.engine
+  return (
+    <>
       <div className="card" style={{ marginBottom: '1.1rem' }}>
         <div className="card-header">
           <div>
-            <div className="card-title">候選策略 → 下單指令</div>
-            <Sub>
-              {plan?.list ? <>清單訊號日 <strong>{plan.list.rebalance_date}</strong> · {plan.list.n} 檔 · 參考價至 {plan.list.price_date || '–'} · run #{plan.list.run_id}</> : '清單讀取中'}
-              {plan?.schedule ? <> · 下一個訊號日約 <strong>{plan.schedule.signal_date}</strong>（{plan.schedule.exec_date} 開盤成交）</> : null}
-            </Sub>
+            <div className="card-title">程式交易</div>
+            <Sub>選股、進出場、停損、下單規則寫成程式，每天 18:40 自動跑；{e ? `${e.enabled ? '執行中' : '關閉'} · ${e.mode === 'live' ? '實單（凱基）' : '紙上（模擬帳戶）'}` : '狀態讀取中'}{status?.next_signal_date ? ` · 下一個訊號日約 ${status.next_signal_date}` : ''}</Sub>
           </div>
-          <div style={{ display: 'flex', gap: '.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="ctrl-group">
-              <div className="ctrl-label">可投入現金（NT$）</div>
-              <input type="number" className="ctrl-select" style={{ width: 140, textAlign: 'right' }} value={cash} min={0} step={10000} onChange={e => setCash(Number(e.target.value))} />
-            </div>
-            <div className="btn-group">
-              {QUICK.map(q => <button key={q} className={`btn-period${cash === q ? ' active' : ''}`} onClick={() => setCash(q)}>{q / 10000} 萬</button>)}
-            </div>
-            <div className="ctrl-group">
-              <div className="ctrl-label">最小下單金額</div>
-              <input type="number" className="ctrl-select" style={{ width: 96, textAlign: 'right' }} value={minTrade} min={0} step={500} onChange={e => setMinTrade(Number(e.target.value))} />
-            </div>
-            <button className="btn-primary" onClick={run} disabled={loading}>{loading ? '計算中…' : '產生指令'}</button>
-          </div>
+          <div className="btn-group">{TABS.map(([k, l]) => <button key={k} className={`btn-period${tab === k ? ' active' : ''}`} onClick={() => pick(k)}>{l}</button>)}</div>
         </div>
-        {error ? <div className="down" style={{ padding: '1rem 1.25rem' }}>{error}</div> : null}
-        {s ? (
-          <div className="stat-grid">
-            <div className="stat-tile"><div className="k">總資產（範圍內）</div><div className="v">{money(s.total)}</div><div className="s">現金 {money(s.cash)} ＋ 策略持股 {money(managedValue)}</div></div>
-            <div className="stat-tile"><div className="k">指令</div><div className="v"><span className="down">{s.n_sell} 賣</span> / <span className="up">{s.n_buy} 買</span></div><div className="s">賣出淨入 {money(s.sell_net)} · 買進成本 {money(s.buy_cost)}</div></div>
-            <div className="stat-tile"><div className="k">執行後現金</div><div className="v">{money(s.cash_after)}</div><div className="s">費用合計 {money(s.fees)}</div></div>
-            <div className="stat-tile"><div className="k">權重偏離</div><div className="v">{pct(s.drift_before)} → {pct(s.drift_after)}</div><div className="s">Σ|現在 − 目標| ÷ 2</div></div>
-            <div className="stat-tile"><div className="k">紙上帳戶</div><div className="v">{review?.active_return != null ? <span className={review.active_return > 0 ? 'up' : 'down'}>{pct(review.active_return, 2)}</span> : '–'}</div><div className="s">{review?.days ? `對 0050，${review.days} 個交易日；待成交清單 ${paper?.pending?.length || 0} 份` : paper?.opened ? `已開戶（${review?.state?.started_on || ''}），尚未結算；待成交清單 ${paper?.pending?.length || 0} 份` : paper ? '模擬帳戶未開' : '讀不到'}</div></div>
-            <div className="stat-tile"><div className="k">策略範圍</div><div className="v">{plan.positions.length} 檔</div><div className="s">不動的其他持股 {plan.untouched.length} 檔</div></div>
-          </div>
-        ) : null}
-        {plan?.warnings?.length ? <div className="note-box" style={{ color: 'var(--orange)' }}>{plan.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}</div> : null}
+        {error ? <div className="down" style={{ padding: '.8rem 1.25rem' }}>{error}</div> : null}
+        {tab === 'engine' ? <EngineTab status={status} reload={load} /> : null}
+        {tab === 'forecast' ? <ForecastTab forecast={forecast} paper={paper} /> : null}
+        {tab === 'observe' ? <ObserveTab status={status} orders={orders} events={events} paper={paper} /> : null}
+        {tab === 'replay' ? <ReplayTab rules={status?.engine?.rules} /> : null}
+        {tab === 'manual' ? <ManualTab /> : null}
       </div>
-
-      {/* 指令表 */}
-      {plan ? (
-        <div className="card" style={{ marginBottom: '1.1rem' }}>
-          <div className="card-header"><div className="card-title">下單指令</div><Sub>先賣後買 · 零股限價單 · 執行完勾選登記，台帳是唯一的事實來源</Sub></div>
-          <OrdersTable plan={plan} onRegistered={() => load(cash, minTrade)} />
-        </div>
-      ) : null}
-
-      <div className="two-col" style={{ marginBottom: '1.1rem' }}>
-        <div className="card">
-          <div className="card-header"><div className="card-title">策略範圍內的部位</div><Sub>清單股票 ＋ 以前用這頁登記過的股票</Sub></div>
-          {plan ? <PositionsTable positions={plan.positions} /> : <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>–</div>}
-        </div>
-        <div className="card">
-          <div className="card-header"><div className="card-title">不動的其他持股</div><Sub>你自己買的，程式不會替你賣</Sub></div>
-          {plan?.untouched?.length ? (
-            <table className="data-table">
-              <thead><tr><th>股票</th><th className="num">股數</th><th className="num">最後收盤</th><th className="num">市值</th></tr></thead>
-              <tbody>{plan.untouched.map(u => <tr key={u.stock_id}><td><strong>{u.stock_id}</strong> {u.stock_name || ''}</td><td className="num">{u.shares.toLocaleString()}</td><td className="num">{u.last_price ?? '–'}</td><td className="num">{money(u.market_value)}</td></tr>)}</tbody>
-            </table>
-          ) : <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>沒有範圍外的持股</div>}
-        </div>
-      </div>
-
-      <div className="card" style={{ marginBottom: '1.1rem' }}>
-        <div className="card-header"><div className="card-title">執行紀錄</div><Sub>台帳裡 note 以 [程式交易] 開頭的交易，按清單分批</Sub></div>
-        <LogTable log={log} />
-      </div>
-
-      <div className="card">
-        <div className="note-box">
-          沒有券商 API：這一頁算指令，你到券商 App 用零股限價單下；成交價填回「成交價」欄再登記，台帳會重算均價與已實現損益（在「我的持股」也看得到，note 標 [程式交易]）。<br />
-          參考價是最新收盤，實際成交是下一個開盤；候選策略的回測與紙上交易都用開盤價，所以這裡的金額是「約」。<br />
-          手續費 0.1425%（零股最低 1 元、整股最低 20 元），賣出另有 0.3% 證交稅；券商折扣自己在登記時改 fee。<br />
-          每月 11 日起第一個交易日收盤算新清單（週末已避開，假日沒有）；清單換了再回來這一頁，退出清單的會出現賣單。
-        </div>
-      </div>
+      <div className="card"><div className="note-box">
+        紙上模式的成交用隔天實際開盤價模擬零股限價單（買：開盤 ≤ 限價才成交；賣：開盤 ≥ 限價），寫進同一本模擬帳戶，淨值曲線在「月調倉」頁也看得到。<br />
+        凱基：官方 Python 套件 kgiapp（.NET Framework 4.5、要先申請）；接口在 Crawler/brokers/kgi.py，填好 KGI_* 環境變數並實作 execute 後切「實單」。沒設好引擎會停下來記錯誤，不會送出任何單。
+      </div></div>
     </>
   )
 }

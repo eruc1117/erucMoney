@@ -28,6 +28,7 @@ WRITABLE_TABLES = [
     'us_daily_prices', 'us_tickers', 'futures_daily', 'index_daily_prices',
     'voting_results', 'weekly_forecast_runs', 'weekly_forecasts', 'users',
     'market_universe', 'market_daily_prices', 'portfolio_runs', 'portfolio_positions', 'portfolio_run_series', 'portfolio_live_list', 'portfolio_paper_state', 'portfolio_paper_trades', 'portfolio_paper_nav',
+    'trading_engine_state', 'trading_orders', 'trading_events',
 ]
 
 

@@ -322,6 +322,19 @@ export const getTradingPlan = (cash, minTrade = 1000) =>
   request(`/trading/plan?cash=${encodeURIComponent(cash)}&min_trade=${encodeURIComponent(minTrade)}`)
 // GET /trading/log
 export const getTradingLog = () => request('/trading/log')
+// 引擎（Iteration 58）：GET status／orders／events／forecast；POST config／run（admin）
+export const getEngineStatus = () => request('/trading/engine/status')
+export const getEngineOrders = (status = null, limit = 200) =>
+  request(`/trading/engine/orders?limit=${limit}${status ? `&status=${encodeURIComponent(status)}` : ''}`)
+export const getEngineEvents = (limit = 100) => request(`/trading/engine/events?limit=${limit}`)
+export const getEngineForecast = () => request('/trading/engine/forecast')
+export const setEngineConfig = (payload) => request('/trading/engine/config', { method: 'POST', body: JSON.stringify(payload) })
+export const runEngineDay = (day = null) => request(`/trading/engine/run${day ? `?day=${day}` : ''}`, { method: 'POST', timeout: 180000 })
+// 回放（Iteration 59）：GET /trading/engine/replay?start&end&capital&stop_loss_pct&rel_dd_guard&limit_slip&max_attempts
+export const getEngineReplay = (params) => {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]))
+  return request(`/trading/engine/replay?${qs.toString()}`, { timeout: 180000 })
+}
 
 // ── 工作進度（harness 狀態：交接筆記、驗證結果、hook 事件、迭代、git；admin）──
 // GET /progress

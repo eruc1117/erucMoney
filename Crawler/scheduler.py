@@ -185,6 +185,16 @@ def job_portfolio_paper():
     """每日 18:40（全市場日線 18:30 之後）：紙上交易——成交上一個清單、結算今天淨值、訊號日算新清單（Iteration 54，階段 4）。
     漏跑會在下次補齊（每一步以日期判斷）。模擬帳戶沒開就略過。"""
     import portfolio_paper
+    import trading_engine
+    st = trading_engine.state()
+    if st and st['enabled']:
+        # 程式交易引擎（Iteration 58）接手：委託單、限價、停損；成交仍寫同一本模擬帳戶
+        r = trading_engine.run_daily(date.today())
+        if r.get('skipped'):
+            logger.info("[排程/engine] 略過：%s", r['skipped'])
+            return
+        logger.info("[排程/engine] 送單 %s、結算 %d 日、停損 %d、新清單 %s、調倉單 %s", r['sent'], r['marked'], len(r['stop_loss']), r['new_list'], r['orders'])
+        return
     r = portfolio_paper.run_daily(date.today())
     if r.get('skipped'):
         logger.info("[排程/paper] 略過：%s", r['skipped'])

@@ -463,6 +463,74 @@ def get_portfolio_paper():
     return portfolio_api.paper()
 
 
+# ── 程式交易引擎（Iteration 58）──────────────────────────────────────────────
+@app.get("/trading/engine/status")
+def get_trading_engine_status():
+    """開關、模式、券商是否就緒、規則、委託統計、下一個訊號日、停損監看、待成交單。"""
+    import trading_engine
+    return trading_engine.status()
+
+
+@app.get("/trading/engine/orders")
+def get_trading_engine_orders(status: Optional[str] = None, limit: int = 200):
+    import trading_engine
+    return {'orders': trading_engine.list_orders(limit=min(max(limit, 1), 1000), status=status)}
+
+
+@app.get("/trading/engine/events")
+def get_trading_engine_events(limit: int = 100):
+    import trading_engine
+    return {'events': trading_engine.list_events(limit=min(max(limit, 1), 500))}
+
+
+@app.get("/trading/engine/forecast")
+def get_trading_engine_forecast():
+    """預測交易結果：1／3／6／12 個月主動報酬期望、95% 區間、贏 0050 機率；預期淨值帶對實際。"""
+    import trading_engine
+    return trading_engine.forecast()
+
+
+@app.get("/trading/engine/replay")
+def get_trading_engine_replay(start: str = '2018-11-12', end: str = '2024-09-30', capital: float = 1_000_000, run_id: int = 44,
+                              stop_loss_pct: Optional[float] = None, rel_dd_guard: Optional[float] = None,
+                              limit_slip: Optional[float] = None, max_attempts: Optional[int] = None):
+    """回放：引擎規則（限價、重掛、停損、守門）vs 照單全收，套在候選期間的歷史行情與清單上。保留期沒有清單、不在這裡開（超出會夾回）。"""
+    import trading_replay
+    try:
+        s, e = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='start／end 要是 YYYY-MM-DD')
+    if e < s or capital <= 0:
+        raise HTTPException(status_code=400, detail='end 要晚於 start、capital 要 > 0')
+    rules = {'stop_loss_pct': stop_loss_pct, 'rel_dd_guard': rel_dd_guard, 'limit_slip': limit_slip, 'max_attempts': max_attempts}
+    return trading_replay.replay(s, e, capital, rules, run_id)
+
+
+class EngineConfig(BaseModel):
+    enabled: Optional[bool] = None
+    mode: Optional[str] = None
+    broker: Optional[str] = None
+    run_id: Optional[int] = None
+    rules: Optional[dict] = None
+
+
+@app.post("/trading/engine/config")
+def post_trading_engine_config(body: EngineConfig):
+    """改開關／模式／規則（Node 端限 admin）。"""
+    import trading_engine
+    try:
+        return trading_engine.configure(enabled=body.enabled, mode=body.mode, broker=body.broker, run_id=body.run_id, rules=body.rules)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/trading/engine/run")
+def post_trading_engine_run(day: Optional[str] = None):
+    """手動跑一天（排程 18:40 也是跑這個）。"""
+    import trading_engine
+    return trading_engine.run_daily(date.fromisoformat(day) if day else None)
+
+
 @app.get("/portfolio/runs")
 def get_portfolio_runs():
     """實驗日誌全部：每一次回測一列，N 只增不減（失敗的也在）。"""

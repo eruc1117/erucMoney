@@ -33,6 +33,37 @@ describe('權限與參數', () => {
   })
 })
 
+describe('程式交易引擎代理（Iteration 58）', () => {
+  it('GET status／orders／events／forecast：登入即可，轉給 FastAPI', async () => {
+    expect((await request(app).get('/trading/engine/status')).status).toBe(401)
+    const s = await request(app).get('/trading/engine/status').set(A)
+    expect(s.status).toBe(200)
+    expect(s.body.engine).toMatchObject({ enabled: true, mode: 'paper' })
+    const o = await request(app).get('/trading/engine/orders?status=pending&limit=5').set(A)
+    expect(o.body.orders[0].status).toBe('pending')
+    expect(fake.calls.find(c => c.path === '/trading/engine/orders').query).toEqual({ status: 'pending', limit: '5' })
+    expect((await request(app).get('/trading/engine/events').set(A)).body.events).toHaveLength(1)
+    expect((await request(app).get('/trading/engine/forecast').set(A)).body.horizons[0].p_beat).toBe(0.714)
+    const rp = await request(app).get('/trading/engine/replay?start=2018-11-12&end=2024-09-30&stop_loss_pct=0.2&junk=1').set(A)
+    expect(rp.status).toBe(200)
+    expect(rp.body.variants.engine.stats.stop_loss).toBe(3)
+    expect(fake.calls.find(c => c.path === '/trading/engine/replay').query).toEqual({ start: '2018-11-12', end: '2024-09-30', stop_loss_pct: '0.2' })
+  })
+  it('POST config／run：一般使用者 403、admin 轉給 FastAPI；mode 亂給 400', async () => {
+    const { localToken } = require('../helpers/tokens')
+    const ADMIN = bearer(localToken({ id: 1, role: 'admin' }))
+    expect((await request(app).post('/trading/engine/config').set(A).send({ enabled: true })).status).toBe(403)
+    expect((await request(app).post('/trading/engine/config').set(ADMIN).send({ mode: 'yolo' })).status).toBe(400)
+    const r = await request(app).post('/trading/engine/config').set(ADMIN).send({ enabled: true, mode: 'paper' })
+    expect(r.status).toBe(200)
+    expect(r.body).toEqual({ enabled: true, mode: 'paper' })
+    expect((await request(app).post('/trading/engine/run?day=2026-10-14').set(A)).status).toBe(403)
+    const run = await request(app).post('/trading/engine/run?day=2026-10-14').set(ADMIN)
+    expect(run.status).toBe(200)
+    expect(fake.calls.find(c => c.path === '/trading/engine/run').query).toEqual({ day: '2026-10-14' })
+  })
+})
+
 describe('清單 → 指令 → 登記 → 紀錄', () => {
   it('空手、投入 10 萬：三檔買單，清單資訊與下一個訊號日都有', async () => {
     const r = await request(app).get('/trading/plan?cash=100000').set(A)

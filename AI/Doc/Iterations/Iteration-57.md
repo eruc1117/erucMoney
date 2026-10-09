@@ -34,12 +34,12 @@
 
 | 檢查 | 結果 | 來源 |
 |---|---|---|
-| `tests/unit/tradingPlan.test.js` 7 項 | 費用門檻、空手買齊（權重合計 100% 時手續費放不下 → 台積電 20 股縮成 19 並警告）、只調差額且 200 元的調整不下單、範圍外不動／退出全賣、現金不夠縮單後現金 ≥ 0、沒參考價略過、先賣後買、下一個訊號日（10/11 週日 → 10/12；當天算；跨年） | `checks.json` name=jest |
-| `tests/http/trading.test.js` 7 項 | 匿名 401、cash 非數字 400、空手 10 萬三檔買單與 note、自己買的 0050 不動不算總資產、登記 2303 後進 managed／總資產／log 分批、另一個使用者看不到 | 同上 |
+| `tests/unit/tradingPlan.test.js` 8 項 | 費用門檻、空手買齊（權重合計 100% 時手續費放不下 → 台積電 20 股縮成 19 並警告）、只調差額且 200 元的調整不下單、範圍外不動／退出全賣、現金不夠縮單後現金 ≥ 0、沒參考價略過、先賣後買、下一個訊號日（10/11 週日 → 10/12；當天算；跨年） | `checks.json` name=jest |
+| `tests/http/trading.test.js` 6 項 | 匿名 401、cash 非數字 400、空手 10 萬三檔買單與 note、自己買的 0050 不動不算總資產、登記 2303 後進 managed／總資產／log 分批、另一個使用者看不到 | 同上 |
 | Server jest 全套 | 175 項、16 套通過 | `checks.json` name=jest（2026-10-09） |
 | Screen vite build | 通過 | `checks.json` name=vite-build |
 | meeting_front_end `npm run build`（react-scripts） | 通過 | 本 session 執行輸出（不在 checks.json） |
-| 頁面 | 本機 Vite ＋ 不帶登入的預覽（:3004，`req.user` 固定 admin、`POST /holdings/trades` 回 403 不登記）看過：以正式庫的清單（訊號日 2026-09-11、21 檔、參考價至 2026-10-07）與 30 萬現金算出 21 筆買單、偏離 50% → 0.6%、執行後現金 3,622 | `events.jsonl` 的 navigate／screenshot 事件 |
+| 頁面 | 本機 Vite ＋ 不帶登入的預覽（:3004，`req.user` 固定 admin、`POST /holdings/trades` 回 403 不登記）看過：以正式庫的清單（訊號日 2026-09-11、21 檔、參考價至 2026-10-07）與 30 萬現金算出 21 筆買單、偏離 50% → 0.6%、執行後現金 3,622 | `events.jsonl` 的 navigate／screenshot 事件；數字來自當時的 `GET /trading/plan?cash=300000` 回應，未存進 repo（待確認） |
 
 ## 三、讀法
 
@@ -47,6 +47,8 @@
 2. 範圍的判斷靠台帳 note 前綴，所以**一定要從這一頁登記**（或自己在 note 寫 `[程式交易]`），否則下個月程式不知道那檔是它買的、不會替你賣。
 3. 30 萬以下台積電一檔吃六成、其餘每檔約 6,000 元，零股股數小（1～5 股的有好幾檔），手續費比例高；這是候選策略「台積電固定持 0050 權重」的結構，不是頁面的問題。
 4. 沒做的：券商 API 下單、成交回報自動對帳（現在是人填成交價）、假日表（下一個訊號日只避週末）、限價單的價格建議（現在是參考價 = 最新收盤）。
+
+5. evidence-reviewer 審過一輪：42 條主張 36 verified、2 incorrect（測試項數，已改）、4 unresolved（meeting_front_end build 輸出、預覽腳本與預覽數字不在 repo，WorkProgress.jsx 的小改只有 git diff 看得到）。
 
 ## 變更檔案
 

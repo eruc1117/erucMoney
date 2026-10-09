@@ -46,7 +46,7 @@ npm run test:coverage   # 加覆蓋率（只算 lib/、routes/、app.js）
 | 行情、產業、籌碼、法人 | `tests/http/stocks.test.js` |
 | 爬蟲與資料回填的 admin 代理 | `tests/http/admin-proxy.test.js` |
 | 美股報價代理 | `tests/http/us.test.js` |
-| 程式交易 `/trading/plan`、`/trading/log`（清單 × 持股 → 指令；登記後分批） | `tests/unit/tradingPlan.test.js`、`tests/http/trading.test.js` |
+| 程式交易 `/trading/plan`、`/trading/log`（清單 × 持股 → 指令；登記後分批）；引擎代理 `/trading/engine/*`（GET 登入、POST admin；`/engine/replay` 只轉八個參數） | `tests/unit/tradingPlan.test.js`、`tests/http/trading.test.js` |
 | 工作進度 `/progress`（admin；progress.md／checks.json／events.jsonl／迭代紀錄／git 解析） | `tests/http/progress.test.js` |
 | helmet、CORS、限流、公開端點 | `tests/http/security.test.js` |
 | 19 個 SQL migration | `tests/db/migrations.test.js` |

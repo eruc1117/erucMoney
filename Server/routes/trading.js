@@ -10,10 +10,47 @@
  */
 const { Router } = require('express')
 const db = require('../db')
-const { fetchFastAPI } = require('../lib/proxy')
+const { fetchFastAPI, proxyToFastAPI } = require('../lib/proxy')
+const { requireRole } = require('../lib/auth')
 const { buildPlan, nextSignalDate, NOTE_PREFIX } = require('../lib/tradingPlan')
 
 const router = Router()
+const CRAWLER_DOWN = res => res.status(503).json({ detail: '爬蟲服務未啟動，請執行 python main.py --mode server' })
+
+// ── 程式交易引擎（Iteration 58）：規則、委託單、事件、預測都在 FastAPI（Crawler/trading_engine.py），這裡只代理 ──
+//   GET  /trading/engine/status|orders|events|forecast   登入即可看（引擎是全域的，不分使用者）
+//   POST /trading/engine/config|run                      admin：開關、模式、規則；手動跑一天
+router.get('/engine/status', (_req, res) => proxyToFastAPI({ port: 8000, path: '/trading/engine/status', res, onError: () => CRAWLER_DOWN(res) }))
+router.get('/engine/orders', (req, res) => {
+  const qs = new URLSearchParams()
+  if (req.query.status) qs.set('status', String(req.query.status))
+  if (req.query.limit) qs.set('limit', String(Number(req.query.limit) || 200))
+  const q = qs.toString()
+  proxyToFastAPI({ port: 8000, path: `/trading/engine/orders${q ? `?${q}` : ''}`, res, onError: () => CRAWLER_DOWN(res) })
+})
+router.get('/engine/events', (req, res) => {
+  const limit = Number(req.query.limit) || 100
+  proxyToFastAPI({ port: 8000, path: `/trading/engine/events?limit=${limit}`, res, onError: () => CRAWLER_DOWN(res) })
+})
+router.get('/engine/forecast', (_req, res) => proxyToFastAPI({ port: 8000, path: '/trading/engine/forecast', res, onError: () => CRAWLER_DOWN(res) }))
+// 回放（Iteration 59）：引擎規則 vs 照單全收套在歷史上；參數原樣轉給 FastAPI（它會驗證與夾回範圍）
+router.get('/engine/replay', (req, res) => {
+  const qs = new URLSearchParams()
+  for (const k of ['start', 'end', 'capital', 'run_id', 'stop_loss_pct', 'rel_dd_guard', 'limit_slip', 'max_attempts']) {
+    if (req.query[k] != null && req.query[k] !== '') qs.set(k, String(req.query[k]))
+  }
+  const q = qs.toString()
+  proxyToFastAPI({ port: 8000, path: `/trading/engine/replay${q ? `?${q}` : ''}`, res, onError: () => CRAWLER_DOWN(res) })
+})
+router.post('/engine/config', requireRole('admin'), (req, res) => {
+  const { enabled, mode, broker, run_id, rules } = req.body ?? {}
+  if (mode != null && !['paper', 'live'].includes(mode)) return res.status(400).json({ detail: 'mode 只能是 paper 或 live' })
+  proxyToFastAPI({ port: 8000, path: '/trading/engine/config', method: 'POST', body: { enabled, mode, broker, run_id, rules }, res, onError: () => CRAWLER_DOWN(res) })
+})
+router.post('/engine/run', requireRole('admin'), (req, res) => {
+  const day = req.query.day ? `?day=${encodeURIComponent(String(req.query.day))}` : ''
+  proxyToFastAPI({ port: 8000, path: `/trading/engine/run${day}`, method: 'POST', body: {}, res, onError: () => CRAWLER_DOWN(res) })
+})
 
 async function userHoldings(userId) {
   const { rows } = await db.query(`

@@ -39,7 +39,7 @@ const PAGE_TITLES = {
   compare:    '預測比對',
   weekly:     '每週全模型預測',
   portfolio:  '月調倉（打敗大盤）',
-  trading:    '程式交易（候選策略下單）',
+  trading:    '程式交易（規則引擎：紙上／凱基）',
   history:    '查詢紀錄',
   voting:     '投票決策',
   models:     '模型版本',

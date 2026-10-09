@@ -1,5 +1,5 @@
 /**
- * 25 個 SQL migration 對一個全新的資料庫（Stock_migtest）：跑得過、重跑冪等、關鍵索引存在。
+ * 26 個 SQL migration 對一個全新的資料庫（Stock_migtest）：跑得過、重跑冪等、關鍵索引存在。
  * 資料庫建了就刪；需要 DB_USER 有 CREATEDB 權限，沒有就整個 describe 跳過並印出原因。
  */
 const fs = require('fs')
@@ -37,20 +37,20 @@ afterAll(async () => {
 })
 
 describe('migrations', () => {
-  it('全新資料庫：基底表 + 25 個 migration 全部套用', async () => {
+  it('全新資料庫：基底表 + 26 個 migration 全部套用', async () => {
     if (skipReason) return
     await pool.query(fs.readFileSync(path.join(__dirname, '..', 'helpers', 'bootstrap.sql'), 'utf8'))
     const applied = await runMigrations(pool)
     const files = fs.readdirSync(path.join(__dirname, '..', '..', 'migrations')).filter(f => f.endsWith('.sql')).sort()
     expect(applied).toEqual(files)
-    expect(applied).toHaveLength(25)
+    expect(applied).toHaveLength(26)
   })
   it('重跑冪等：第二次不套用任何檔案，_migrations 筆數不變', async () => {
     if (skipReason) return
     const again = await runMigrations(pool)
     expect(again).toEqual([])
     const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM _migrations')
-    expect(rows[0].n).toBe(25)
+    expect(rows[0].n).toBe(26)
   })
   it('users 表：role 檢查約束、admin 占位列、external_id 部分唯一索引', async () => {
     if (skipReason) return
