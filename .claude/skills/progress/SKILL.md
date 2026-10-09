@@ -8,4 +8,4 @@ description: 在 Claude Code 這一側看目前 Claude 在這個 repo 的工作�
 1. 跑 `node AI/harness/progress_report.js $ARGUMENTS`（只讀 progress.md、AI/progress/checks.json、AI/progress/events.jsonl、迭代紀錄與 git）。
 2. 把輸出**原樣**放進一個程式碼區塊給使用者，不要改寫、不要省略段落。
 3. 區塊下面最多三句話：哪個 session 是現在這個、有沒有過期的檢查（檢查時間早於相關檔案）、未解裡最該先處理的一條。
-4. 本 session 自己的背景 subagent 與排程，提醒使用者用內建的 `/tasks` 看；網頁版在管理模式「工程 → 工作進度」（需 admin）。
+4. 使用者要「另外的畫面」時：`node AI/harness/progress_ui.js` 開獨立視窗（http://localhost:3010，每 5 秒更新，顯示各 session 與正在跑的子代理）；本 session 自己的背景 subagent 用內建 `/tasks`；網頁版在管理模式「工程 → 工作進度」（需 admin）。

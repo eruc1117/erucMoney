@@ -17,7 +17,9 @@
 
 - `hook_log.js`：hook 事件 → `AI/progress/events.jsonl`（一行一事件，5 MB 輪替）。永遠 exit 0，不印 stdout。
 - `record_check.js`：跑指令並把結果（exit code、最後 30 行）寫進 `AI/progress/checks.json`；或直接記一個判定（`--status pass|fail|skip --summary`）。
-- `progress_report.js`：把 progress.md、checks.json、events.jsonl（24 小時內各 session 在做什麼）、迭代與 git 印成一頁文字；`/progress` skill 跑它，`--events N` 多印事件。網頁版是 `Server/routes/progress.js`。
+- `progress_data.js`：工作進度的資料層（只讀 progress.md、checks.json、events.jsonl、迭代、git），算出各 session 與「負責的代理人」（Agent 工具呼叫＝派出子代理，SubagentStop 先進先出收掉）。
+- `progress_report.js`：終端機文字版；`/progress` skill 跑它，`--events N` 多印事件。
+- `progress_ui.js`：獨立畫面（`node AI/harness/progress_ui.js` → http://localhost:3010，每 5 秒更新，啟動自動開瀏覽器）。網頁版是 `Server/routes/progress.js`（admin）。
 
 ```
 node AI/harness/record_check.js --name jest --cwd Server -- npm test
