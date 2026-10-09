@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(!.env.example)",
+      "Read(!Server/.env.test)",
+      "Read(Server/.jwt_secret)",
+      "Edit(UnifiedModel/results/portfolio_*.md)",
+      "Write(UnifiedModel/results/portfolio_*.md)",
+      "Edit(AI/progress/checks.json)",
+      "Write(AI/progress/checks.json)",
+      "Edit(AI/progress/events.jsonl)",
+      "Write(AI/progress/events.jsonl)"
+    ]
+  },
+  "env": {
+    "PYTHONUTF8": "1",
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "4"
+  },
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ],
+    "PostToolUse": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ],
+    "PostToolUseFailure": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ],
+    "PermissionDenied": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/AI/harness/hook_log.js\"", "timeout": 10 }] }
+    ]
+  }
+}

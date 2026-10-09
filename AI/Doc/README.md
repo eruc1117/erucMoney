@@ -16,6 +16,7 @@
 | [../../UnifiedModel/results/news_models.md](../../UnifiedModel/results/news_models.md) | 新聞訊號三模型的走查與五道關卡（Iteration 47，`train_news_models.py` 產出） |
 | [ModelAccuracy.md](./ModelAccuracy.md) | 模型預測準確度報告（線上台帳 vs 離線走查）與改進方向（2026-09-20） |
 | [Bugs/bugs.md](./Bugs/bugs.md) | Bug 紀錄與功能追加履歷 |
+| [../harness/README.md](../harness/README.md) | Claude Code harness（2026-10-09）：CLAUDE.md、rules、skills、agents、hooks、`progress.md` 交接筆記、`record_check.js` 驗證紀錄；儀表板「工作進度」頁 |
 
 ## 迭代紀錄（Iterations/）
 
@@ -60,6 +61,8 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-56.md](./Iterations/Iteration-56.md) | 月調倉頁分頁「買多少股」：輸入金額依最近清單權重與最新收盤換算零股股數（先留手續費再取整、零股最低費、剩餘現金、張＋零股）；清單 API 多 `price`／`price_date`；pytest 200、vite-build、jest-unit 36 通過 |
+| [Iteration-55.md](./Iterations/Iteration-55.md) | **Claude Code harness 七層就位**（CLAUDE.md、rules、skills `/iterate` `/experiment` `/handoff`、agents evidence-reviewer／strategy-critic／test-runner、deny 與 hooks、`progress.md` 交接筆記、`record_check.js` 驗證紀錄）；儀表板新頁「工作進度」（`/progress`：階段路線圖、交接、驗證、七層、hook 活動、迭代、提交） |
 | [Iteration-54.md](./Iterations/Iteration-54.md) | **階段 4 紙上交易**：模擬帳戶三張表（migration 025，不混 user_trades）、2026-10-09 開戶 100 萬零股；每日 18:40 `job_portfolio_paper` 成交／結算／訊號日算清單（可補跑）；`/portfolio/paper` 與月調倉頁「紙上交易」卡（對 0050、逐月對回測預期）；第一份清單 10/13 算、10/14 成交 |
 | [Iteration-53.md](./Iterations/Iteration-53.md) | 第二批策略家族（N 45~66）：營收加速、連續成長、低波動、52 週高點、反轉、異常成交量；**跨段一致的只有「動能＋營收類＋持台積電」**（rev_accel+mom 11.1%/8.5%、win3+mom+rev_streak 9.9%/15.2%），單獨基本面與反轉不行，52 週高點是期間效應；候選不換 |
 | [Iteration-52.md](./Iterations/Iteration-52.md) | 月調倉頁頁首「現在該買哪些」（候選算到最近訊號日的 21 檔目標持股，migration 023，保留期績效不算不存）；**分析頁免登入**：erucMoney 路由分公開讀取／個人／管理三種（`optionalAuth`、`readPublic`、`requireUser`），行事曆代理匿名只轉非個人 GET，前端 /stock 離開受保護路由、持股與閒置資金標 🔒 |

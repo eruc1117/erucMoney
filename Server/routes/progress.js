@@ -1,5 +1,5 @@
 /**
- * 工作進度（Iteration 54 的 harness 工程）：把「交接筆記、驗證結果、hook 事件、迭代紀錄、git」
+ * 工作進度（Iteration 55 的 harness 工程）：把「交接筆記、驗證結果、hook 事件、迭代紀錄、git」
  * 整理成一個 JSON，給儀表板「工作進度」頁畫。只讀檔案與 git，不碰資料庫。
  *
  *   GET /progress            全部（admin）
@@ -77,8 +77,25 @@ function readEvents(p, limit = 120) {
   }
   const last = all.length ? all[all.length - 1].ts : null
   const active = last ? (Date.now() - new Date(last).getTime()) < 10 * 60 * 1000 : false
-  const per_day = [...byDay.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1).slice(-30).map(([d, n]) => ({ d, n }))
+  const per_day = fillDays(byDay)
   return { recent: all.slice(-limit).reverse(), per_day, sessions: sessions.size, last_event_at: last, active, total: all.length }
+}
+
+// 連續日期窗：起點 = min(最早有事件的日, 今天 − 13 天)，最多 30 天，沒事件的日子補 0
+// （只有一天有事件時，單一根柱子會填滿整張圖；補成日期窗後寬度才正常）
+function fillDays(byDay, maxDays = 30) {
+  const today = new Date(); today.setUTCHours(0, 0, 0, 0)
+  const days = [...byDay.keys()].sort()
+  let start = new Date(today); start.setUTCDate(start.getUTCDate() - 13)
+  if (days.length && new Date(days[0] + 'T00:00:00Z') < start) start = new Date(days[0] + 'T00:00:00Z')
+  const floor = new Date(today); floor.setUTCDate(floor.getUTCDate() - (maxDays - 1))
+  if (start < floor) start = floor
+  const out = []
+  for (let d = new Date(start); d <= today; d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = d.toISOString().slice(0, 10)
+    out.push({ d: key, n: byDay.get(key) || 0 })
+  }
+  return out
 }
 
 // ── 迭代紀錄：# Iteration NN — 標題 ＋ **日期：** YYYY-MM-DD ──
@@ -97,20 +114,21 @@ function readIterations(dir) {
 }
 
 function git(args, cwd) {
-  try { return execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() } catch { return null }
+  // 不能 .trim()：`git status --porcelain` 第一行開頭的空白是狀態欄（" M path"），吃掉就少一個字
+  try { return execFileSync('git', args, { cwd, encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).replace(/\s+$/, '') } catch { return null }
 }
 function readGit(cwd) {
   const log = git(['log', '-15', '--date=short', '--format=%h%x09%ad%x09%s'], cwd)
   const commits = log ? log.split('\n').filter(Boolean).map(l => { const [hash, date, ...s] = l.split('\t'); return { hash, date, subject: s.join('\t') } }) : []
   const status = git(['status', '--porcelain'], cwd)
-  const lines = status === null ? null : status.split('\n').filter(Boolean)
+  const lines = status === null ? null : status.split('\n').filter(l => l.length > 3)
   return {
     available: log !== null,
-    branch: git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd),
+    branch: (git(['rev-parse', '--abbrev-ref', 'HEAD'], cwd) || '').trim() || null,
     commits,
     modified: lines ? lines.filter(l => !l.startsWith('??')).length : null,
     untracked: lines ? lines.filter(l => l.startsWith('??')).length : null,
-    dirty_files: lines ? lines.slice(0, 40).map(l => l.slice(3)) : [],
+    dirty_files: lines ? lines.slice(0, 40).map(l => `${l.startsWith('??') ? '＋' : '✎'} ${l.slice(3)}`) : [],
   }
 }
 

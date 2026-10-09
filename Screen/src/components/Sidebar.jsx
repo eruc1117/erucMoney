@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { key: 'us',         icon: '🇺🇸', label: '美股跳空' },
   { key: 'voting',     icon: '🗳️', label: '投票決策' },
   { key: 'models',     icon: '🗂️', label: '模型版本' },
+  { key: 'progress',   icon: '🛠️', label: '工作進度' },
   { key: 'account',    icon: '👤', label: '帳號' },
 ]
 

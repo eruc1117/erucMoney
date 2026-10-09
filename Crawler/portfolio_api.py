@@ -63,15 +63,22 @@ def live_list() -> Optional[dict]:
     """portfolio_live_list：候選策略算到最近訊號日的目標持股（現在該買哪些）。"""
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("""SELECT computed_at, run_id, rebalance_date, exec_date, stock_id, stock_name, rank, signal_value, target_weight, is_new
-                           FROM portfolio_live_list WHERE rebalance_date = (SELECT max(rebalance_date) FROM portfolio_live_list)
-                           ORDER BY rank NULLS LAST, stock_id""")
+            cur.execute("""SELECT l.computed_at, l.run_id, l.rebalance_date, l.exec_date, l.stock_id, l.stock_name, l.rank, l.signal_value, l.target_weight, l.is_new,
+                                  p.close_price, p.trade_date
+                           FROM portfolio_live_list l
+                           LEFT JOIN LATERAL (SELECT close_price, trade_date FROM market_daily_prices m
+                                              WHERE m.stock_id = l.stock_id AND m.close_price > 0 ORDER BY trade_date DESC LIMIT 1) p ON TRUE
+                           WHERE l.rebalance_date = (SELECT max(rebalance_date) FROM portfolio_live_list)
+                           ORDER BY l.rank NULLS LAST, l.stock_id""")
             rows = cur.fetchall()
     if not rows:
         return None
     return {'computed_at': rows[0][0].isoformat(), 'run_id': rows[0][1], 'rebalance_date': str(rows[0][2]), 'exec_date': str(rows[0][3]) if rows[0][3] else None,
+            'price_date': max((str(pd) for *_, pd in rows if pd), default=None),
             'items': [{'stock_id': s, 'stock_name': nm, 'rank': rk, 'signal_value': float(sv) if sv is not None else None,
-                       'target_weight': float(w), 'is_new': bool(new)} for _, _, _, _, s, nm, rk, sv, w, new in rows]}
+                       'target_weight': float(w), 'is_new': bool(new),
+                       'price': float(px) if px is not None else None, 'price_date': str(pd) if pd else None}
+                      for _, _, _, _, s, nm, rk, sv, w, new, px, pd in rows]}
 
 
 def paper() -> dict:

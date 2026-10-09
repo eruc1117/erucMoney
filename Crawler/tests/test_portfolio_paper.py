@@ -112,3 +112,18 @@ def test_run_daily_without_account_or_data(clean_db):
     pp.start(capital=1, run_id=None, started_on=date(2026, 10, 9))
     assert pp.run_daily(date(2026, 10, 9)).get('skipped')                        # 沒行情
     assert pp.review()['days'] == 0
+
+
+def test_live_list_carries_latest_close_for_share_calculator(clean_db):
+    """買多少股分頁要的：清單每檔帶最新收盤價與日期（market_daily_prices），沒價格的留 None。"""
+    import portfolio_api
+    _seed_market(clean_db, {'1111': [100, 100, 100, 100, 110], '2222': [50] * 5})
+    _seed_list(clean_db, date(2026, 9, 11), {'1111': 1.0})                      # 舊清單：不該被拿到
+    _seed_list(clean_db, date(2026, 10, 13), {'1111': 0.5, '2222': 0.3, '7777': 0.2})
+    l = portfolio_api.live_list()
+    assert l['rebalance_date'] == '2026-10-13' and l['price_date'] == '2026-10-15'
+    by = {i['stock_id']: i for i in l['items']}
+    assert by['1111']['price'] == 110.0 and by['1111']['price_date'] == '2026-10-15'
+    assert by['2222']['price'] == 50.0
+    assert by['7777']['price'] is None and by['7777']['price_date'] is None
+    assert portfolio_api.candidates()['current_list']['rebalance_date'] == '2026-10-13'

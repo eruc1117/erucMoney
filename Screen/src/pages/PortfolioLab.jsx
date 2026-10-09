@@ -237,6 +237,85 @@ function PaperCard({ paper }) {
   )
 }
 
+// ── 次分頁「買多少股」：輸入金額 → 依最近清單的目標權重與最新收盤價算零股股數 ──────────
+const FEE_RATE = 0.000855      // 單邊手續費（6 折）；與回測、紙上交易同一個數字
+const FEE_MIN = 1              // 零股最低手續費（多數券商 NT$1）；整張是 NT$20
+const TAX_RATE = 0.003
+
+function planShares(items, amount) {
+  // 先按比例縮以留手續費，再逐檔 floor；剩餘現金最後報出來（不硬塞）
+  const usable = amount / (1 + FEE_RATE)
+  const rows = items.map(it => {
+    if (!it.price || it.price <= 0) return { ...it, shares: 0, cost: 0, fee: 0, note: '沒有價格' }
+    const shares = Math.floor(usable * it.target_weight / it.price)
+    const cost = shares * it.price
+    const fee = shares > 0 ? Math.max(FEE_MIN, Math.round(cost * FEE_RATE)) : 0
+    return { ...it, shares, cost, fee, lots: Math.floor(shares / 1000), odd: shares % 1000 }
+  })
+  const totalCost = rows.reduce((a, r) => a + r.cost, 0)
+  const totalFee = rows.reduce((a, r) => a + r.fee, 0)
+  return { rows, totalCost, totalFee, left: amount - totalCost - totalFee, invested: amount > 0 ? totalCost / amount : 0 }
+}
+
+function BuyCalculator({ list }) {
+  const [amountText, setAmountText] = useState(() => { try { return localStorage.getItem('pf_buy_amount') || '300000' } catch { return '300000' } })
+  const amount = Math.max(0, Number(String(amountText).replace(/[^0-9.]/g, '')) || 0)
+  useEffect(() => { try { localStorage.setItem('pf_buy_amount', String(amountText)) } catch { /* ignore */ } }, [amountText])
+  if (!list?.items?.length) return <div className="card-body muted">還沒有清單（每月 11 日起第一個交易日收盤後才有）</div>
+  const plan = planShares(list.items, amount)
+  const noPrice = plan.rows.filter(r => !r.price).length
+  return (
+    <>
+      <div className="card-body">
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label className="ctrl-label" htmlFor="pf-amount">投入金額（NT$）</label>
+          <input id="pf-amount" className="budget-input" inputMode="numeric" value={amountText} onChange={e => setAmountText(e.target.value)} style={{ width: 160 }} />
+          <div className="btn-group">
+            {[100000, 300000, 500000, 1000000].map(v => <button key={v} className="btn-filter" onClick={() => setAmountText(String(v))}>{(v / 10000).toFixed(0)} 萬</button>)}
+          </div>
+        </div>
+        <Sub>依 {list.rebalance_date} 清單的目標權重與 {list.price_date || '最新'} 收盤價；零股（1 股起），買單先留手續費 {(FEE_RATE * 100).toFixed(4)}%（最低 NT${FEE_MIN}）再取整，所以會剩一點現金。賣出另有 {TAX_RATE * 100}% 證交稅。</Sub>
+      </div>
+      <div className="card-body" style={{ paddingTop: 0 }}>
+        <div className="stat-grid">
+          <div className="stat-tile"><div className="k">投入</div><div className="v">{amount.toLocaleString()}</div><div className="s">{plan.rows.filter(r => r.shares > 0).length} 檔有買到</div></div>
+          <div className="stat-tile"><div className="k">買進成本</div><div className="v">{Math.round(plan.totalCost).toLocaleString()}</div><div className="s">投入的 {(plan.invested * 100).toFixed(1)}%</div></div>
+          <div className="stat-tile"><div className="k">手續費</div><div className="v">{plan.totalFee.toLocaleString()}</div><div className="s">含零股最低費</div></div>
+          <div className="stat-tile"><div className="k">剩餘現金</div><div className="v">{Math.round(plan.left).toLocaleString()}</div><div className="s">{noPrice ? `${noPrice} 檔沒有價格` : '取整後的零頭'}</div></div>
+        </div>
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className="data-table">
+          <thead>
+            <tr><th>排名</th><th>代碼</th><th>名稱</th><th style={{ textAlign: 'right' }}>目標權重</th><th style={{ textAlign: 'right' }}>收盤價</th>
+              <th style={{ textAlign: 'right' }}>買幾股</th><th style={{ textAlign: 'right' }}>張＋零股</th><th style={{ textAlign: 'right' }}>成本</th><th style={{ textAlign: 'right' }}>手續費</th><th style={{ textAlign: 'right' }}>實際權重</th></tr>
+          </thead>
+          <tbody>
+            {plan.rows.map(r => (
+              <tr key={r.stock_id} style={r.shares === 0 ? { opacity: 0.55 } : undefined}>
+                <td>{r.stock_id === '2330' ? <span className="muted" title="台積電固定持 0050 權重">固定</span> : (r.rank ?? <span className="muted">續抱</span>)}</td>
+                <td><strong>{r.stock_id}</strong>{r.is_new ? <span className="up" title="這個月新進場"> ★</span> : null}</td>
+                <td>{r.stock_name || ''}</td>
+                <td style={{ textAlign: 'right' }}>{pct(r.target_weight, 1).replace('+', '')}</td>
+                <td style={{ textAlign: 'right' }}>{r.price ? num(r.price, 2) : <span className="down">–</span>}</td>
+                <td style={{ textAlign: 'right' }}><strong>{r.shares.toLocaleString()}</strong>{r.note ? <Sub>{r.note}</Sub> : null}</td>
+                <td style={{ textAlign: 'right' }} className="muted">{r.shares > 0 ? `${r.lots} 張 ${r.odd} 股` : '–'}</td>
+                <td style={{ textAlign: 'right' }}>{Math.round(r.cost).toLocaleString()}</td>
+                <td style={{ textAlign: 'right' }}>{r.fee.toLocaleString()}</td>
+                <td style={{ textAlign: 'right' }}>{amount > 0 ? pct(r.cost / amount, 1).replace('+', '') : '–'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="card-body muted" style={{ fontSize: '0.8rem', lineHeight: 1.7 }}>
+        這是把候選策略的目標權重換算成股數，不是投資建議。清單每月更新一次（11 日起第一個交易日收盤算），換月時要先賣掉不在新清單裡的、再買新進場的★，賣出才有證交稅。
+        金額小的時候高價股（台積電）會吃掉大半權重、低價股零頭多；投入 30 萬以下建議看「剩餘現金」與「實際權重」是否偏離目標太多。
+      </div>
+    </>
+  )
+}
+
 function RunLog({ runs, t }) {
   if (!runs?.length) return <div className="card-body muted">實驗日誌是空的</div>
   return (
@@ -278,6 +357,8 @@ export default function PortfolioLab() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [showLog, setShowLog] = useState(false)
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('pf_tab') || 'overview' } catch { return 'overview' } })
+  useEffect(() => { try { localStorage.setItem('pf_tab', tab) } catch { /* ignore */ } }, [tab])
 
   useEffect(() => {
     let alive = true
@@ -294,8 +375,33 @@ export default function PortfolioLab() {
   const full = cand?.full
   const fm = full?.run?.metrics
 
+  const tabs = [['overview', '總覽'], ['buy', '買多少股']]
+  const tabBar = (
+    <div className="btn-group" role="tablist" style={{ marginBottom: 12 }}>
+      {tabs.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} className={tab === k ? 'btn-primary' : 'btn-secondary'} onClick={() => setTab(k)}>{label}</button>)}
+    </div>
+  )
+
+  if (tab === 'buy') {
+    return (
+      <>
+        {tabBar}
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">買多少股：把最近清單換算成股數</span>
+            <span className="muted" style={{ fontSize: '.82rem' }}>清單訊號日 {cand?.current_list?.rebalance_date || '–'} · 收盤價 {cand?.current_list?.price_date || '–'}</span>
+          </div>
+          {loading && <div className="card-body muted">載入中…</div>}
+          {error && <div className="card-body" style={{ color: 'var(--orange)' }}>{error}</div>}
+          {!loading && !error && <BuyCalculator list={cand?.current_list} />}
+        </div>
+      </>
+    )
+  }
+
   return (
     <>
+      {tabBar}
       <div className="card">
         <div className="card-header">
           <span className="card-title">打敗大盤：目前候選對門檻</span>

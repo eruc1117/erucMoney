@@ -40,7 +40,7 @@ function summarize(tool, input = {}) {
     case 'WebFetch': return clip(input.url)
     case 'WebSearch': return clip(input.query)
     case 'Artifact': return clip(`${input.action || 'publish'} ${input.file_path || input.url || ''}`)
-    default: return clip(JSON.stringify(input))
+    default: return clip(input.description || input.url || input.query || input.text || input.command || input.prompt || JSON.stringify(input))
   }
 }
 
@@ -78,7 +78,13 @@ function main() {
   if (ev.event === 'UserPromptSubmit') ev.summary = clip(payload.prompt, 200)
   if (ev.event === 'SessionStart') ev.summary = clip(payload.source || '')
   if (ev.event === 'SubagentStop' || ev.event === 'SubagentStart') {
-    ev.summary = clip(payload.agent_type || payload.subagent_type || payload.agent_id || payload.agent_name || '')
+    ev.summary = clip(payload.subagent_name || payload.agent_type || payload.subagent_type || payload.agent_name || payload.agent_id || '')
+  }
+  // 被擋下的動作與失敗的工具：原因記下來（auto mode 擋了什麼，之後看得到）
+  if (ev.event === 'PermissionDenied' || ev.event === 'PostToolUseFailure') {
+    ev.ok = false
+    const why = payload.reason || payload.error || payload.message || (payload.tool_response && (payload.tool_response.error || payload.tool_response.message))
+    if (why) ev.reason = clip(why, 200)
   }
   if (ev.event === 'Notification') ev.summary = clip(payload.message || payload.title || '')
   if (ev.event === 'PreCompact') ev.summary = clip(payload.trigger || '')

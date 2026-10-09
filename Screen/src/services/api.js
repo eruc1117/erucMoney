@@ -316,6 +316,10 @@ export const getPortfolioRuns = () => request('/portfolio/runs')
 export const getPortfolioRun = (id, step = 1) => request(`/portfolio/runs/${id}?step=${step}`)
 export const getPortfolioPaper = () => request('/portfolio/paper')
 
+// ── 工作進度（harness 狀態：交接筆記、驗證結果、hook 事件、迭代、git；admin）──
+// GET /progress
+export const getProgress = () => request('/progress')
+
 export const getWeeklyPlan = (stockId) =>
   request(`/voting/weekly-plan?stock_id=${encodeURIComponent(stockId)}`)
 

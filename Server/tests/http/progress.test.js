@@ -102,7 +102,14 @@ describe('內容', () => {
     const e = body.events
     expect(e.total).toBe(3)
     expect(e.recent[0].event).toBe('Stop')
-    expect(e.per_day).toEqual([{ d: "2026-10-01", n: 1 }, { d: "2026-10-02", n: 2 }])
+    // 連續日期窗：從最早事件日到今天，中間補 0
+    const byDay = Object.fromEntries(e.per_day.map(p => [p.d, p.n]))
+    expect(e.per_day[0].d <= '2026-10-01').toBe(true)   // 起點 = min(最早事件日, 今天 − 13 天)
+    expect(byDay['2026-10-01']).toBe(1)
+    expect(byDay['2026-10-02']).toBe(2)
+    expect(byDay['2026-10-03']).toBe(0)
+    expect(e.per_day.length).toBeLessThanOrEqual(30)
+    expect(e.per_day.every((p, i) => i === 0 || p.d > e.per_day[i - 1].d)).toBe(true)
     expect(e.sessions).toBe(2)
     expect(e.active).toBe(false)
   })

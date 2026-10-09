@@ -25,6 +25,7 @@ import USMarket           from './pages/USMarket'
 import InstitutionalHoldings from './pages/InstitutionalHoldings'
 import WeeklyForecast     from './pages/WeeklyForecast'
 import PortfolioLab       from './pages/PortfolioLab'
+import WorkProgress       from './pages/WorkProgress'
 
 const PAGE_TITLES = {
   overview:   '市場總覽',
@@ -40,6 +41,7 @@ const PAGE_TITLES = {
   history:    '查詢紀錄',
   voting:     '投票決策',
   models:     '模型版本',
+  progress:   '工作進度（harness）',
   holdings:   '我的持股',
   cash:       '閒置資金',
   us:         '美股開盤跳空',
@@ -90,6 +92,7 @@ export default function App() {
           {page === 'history'    && <QueryHistory onSelectStock={goToStock} />}
           {page === 'voting'     && <VotingDashboard />}
           {page === 'models'     && <ModelVersions />}
+          {page === 'progress'   && <WorkProgress />}
           {page === 'holdings'   && <Holdings />}
           {page === 'cash'       && <IdleCash />}
           {page === 'us'         && <USMarket />}
