@@ -6,7 +6,7 @@
 | 層 | 檔案 | 做什麼 |
 |---|---|---|
 | 1 工作區事實 | `CLAUDE.md`、`.claude/rules/*.md` | 跨任務的事實；路徑規則只在碰到對應檔案時載入 |
-| 2 重複流程 | `.claude/skills/iterate`、`experiment`、`handoff` | `/iterate 題目`、`/experiment 假設`、`/handoff` |
+| 2 重複流程 | `.claude/skills/iterate`、`experiment`、`handoff`、`progress` | `/iterate 題目`、`/experiment 假設`、`/handoff`、`/progress`（在 Claude 這一側看進度） |
 | 3 來源存取 | `AI/Doc/README.md`、`AI/UserDoc/` | 本專案的來源都在 repo 裡，沒有接 MCP |
 | 4 行動規則 | `.claude/settings.json` | deny：`.env`、`Server/.jwt_secret`、實驗結果檔、`checks.json`／`events.jsonl` 不手改；env：`PYTHONUTF8`、子代理深度 1、同時 4 個；hooks：七種事件都呼叫 `hook_log.js` |
 | 5 審查者回證據 | `.claude/agents/evidence-reviewer.md`、`strategy-critic.md`、`test-runner.md` | 只讀不改；回表格或 PASS／FAIL 清單；effort high／high／low |
@@ -17,6 +17,7 @@
 
 - `hook_log.js`：hook 事件 → `AI/progress/events.jsonl`（一行一事件，5 MB 輪替）。永遠 exit 0，不印 stdout。
 - `record_check.js`：跑指令並把結果（exit code、最後 30 行）寫進 `AI/progress/checks.json`；或直接記一個判定（`--status pass|fail|skip --summary`）。
+- `progress_report.js`：把 progress.md、checks.json、events.jsonl（24 小時內各 session 在做什麼）、迭代與 git 印成一頁文字；`/progress` skill 跑它，`--events N` 多印事件。網頁版是 `Server/routes/progress.js`。
 
 ```
 node AI/harness/record_check.js --name jest --cwd Server -- npm test
