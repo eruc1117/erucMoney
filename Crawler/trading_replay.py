@@ -47,18 +47,22 @@ def run_period(run_id: int) -> Optional[tuple]:
     return (r[0], r[1], r[2]) if r else None
 
 
-def load_prices(ids: list, start: date, end: date) -> dict:
+def load_prices(ids: list, start: date, end: date, table: str = 'market_daily_prices') -> dict:
     """{trade_date: {sid: {open, high, low, close, prev_close}}}，**還原價**：開高低收都乘上 adj_close ÷ close 的係數，
     持股才含息（除權息那天不會憑空掉一截），和對手 0050 的 adj_close 對稱；回測（portfolio_signal）也是用還原價。
-    前收用每檔自己的上一筆（含 start 之前一筆）。沒有 adj_close 的列用原始價。"""
+    前收用每檔自己的上一筆（含 start 之前一筆）。沒有 adj_close 的列用原始價；沒有開盤價的列（舊資料）用收盤當開盤。
+    table 可指定 stock_daily_prices（追蹤股與 0050 這類 ETF 在那裡，不在全市場日線）。"""
+    assert table in ('market_daily_prices', 'stock_daily_prices')
     with get_conn() as conn:
-        df = pd.read_sql("""SELECT stock_id, trade_date, open_price, high_price, low_price, close_price, adj_close FROM market_daily_prices
+        df = pd.read_sql(f"""SELECT stock_id, trade_date, open_price, high_price, low_price, close_price, adj_close FROM {table}
                             WHERE stock_id = ANY(%s) AND trade_date BETWEEN %s AND %s ORDER BY stock_id, trade_date""",
                          conn, params=(list(ids), start - timedelta(days=15), end))
     if df.empty:
         return {}
     for c in ('open_price', 'high_price', 'low_price', 'close_price', 'adj_close'):
         df[c] = pd.to_numeric(df[c], errors='coerce')
+    for c in ('open_price', 'high_price', 'low_price'):
+        df[c] = df[c].where(df[c] > 0, df['close_price'])
     factor = (df['adj_close'] / df['close_price']).where((df['adj_close'] > 0) & (df['close_price'] > 0), 1.0)
     for c in ('open_price', 'high_price', 'low_price', 'close_price'):
         df[c] = df[c] * factor

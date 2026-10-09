@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { key: 'weekly',     icon: '📅', label: '週預測' },
   { key: 'portfolio',  icon: '🏆', label: '月調倉' },
   { key: 'trading',    icon: '🎯', label: '程式交易' },
+  { key: 'simulate',   icon: '🧪', label: '交易模擬' },
   { key: 'history',    icon: '📋', label: '查詢紀錄' },
   { key: 'holdings',   icon: '💼', label: '我的持股' },
   { key: 'cash',       icon: '💵', label: '閒置資金' },

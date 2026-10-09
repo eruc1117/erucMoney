@@ -330,6 +330,12 @@ export const getEngineEvents = (limit = 100) => request(`/trading/engine/events?
 export const getEngineForecast = () => request('/trading/engine/forecast')
 export const setEngineConfig = (payload) => request('/trading/engine/config', { method: 'POST', body: JSON.stringify(payload) })
 export const runEngineDay = (day = null) => request(`/trading/engine/run${day ? `?day=${day}` : ''}`, { method: 'POST', timeout: 180000 })
+// 公開模擬（Iteration 60，不用登入）：GET /sim/replay（同回放）、POST /sim/run（自訂指令）
+export const getSimReplay = (params) => {
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]))
+  return request(`/sim/replay?${qs.toString()}`, { timeout: 180000 })
+}
+export const runSim = (payload) => request('/sim/run', { method: 'POST', body: JSON.stringify(payload), timeout: 180000 })
 // 回放（Iteration 59）：GET /trading/engine/replay?start&end&capital&stop_loss_pct&rel_dd_guard&limit_slip&max_attempts
 export const getEngineReplay = (params) => {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]))

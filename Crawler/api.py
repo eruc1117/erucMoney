@@ -506,6 +506,28 @@ def get_trading_engine_replay(start: str = '2018-11-12', end: str = '2024-09-30'
     return trading_replay.replay(s, e, capital, rules, run_id)
 
 
+class SimRequest(BaseModel):
+    text: str
+    start: str
+    end: str
+    capital: float = 1_000_000
+
+
+@app.post("/trading/sim")
+def post_trading_sim(body: SimRequest):
+    """自訂交易指令模擬（公開）：一行一筆「日期 買/賣 代號 數量」，設定期間與資金，用實際日線跑完給收益對 0050。只讀。"""
+    import trading_sim
+    try:
+        s, e = date.fromisoformat(body.start), date.fromisoformat(body.end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='start／end 要是 YYYY-MM-DD')
+    if len(body.text) > 4000:
+        raise HTTPException(status_code=400, detail='指令文字最多 4000 字')
+    if body.capital <= 0:
+        raise HTTPException(status_code=400, detail='capital 要 > 0')
+    return trading_sim.run_text(body.text, s, e, body.capital)
+
+
 class EngineConfig(BaseModel):
     enabled: Optional[bool] = None
     mode: Optional[str] = None

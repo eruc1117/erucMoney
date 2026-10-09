@@ -59,6 +59,8 @@ const DEFAULTS = {
   'GET /trading/engine/forecast': () => ({ status: 200, body: { available: true, horizons: [{ months: 12, expected_active: 0.0705, p_beat: 0.714 }] } }),
   'GET /trading/engine/replay':   (req) => ({ status: 200, body: { available: true, start: req.query.start, end: req.query.end, rules: { stop_loss_pct: Number(req.query.stop_loss_pct || 0.15) },
     variants: { engine: { metrics: { total_return: 0.5 }, stats: { stop_loss: 3 } }, plain: { metrics: { total_return: 0.55 }, stats: { stop_loss: 0 } } }, engine_minus_plain: { total_return: -0.05 } } }),
+  'POST /trading/sim':            (req) => ({ status: 200, body: { available: true, start: req.body?.start, end: req.body?.end, capital: req.body?.capital, n_instructions: String(req.body?.text || '').split('\n').filter(Boolean).length,
+    metrics: { total_return: 0.12, bench_return: 0.1, active_return: 0.018 }, trades: [], skipped: [], errors: [], series: [] } }),
   'POST /trading/engine/config':  (req) => ({ status: 200, body: { enabled: req.body?.enabled ?? null, mode: req.body?.mode ?? 'paper' } }),
   'POST /trading/engine/run':     () => ({ status: 200, body: { sent: [], marked: 0, stop_loss: [], orders: [] } }),
   'GET /portfolio/runs':      ()    => ({ status: 200, body: { n_total: 2, thresholds: { dsr: 0.95 },
