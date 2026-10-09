@@ -3,12 +3,13 @@
 
 規則（JSON，一條一個 dict）：
     {"stock_id": "2330",
-     "when": {"type": "cross_below_ma", "n": 20},          # 條件（見 CONDITIONS）
+     "when": {"type": "cross_below_ma", "n": 20},          # 條件（見 CONDITIONS）；或群組 {"op": "and"|"or", "conds": [條件, …]}，可巢狀兩層
      "then": {"side": "sell", "qty": null, "unit": "全部"},  # 動作：buy／sell；unit 股／張／元／全部
      "max_times": 1,                                         # 最多觸發幾次（null = 不限）
      "only_if_flat": true,                                   # 買：沒持股才買（避免每天加碼）；賣：有持股才賣（本來就是）
      "cooldown": 0}                                          # 觸發後幾個交易日內不再觸發
-條件在每個交易日**收盤**判斷，動作在**下一個交易日開盤**市價成交（和引擎一樣）；日期類條件（monthly_day、on_date）在當天開盤成交。
+條件在每個交易日**收盤**判斷，動作在**下一個交易日開盤**市價成交（和引擎一樣）；含日期類條件（monthly_day、on_date）的規則在當天開盤判斷，
+群組裡的指標類條件此時用前一個交易日的收盤（例：「每月 5 日 且 在 60 日均線之下」= 5 日那天開盤，看前一日收盤是否在均線下）。
 指標用還原收盤算：MA(n)、RSI(n，Wilder)、n 日報酬；成本用模擬帳戶的平均成本（含手續費）。
 成交、價格、指標算法與其他模擬同一份（trading_rules.fill_orders、trading_replay.load_prices／_metrics）。
 """
@@ -46,11 +47,37 @@ CONDITIONS = {
 UNITS = ('股', '張', '元', '全部')
 
 
+DATE_TYPES = ('monthly_day', 'on_date')
+
+
+def is_group(w) -> bool:
+    return isinstance(w, dict) and 'op' in w
+
+
+def leaves(w) -> list:
+    """把 when（單一條件或 and／or 群組，可巢狀）攤成葉節點清單。"""
+    if not isinstance(w, dict):
+        return []
+    if is_group(w):
+        return [x for c in (w.get('conds') or []) for x in leaves(c)]
+    return [w]
+
+
+def has_date_leaf(w) -> bool:
+    return any(x.get('type') in DATE_TYPES for x in leaves(w))
+
+
+def cond_text(w) -> str:
+    if is_group(w):
+        joiner = ' 且 ' if w['op'] == 'and' else ' 或 '
+        return '（' + joiner.join(cond_text(c) for c in w.get('conds') or []) + '）'
+    return CONDITIONS[w['type']][1].format(**{k: w.get(k) for k in CONDITIONS[w['type']][0]})
+
+
 def rule_text(r: dict) -> str:
     w, t = r['when'], r['then']
-    cond = CONDITIONS[w['type']][1].format(**{k: w.get(k) for k in CONDITIONS[w['type']][0]})
     act = ('買 ' if t['side'] == 'buy' else '賣 ') + ('全部' if t.get('unit') == '全部' else f"{t.get('qty')}{t.get('unit', '股')}")
-    return f"{r['stock_id']}：{cond} → {act}"
+    return f"{r['stock_id']}：{cond_text(w)} → {act}"
 
 
 def validate_rules(rules: list) -> list:
@@ -67,20 +94,10 @@ def validate_rules(rules: list) -> list:
         if not (4 <= len(sid) <= 6):
             errs.append(f'第 {i} 條：股票代號看不懂')
         w, t = r.get('when') or {}, r.get('then') or {}
-        if w.get('type') not in CONDITIONS:
-            errs.append(f'第 {i} 條：條件 {w.get("type")} 不認識'); continue
-        for k in CONDITIONS[w['type']][0]:
-            if k == 'date':
-                try:
-                    date.fromisoformat(str(w.get('date')))
-                except (TypeError, ValueError):
-                    errs.append(f'第 {i} 條：日期要是 YYYY-MM-DD')
-            elif not isinstance(w.get(k), (int, float)):
-                errs.append(f'第 {i} 條：條件缺參數 {k}')
-            elif k == 'n' and not (1 <= w[k] <= 250):
-                errs.append(f'第 {i} 條：{k} 要在 1～250')
-            elif k == 'd' and not (1 <= w[k] <= 28):
-                errs.append(f'第 {i} 條：每月幾號要在 1～28')
+        before = len(errs)
+        _validate_when(w, i, errs, depth=0)
+        if len(errs) > before:
+            continue
         if t.get('side') not in ('buy', 'sell'):
             errs.append(f'第 {i} 條：動作要是 buy 或 sell')
         unit = t.get('unit', '股')
@@ -95,11 +112,42 @@ def validate_rules(rules: list) -> list:
     return errs
 
 
+def _validate_when(w, i: int, errs: list, depth: int):
+    if not isinstance(w, dict):
+        errs.append(f'第 {i} 條：條件要是物件'); return
+    if is_group(w):
+        if w['op'] not in ('and', 'or'):
+            errs.append(f'第 {i} 條：群組的 op 要是 and 或 or'); return
+        conds = w.get('conds')
+        if not isinstance(conds, list) or not (1 <= len(conds) <= 8):
+            errs.append(f'第 {i} 條：群組要有 1～8 個條件'); return
+        if depth >= 2:
+            errs.append(f'第 {i} 條：群組最多巢狀兩層'); return
+        for c in conds:
+            _validate_when(c, i, errs, depth + 1)
+        return
+    if w.get('type') not in CONDITIONS:
+        errs.append(f'第 {i} 條：條件 {w.get("type")} 不認識'); return
+    for k in CONDITIONS[w['type']][0]:
+        if k == 'date':
+            try:
+                date.fromisoformat(str(w.get('date')))
+            except (TypeError, ValueError):
+                errs.append(f'第 {i} 條：日期要是 YYYY-MM-DD')
+        elif not isinstance(w.get(k), (int, float)):
+            errs.append(f'第 {i} 條：條件缺參數 {k}')
+        elif k == 'n' and not (1 <= w[k] <= 250):
+            errs.append(f'第 {i} 條：{k} 要在 1～250')
+        elif k == 'd' and not (1 <= w[k] <= 28):
+            errs.append(f'第 {i} 條：每月幾號要在 1～28')
+
+
 def _indicators(closes: pd.Series, rules_for_stock: list) -> dict:
     """只算這檔用得到的指標；回 {name: Series}。"""
     out = {}
     for r in rules_for_stock:
-        w = r['when']; t = w['type']
+      for w in leaves(r['when']):
+        t = w['type']
         if t in ('cross_above_ma', 'cross_below_ma', 'above_ma', 'below_ma'):
             out.setdefault(f"ma{w['n']}", closes.rolling(int(w['n'])).mean())
         elif t in ('rsi_below', 'rsi_above'):
@@ -115,9 +163,42 @@ def _indicators(closes: pd.Series, rules_for_stock: list) -> dict:
     return out
 
 
-def _check(r: dict, d: date, i: int, closes: pd.Series, ind: dict, held: int, avg_cost: Optional[float]) -> Optional[dict]:
-    """條件成立回 {'value': …}，否則 None。i 是 d 在 closes 的位置。"""
-    w = r['when']; t = w['type']
+def _date_hit(w: dict, d: date, di: int, days: list) -> Optional[dict]:
+    """日期類葉節點：今天是不是「本月 d 日起第一個交易日」／「指定日起第一個交易日」。"""
+    if w['type'] == 'monthly_day':
+        if d.day >= w['d'] and not any(x.month == d.month and x.year == d.year and x.day >= w['d'] for x in days[:di]):
+            return {'value': None}
+        return None
+    od = date.fromisoformat(str(w['date']))
+    return {'value': None} if (d >= od and not any(x >= od for x in days[:di])) else None
+
+
+def _eval(w, ctx: dict) -> Optional[dict]:
+    """求值單一條件或群組。ctx：d、di、days、closes、ind、held、avg_cost、i（指標類用的收盤位置；None = 沒行情）。
+    成立回 {'value': …}（群組是各葉的值），否則 None。"""
+    if is_group(w):
+        vals = []
+        for c in w.get('conds') or []:
+            h = _eval(c, ctx)
+            if w['op'] == 'and':
+                if h is None:
+                    return None
+                vals.append(h.get('value'))
+            elif h is not None:
+                vals.append(h.get('value'))
+        if w['op'] == 'or' and not vals:
+            return None
+        return {'value': vals}
+    if w['type'] in DATE_TYPES:
+        return _date_hit(w, ctx['d'], ctx['di'], ctx['days'])
+    if ctx['i'] is None or ctx['i'] < 0:
+        return None
+    return _check_leaf(w, ctx['i'], ctx['closes'], ctx['ind'], ctx['held'], ctx['avg_cost'])
+
+
+def _check_leaf(w: dict, i: int, closes: pd.Series, ind: dict, held: int, avg_cost: Optional[float]) -> Optional[dict]:
+    """指標類葉節點成立回 {'value': …}，否則 None。i 是收盤在 closes 的位置。"""
+    t = w['type']
     c = float(closes.iloc[i])
     if t == 'price_below':
         return {'value': c} if c < w['x'] else None
@@ -167,9 +248,11 @@ def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_0
         return {'available': False, 'reason': '規則有問題', 'errors': errs}
     if end < start or (end - start).days > MAX_YEARS * 366:
         return {'available': False, 'reason': f'期間要正向且最多 {MAX_YEARS} 年'}
-    rules = [{**r, 'stock_id': str(r['stock_id']).strip().upper(), 'max_times': r.get('max_times', 1 if r['when']['type'] not in ('monthly_day',) else None),
-              'only_if_flat': r.get('only_if_flat', r['then']['side'] == 'buy' and r['when']['type'] not in ('monthly_day', 'on_date')),
+    rules = [{**r, 'stock_id': str(r['stock_id']).strip().upper(),
+              'max_times': r.get('max_times', None if any(x['type'] == 'monthly_day' for x in leaves(r['when'])) else 1),
+              'only_if_flat': r.get('only_if_flat', r['then']['side'] == 'buy' and not has_date_leaf(r['when'])),
               'cooldown': int(r.get('cooldown') or 0)} for r in rules]
+    at_open = [has_date_leaf(r['when']) for r in rules]      # 含日期類條件的規則在當天開盤判斷（指標用前一日收盤），其餘收盤判斷、隔天開盤
     days = pp.market_days(start, end)
     if len(days) < 2:
         return {'available': False, 'reason': '這段期間沒有全市場行情（資料從 2018-01 起）'}
@@ -260,16 +343,11 @@ def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_0
         todo = [o for o in pending]
         pending = []
         for idx, r in enumerate(rules):
-            w = r['when']; t = w['type']
-            hit = None
-            if t == 'monthly_day':
-                # 本月 d 日起第一個交易日 = 今天是本月第一個 ≥ d 日的交易日
-                if d.day >= w['d'] and not any(x.month == d.month and x.year == d.year and x.day >= w['d'] for x in days[:di]):
-                    hit = {'value': None}
-            elif t == 'on_date':
-                od = date.fromisoformat(str(w['date']))
-                if d >= od and not any(x >= od for x in days[:di]):
-                    hit = {'value': None}
+            if not at_open[idx]:
+                continue
+            s = r['stock_id']
+            i_prev = pos[s][d] - 1 if d in pos.get(s, {}) else None      # 指標葉用前一個交易日的收盤
+            hit = _eval(r['when'], {'d': d, 'di': di, 'days': days, 'closes': closes[s], 'ind': ind[s], 'held': held.get(s, 0), 'avg_cost': avg_cost(s), 'i': i_prev})
             if hit and _can_fire(r, idx, fired, last_fire, di, held):
                 fired[idx] += 1; last_fire[idx] = di
                 todo.append(make_order(r, idx, d, True))
@@ -280,14 +358,13 @@ def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_0
         nav_rows.append((d, cash + value, cash, bench.get(d)))
         # 3. 收盤：判斷指標類條件 → 明天開盤
         for idx, r in enumerate(rules):
-            t = r['when']['type']
-            if t in ('monthly_day', 'on_date'):
+            if at_open[idx]:
                 continue
             s = r['stock_id']
             if d not in pos.get(s, {}):
                 continue
             i = pos[s][d]
-            hit = _check(r, d, i, closes[s], ind[s], held.get(s, 0), avg_cost(s))
+            hit = _eval(r['when'], {'d': d, 'di': di, 'days': days, 'closes': closes[s], 'ind': ind[s], 'held': held.get(s, 0), 'avg_cost': avg_cost(s), 'i': i})
             if hit and _can_fire(r, idx, fired, last_fire, di, held):
                 fired[idx] += 1; last_fire[idx] = di
                 pending.append(make_order(r, idx, d, False))

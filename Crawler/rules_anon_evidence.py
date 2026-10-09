@@ -10,13 +10,21 @@ STOP = [   # 頁面模板「停損停利」套在 2330（--template stop）
     {'stock_id': '2330', 'when': {'type': 'loss_from_cost', 'x': 10}, 'then': {'side': 'sell', 'unit': '全部'}, 'max_times': None, 'only_if_flat': False},
     {'stock_id': '2330', 'when': {'type': 'gain_from_cost', 'x': 20}, 'then': {'side': 'sell', 'unit': '全部'}, 'max_times': None, 'only_if_flat': False},
 ]
+COMBO = [   # 頁面模板「雙重確認」＋「定投在均線下」（--template combo）：AND／OR 群組
+    {'stock_id': '2330', 'when': {'op': 'and', 'conds': [{'type': 'cross_above_ma', 'n': 20}, {'type': 'rsi_above', 'n': 14, 'x': 50}]}, 'then': {'side': 'buy', 'qty': 100000, 'unit': '元'}, 'max_times': None, 'only_if_flat': True},
+    {'stock_id': '2330', 'when': {'op': 'or', 'conds': [{'type': 'cross_below_ma', 'n': 20}, {'type': 'loss_from_cost', 'x': 10}]}, 'then': {'side': 'sell', 'unit': '全部'}, 'max_times': None, 'only_if_flat': False},
+    {'stock_id': '0050', 'when': {'op': 'and', 'conds': [{'type': 'monthly_day', 'd': 5}, {'type': 'below_ma', 'n': 60}]}, 'then': {'side': 'buy', 'qty': 20000, 'unit': '元'}, 'max_times': None, 'only_if_flat': False},
+]
 rules = [
     {'stock_id': '2330', 'when': {'type': 'cross_above_ma', 'n': 20}, 'then': {'side': 'buy', 'qty': 100000, 'unit': '元'}, 'max_times': None, 'only_if_flat': True},
     {'stock_id': '2330', 'when': {'type': 'cross_below_ma', 'n': 20}, 'then': {'side': 'sell', 'unit': '全部'}, 'max_times': None, 'only_if_flat': False},
     {'stock_id': '0050', 'when': {'type': 'monthly_day', 'd': 5}, 'then': {'side': 'buy', 'qty': 10000, 'unit': '元'}, 'max_times': None, 'only_if_flat': False},
 ]
-if '--template' in sys.argv and sys.argv[sys.argv.index('--template') + 1] == 'stop':
+tpl = sys.argv[sys.argv.index('--template') + 1] if '--template' in sys.argv else ''
+if tpl == 'stop':
     rules = STOP
+elif tpl == 'combo':
+    rules = COMBO
 capital = 1_000_000 if rules is STOP else 300000
 body = json.dumps({'rules': rules, 'start': '2024-01-02', 'end': '2024-09-30', 'capital': capital}).encode('utf-8')
 req = urllib.request.Request('http://localhost:3001/sim/rules', data=body, headers={'Content-Type': 'application/json'}, method='POST')

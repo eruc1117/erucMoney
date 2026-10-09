@@ -1,4 +1,5 @@
-// 條件規則（Iteration 61）：「條件 → 買／賣」的模組化輸入。使用者挑股票、條件、動作，可套模板；後端逐日用實際行情判斷、觸發隔天開盤成交。
+// 條件規則（Iteration 61；62 加 AND／OR 群組）：「條件 → 買／賣」的模組化輸入。一條規則可有多個條件用「且」或「或」連起來；
+// 含日期條件的規則在當天開盤判斷（指標看前一日收盤），其餘收盤判斷、隔天開盤成交。
 // 用在 TradingSim（公開頁）。runRules 由頁面給（公開頁用 /sim/rules）。
 import { useEffect, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
@@ -34,19 +35,34 @@ export const CONDITIONS = {
 const UNITS_BUY = [['元', '元'], ['股', '股'], ['張', '張']]
 const UNITS_SELL = [['全部', '全部'], ['股', '股'], ['張', '張']]
 
+// ── 條件群組（Iteration 62）：rule.when 是單一條件，或 { op: 'and'|'or', conds: [條件…] } ──
+export const isGroup = w => !!w && typeof w === 'object' && 'op' in w
+export const condsOf = r => (isGroup(r.when) ? r.when.conds : [r.when])
+export const opOf = r => (isGroup(r.when) ? r.when.op : 'and')
+const DATE_TYPES = ['monthly_day', 'on_date']
+const hasDate = conds => conds.some(c => DATE_TYPES.includes(c.type))
+function buildWhen(conds, op) { return conds.length === 1 ? conds[0] : { op, conds } }
+function condText(w) {
+  if (isGroup(w)) return '（' + w.conds.map(condText).join(w.op === 'and' ? ' 且 ' : ' 或 ') + '）'
+  const c = CONDITIONS[w?.type]
+  return c ? c.text(w) : '（未設定）'
+}
 export function ruleText(r) {
-  const c = CONDITIONS[r.when?.type]
-  if (!c) return '（未設定）'
   const act = (r.then.side === 'buy' ? '買 ' : '賣 ') + (r.then.unit === '全部' ? '全部' : `${r.then.qty}${r.then.unit}`)
-  return `${codeOf(r.stock_id)}：${c.text(r.when)} → ${act}`
+  return `${codeOf(r.stock_id)}：${condText(r.when)} → ${act}`
+}
+function leafOfType(type) {
+  const w = { type }
+  for (const [k, , dflt] of CONDITIONS[type].params) w[k] = dflt
+  return w
+}
+// 依整條規則的條件重算預設：含每月固定日 → 次數不限；含日期類 → 買單不擋「沒持股才買」
+function withDefaults(rule) {
+  const conds = condsOf(rule)
+  return { ...rule, max_times: conds.some(c => c.type === 'monthly_day') ? null : (rule.max_times === undefined ? 1 : rule.max_times),
+           only_if_flat: rule.then.side === 'buy' && !hasDate(conds) }
 }
 function newRule(stock = '2330') { return { stock_id: stock, when: { type: 'cross_above_ma', n: 20 }, then: { side: 'buy', qty: 100000, unit: '元' }, max_times: 1, only_if_flat: true, cooldown: 0 } }
-function withType(rule, type) {
-  const when = { type }
-  for (const [k, , dflt] of CONDITIONS[type].params) when[k] = dflt
-  const monthly = type === 'monthly_day' || type === 'on_date'
-  return { ...rule, when, max_times: type === 'monthly_day' ? null : 1, only_if_flat: rule.then.side === 'buy' && !monthly }
-}
 
 // 模板（stock 由表單帶入）
 const TEMPLATES = [
@@ -63,37 +79,65 @@ const TEMPLATES = [
   { key: 'rsi', label: 'RSI 反轉', hint: 'RSI(14) < 30 買 5 萬，> 70 賣光', make: s => [
     { ...newRule(s), when: { type: 'rsi_below', n: 14, x: 30 }, then: { side: 'buy', qty: 50000, unit: '元' }, max_times: null, only_if_flat: true, cooldown: 5 },
     { ...newRule(s), when: { type: 'rsi_above', n: 14, x: 70 }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false, cooldown: 5 }] },
+  { key: 'dcama', label: '定投在均線下', hint: '每月 5 日 且 前一日收盤在 60 日均線之下 才買 2 萬（AND）', make: s => [
+    { ...newRule(s), when: { op: 'and', conds: [{ type: 'monthly_day', d: 5 }, { type: 'below_ma', n: 60 }] }, then: { side: 'buy', qty: 20000, unit: '元' }, max_times: null, only_if_flat: false }] },
+  { key: 'confirm', label: '雙重確認', hint: '穿過 20 日均線 且 RSI(14) > 50 才買 10 萬；跌破 20 日均線 或 比成本低 10% 就賣光', make: s => [
+    { ...newRule(s), when: { op: 'and', conds: [{ type: 'cross_above_ma', n: 20 }, { type: 'rsi_above', n: 14, x: 50 }] }, then: { side: 'buy', qty: 100000, unit: '元' }, max_times: null, only_if_flat: true },
+    { ...newRule(s), when: { op: 'or', conds: [{ type: 'cross_below_ma', n: 20 }, { type: 'loss_from_cost', x: 10 }] }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false }] },
 ]
 
-function RuleRow({ r, onChange, onRemove, stocks }) {
-  const c = CONDITIONS[r.when.type]
-  const units = r.then.side === 'buy' ? UNITS_BUY : UNITS_SELL
-  const setWhen = (k, v) => onChange({ ...r, when: { ...r.when, [k]: k === 'date' ? v : Number(v) } })
-  const setThen = (k, v) => onChange({ ...r, then: { ...r.then, [k]: k === 'qty' ? Number(v) : v } })
+function CondRow({ w, first, op, onChange, onRemove, onToggleOp, canRemove }) {
+  const c = CONDITIONS[w.type]
+  const setParam = (k, v) => onChange({ ...w, [k]: k === 'date' ? v : Number(v) })
   return (
-    <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', alignItems: 'flex-end', padding: '.55rem .75rem', border: '1px solid var(--border-soft)', borderRadius: 8, marginBottom: '.45rem' }}>
-      <div className="ctrl-group"><div className="ctrl-label">股票</div><input className="ctrl-select" list="sim-stocks" style={{ width: 120 }} value={r.stock_id} onChange={e => onChange({ ...r, stock_id: e.target.value })} /></div>
-      <div className="ctrl-group"><div className="ctrl-label">當</div>
-        <select className="ctrl-select" value={r.when.type} onChange={e => onChange(withType(r, e.target.value))}>{Object.entries(CONDITIONS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
+    <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+      <div className="ctrl-group"><div className="ctrl-label">{first ? '當' : '連接'}</div>
+        {first ? <div className="ctrl-select" style={{ width: 44, textAlign: 'center', pointerEvents: 'none' }}>當</div>
+               : <button className="btn-secondary" style={{ width: 44 }} title="切換 且／或（整條規則共用）" onClick={onToggleOp}>{op === 'and' ? '且' : '或'}</button>}
+      </div>
+      <div className="ctrl-group"><div className="ctrl-label">條件</div>
+        <select className="ctrl-select" value={w.type} onChange={e => onChange(leafOfType(e.target.value))}>{Object.entries(CONDITIONS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select>
       </div>
       {c.params.map(([k, label]) => (
         <div className="ctrl-group" key={k}><div className="ctrl-label">{label}</div>
-          <input className="ctrl-select" type={k === 'date' ? 'date' : 'number'} style={{ width: k === 'date' ? 140 : 84, textAlign: k === 'date' ? 'left' : 'right' }} value={r.when[k] ?? ''} onChange={e => setWhen(k, e.target.value)} />
+          <input className="ctrl-select" type={k === 'date' ? 'date' : 'number'} style={{ width: k === 'date' ? 140 : 84, textAlign: k === 'date' ? 'left' : 'right' }} value={w[k] ?? ''} onChange={e => setParam(k, e.target.value)} />
         </div>
       ))}
-      <div className="ctrl-group"><div className="ctrl-label">就</div>
-        <div className="btn-group">
-          <button className={`btn-period${r.then.side === 'buy' ? ' active' : ''}`} onClick={() => onChange({ ...r, then: { side: 'buy', qty: r.then.qty || 100000, unit: '元' }, only_if_flat: true })}>買</button>
-          <button className={`btn-period${r.then.side === 'sell' ? ' active' : ''}`} onClick={() => onChange({ ...r, then: { side: 'sell', unit: '全部' }, only_if_flat: false })}>賣</button>
+      {canRemove ? <button className="btn-icon" title="刪除這個條件" onClick={onRemove}>－</button> : null}
+    </div>
+  )
+}
+
+function RuleRow({ r, onChange, onRemove }) {
+  const conds = condsOf(r); const op = opOf(r)
+  const units = r.then.side === 'buy' ? UNITS_BUY : UNITS_SELL
+  const setThen = (k, v) => onChange({ ...r, then: { ...r.then, [k]: k === 'qty' ? Number(v) : v } })
+  const setConds = (next, nextOp = op) => onChange(withDefaults({ ...r, when: buildWhen(next, nextOp) }))
+  return (
+    <div style={{ padding: '.55rem .75rem', border: '1px solid var(--border-soft)', borderRadius: 8, marginBottom: '.45rem', display: 'flex', flexDirection: 'column', gap: '.4rem' }}>
+      <div style={{ display: 'flex', gap: '.45rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="ctrl-group"><div className="ctrl-label">股票</div><input className="ctrl-select" list="sim-stocks" style={{ width: 120 }} value={r.stock_id} onChange={e => onChange({ ...r, stock_id: e.target.value })} /></div>
+        <div className="ctrl-group"><div className="ctrl-label">就</div>
+          <div className="btn-group">
+            <button className={`btn-period${r.then.side === 'buy' ? ' active' : ''}`} onClick={() => onChange(withDefaults({ ...r, then: { side: 'buy', qty: r.then.qty || 100000, unit: '元' } }))}>買</button>
+            <button className={`btn-period${r.then.side === 'sell' ? ' active' : ''}`} onClick={() => onChange({ ...r, then: { side: 'sell', unit: '全部' }, only_if_flat: false })}>賣</button>
+          </div>
         </div>
+        {r.then.unit !== '全部' ? <div className="ctrl-group"><div className="ctrl-label">數量</div><input className="ctrl-select" type="number" style={{ width: 100, textAlign: 'right' }} value={r.then.qty ?? ''} onChange={e => setThen('qty', e.target.value)} /></div> : null}
+        <div className="ctrl-group"><div className="ctrl-label">單位</div><select className="ctrl-select" value={r.then.unit} onChange={e => setThen('unit', e.target.value)}>{units.map(([u, l]) => <option key={u} value={u}>{l}</option>)}</select></div>
+        <div className="ctrl-group"><div className="ctrl-label">最多次數</div><input className="ctrl-select" type="number" style={{ width: 70, textAlign: 'right' }} placeholder="不限" value={r.max_times ?? ''} onChange={e => onChange({ ...r, max_times: e.target.value === '' ? null : Number(e.target.value) })} /></div>
+        {r.then.side === 'buy' ? <label style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center', gap: '.3rem', paddingBottom: '.4rem' }}><input type="checkbox" checked={!!r.only_if_flat} onChange={e => onChange({ ...r, only_if_flat: e.target.checked })} />沒持股才買</label> : null}
+        <div className="ctrl-group"><div className="ctrl-label">冷卻（日）</div><input className="ctrl-select" type="number" style={{ width: 64, textAlign: 'right' }} value={r.cooldown ?? 0} onChange={e => onChange({ ...r, cooldown: Number(e.target.value) })} /></div>
+        <button className="btn-secondary" onClick={() => setConds([...conds, leafOfType('rsi_below')])} disabled={conds.length >= 8}>＋ 加條件</button>
+        <button className="btn-icon" title="刪除規則" onClick={onRemove}>✕</button>
       </div>
-      {r.then.unit !== '全部' ? <div className="ctrl-group"><div className="ctrl-label">數量</div><input className="ctrl-select" type="number" style={{ width: 100, textAlign: 'right' }} value={r.then.qty ?? ''} onChange={e => setThen('qty', e.target.value)} /></div> : null}
-      <div className="ctrl-group"><div className="ctrl-label">單位</div><select className="ctrl-select" value={r.then.unit} onChange={e => setThen('unit', e.target.value)}>{units.map(([u, l]) => <option key={u} value={u}>{l}</option>)}</select></div>
-      <div className="ctrl-group"><div className="ctrl-label">最多次數</div><input className="ctrl-select" type="number" style={{ width: 70, textAlign: 'right' }} placeholder="不限" value={r.max_times ?? ''} onChange={e => onChange({ ...r, max_times: e.target.value === '' ? null : Number(e.target.value) })} /></div>
-      {r.then.side === 'buy' ? <label style={{ fontSize: '.8rem', display: 'flex', alignItems: 'center', gap: '.3rem', paddingBottom: '.4rem' }}><input type="checkbox" checked={!!r.only_if_flat} onChange={e => onChange({ ...r, only_if_flat: e.target.checked })} />沒持股才買</label> : null}
-      <div className="ctrl-group"><div className="ctrl-label">冷卻（日）</div><input className="ctrl-select" type="number" style={{ width: 64, textAlign: 'right' }} value={r.cooldown ?? 0} onChange={e => onChange({ ...r, cooldown: Number(e.target.value) })} /></div>
-      <button className="btn-icon" title="刪除" onClick={onRemove}>✕</button>
-      <div style={{ flexBasis: '100%', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '.78rem' }} className="muted">{ruleText(r)}</div>
+      {conds.map((w, i) => (
+        <CondRow key={i} w={w} first={i === 0} op={op} canRemove={conds.length > 1}
+                 onChange={nw => setConds(conds.map((x, j) => (j === i ? nw : x)))}
+                 onRemove={() => setConds(conds.filter((_, j) => j !== i))}
+                 onToggleOp={() => setConds(conds, op === 'and' ? 'or' : 'and')} />
+      ))}
+      <div style={{ fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '.78rem' }} className="muted">{ruleText(r)}{conds.length > 1 ? <span>　· {hasDate(conds) ? '含日期條件：當天開盤判斷，指標看前一日收盤' : '收盤判斷、隔天開盤成交'}</span> : null}</div>
     </div>
   )
 }
@@ -145,7 +189,7 @@ export default function RuleBuilder({ form, stocks, runRules }) {
         <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button>
         <Sub>條件每天收盤判斷、隔天開盤成交；每月固定日／指定日期當天開盤。「最多次數」空白 = 不限；「沒持股才買」避免每天加碼。</Sub>
       </div>
-      {rules.length ? rules.map((x, i) => <RuleRow key={i} r={x} stocks={stocks} onChange={nr => update(i, nr)} onRemove={() => setRules(rules.filter((_, j) => j !== i))} />) : <Empty>還沒有規則。套個模板或加一條。</Empty>}
+      {rules.length ? rules.map((x, i) => <RuleRow key={i} r={x} onChange={nr => update(i, nr)} onRemove={() => setRules(rules.filter((_, j) => j !== i))} />) : <Empty>還沒有規則。套個模板或加一條。</Empty>}
       {error ? <div className="down" style={{ fontSize: '.86rem', marginTop: '.4rem' }}>{error}</div> : null}
 
       {r ? (
