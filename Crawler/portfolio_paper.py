@@ -151,12 +151,15 @@ def load_list(rebalance_date: date) -> list:
 
 
 def pending_lists(today: date) -> list:
-    """已算出、還沒成交、訊號日 < today 的清單日期（舊的在前）。"""
+    """已算出、還沒成交、訊號日 < today 的清單日期（舊的在前）。開戶前的清單（例如回測期末那份）不算——模擬帳戶只做開戶後的訊號日。"""
+    st = state()
+    since = st['started_on'] if st else today
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""SELECT DISTINCT rebalance_date FROM portfolio_live_list l
-                           WHERE rebalance_date < %s AND NOT EXISTS (SELECT 1 FROM portfolio_paper_trades t WHERE t.rebalance_date = l.rebalance_date)
-                           ORDER BY 1""", (today,))
+                           WHERE rebalance_date >= %s AND rebalance_date < %s
+                             AND NOT EXISTS (SELECT 1 FROM portfolio_paper_trades t WHERE t.rebalance_date = l.rebalance_date)
+                           ORDER BY 1""", (since, today))
             return [r[0] for r in cur.fetchall()]
 
 

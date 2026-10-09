@@ -56,8 +56,12 @@ def test_start_once_then_fill_mark_review(clean_db, monkeypatch):
     assert st['cash'] == 1_000_000
     with pytest.raises(RuntimeError):
         pp.start()
+    # 開戶前的清單（回測期末那份）不算待成交
+    _seed_list(db, date(2026, 9, 11), {'1111': 1.0})
+    assert pp.pending_lists(date(2026, 10, 14)) == []
     # 10/13 的清單：台積電 0.5、1111 0.25、2222 0.25；10/14 開盤成交
     _seed_list(db, date(2026, 10, 13), {'2330': 0.5, '1111': 0.25, '2222': 0.25})
+    assert pp.pending_lists(date(2026, 10, 14)) == [date(2026, 10, 13)]
     monkeypatch.setattr(pp, 'make_list', lambda rd, run_id: {'n': 0, 'new': []})     # 不跑真的回測
     r = pp.run_daily(date(2026, 10, 14))
     assert len(r['filled']) == 1 and r['filled'][0]['exec_date'] == date(2026, 10, 14) and r['filled'][0]['buys'] == 3
@@ -78,14 +82,14 @@ def test_start_once_then_fill_mark_review(clean_db, monkeypatch):
     assert r2['filled'] == [] and r2['marked'] == 1
     rv = pp.review()
     assert rv['days'] == 4 and rv['n_holdings'] == 3 and rv['bench_return'] == pytest.approx(104 / 101 - 1, abs=1e-4)   # 0050 從起始日 10/9 的 101 → 104
-    assert rv['port_return'] == pytest.approx((cash + held['2330'] * 1000 + held['1111'] * 110 + held['2222'] * 45) / 1_000_000 - 1, abs=1e-6)
+    assert rv['port_return'] == pytest.approx((cash + held['2330'] * 1000 + held['1111'] * 110 + held['2222'] * 45) / 1_000_000 - 1, abs=1e-4)   # review 四捨五入到 4 位
     assert rv['monthly'][0]['month'] == '2026-10' and rv['monthly'][0]['active'] == pytest.approx(rv['port_return'] - rv['bench_return'], abs=1e-6)
 
 
 def test_fill_skips_locked_and_sells_dropped_names(clean_db, monkeypatch):
     db = clean_db
     _seed_market(db, {'1111': [100] * 5, '2222': [50] * 5, '3333': [20, 20, 20, 20, 20]}, lock={'3333': date(2026, 10, 14)})
-    pp.start(capital=100_000, run_id=None, started_on=date(2026, 10, 9))
+    pp.start(capital=100_000, run_id=None, started_on=date(2026, 10, 8))     # 開戶日 = 第一個訊號日
     _seed_list(db, date(2026, 10, 8), {'1111': 0.5, '2222': 0.5})            # 第一份清單 10/9 成交
     monkeypatch.setattr(pp, 'make_list', lambda rd, run_id: {'n': 0, 'new': []})
     pp.run_daily(date(2026, 10, 9))
