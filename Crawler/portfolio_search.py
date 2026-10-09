@@ -41,6 +41,14 @@ ROUNDS = {
         dict(signal='sue', tranches=6, tsmc_weight='est'), dict(signal='mom', tranches=6, tsmc_weight='est'),
         dict(signal='win', tranches=3, tsmc_weight='est'), dict(signal='win3+mom', tranches=6, tsmc_weight='est'),
     ],
+    # 第五輪（Iteration 53）：不同假設的訊號家族，同一個結構（分三批、持台積電），dev 與 valid 各跑一次、不調參
+    'families': [
+        dict(signal='rev_accel', tranches=3, tsmc_weight='est'), dict(signal='rev_streak', tranches=3, tsmc_weight='est'),
+        dict(signal='lowvol', tranches=3, tsmc_weight='est'), dict(signal='hi52', tranches=3, tsmc_weight='est'),
+        dict(signal='rev1m', tranches=3, tsmc_weight='est'), dict(signal='volchg', tranches=3, tsmc_weight='est'),
+        dict(signal='win3+mom+lowvol', tranches=3, tsmc_weight='est'), dict(signal='mom+hi52', tranches=3, tsmc_weight='est'),
+        dict(signal='rev_accel+mom', tranches=3, tsmc_weight='est'), dict(signal='win3+mom+rev_streak', tranches=3, tsmc_weight='est'),
+    ],
     # 第三輪：訊號組合（排名平均）
     'combo': [
         dict(signal='mom', tranches=3), dict(signal='win+mom', tranches=3), dict(signal='win+sue', tranches=3),

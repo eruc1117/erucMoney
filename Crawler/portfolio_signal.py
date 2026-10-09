@@ -252,7 +252,93 @@ def signal_win3(mkt: Market, d: pd.Timestamp) -> pd.Series:
     return total.dropna() if total is not None else pd.Series(dtype=float)
 
 
-SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3')
+# ── 第二批：不同假設的訊號家族（Iteration 53）──────────────────────────────
+
+def _window(mkt: Market, d: pd.Timestamp, n: int):
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right'))
+    return (None if i < n + 1 else slice(i - n, i)), i
+
+
+def signal_lowvol(mkt: Market, d: pd.Timestamp, n: int = 60) -> pd.Series:
+    """低波動：過去 60 日 log 報酬標準差取負（低波動異象：波動低的股票風險調整後報酬較高）。"""
+    sl, _ = _window(mkt, d, n + 1)
+    if sl is None:
+        return pd.Series(dtype=float)
+    lr = np.log(mkt.adj.iloc[sl]).diff().iloc[1:]
+    sd = lr.std().where(lr.count() >= int(n * 0.8))
+    return (-sd).dropna()
+
+
+def signal_hi52(mkt: Market, d: pd.Timestamp, n: int = 252) -> pd.Series:
+    """52 週高點接近度：收盤 ÷ 過去 252 日最高收盤（George & Hwang 2004：靠近高點的股票之後表現較好）。"""
+    sl, _ = _window(mkt, d, n)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.adj.iloc[sl]
+    hi = seg.max().where(seg.count() >= int(n * 0.8))
+    return (seg.iloc[-1] / hi).dropna()
+
+
+def signal_rev1m(mkt: Market, d: pd.Timestamp, n: int = 21) -> pd.Series:
+    """1 個月反轉：過去 21 日累積異常報酬取負（短期反轉；台股文獻說反轉比動能常見）。"""
+    sl, _ = _window(mkt, d, n + 1)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.ar.iloc[sl].iloc[1:]
+    return (-seg.sum(min_count=int(n * 0.8))).dropna()
+
+
+def signal_volchg(mkt: Market, d: pd.Timestamp, short: int = 20, long: int = 120) -> pd.Series:
+    """異常成交量：近 20 日平均成交金額 ÷ 近 120 日平均（注意力／資金流入）。"""
+    sl, _ = _window(mkt, d, long)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.turnover.iloc[sl]
+    recent = seg.iloc[-short:]
+    ratio = recent.mean().where(recent.count() >= int(short * 0.8)) / seg.mean().where(seg.count() >= int(long * 0.8))
+    return np.log(ratio.replace(0, np.nan)).dropna()
+
+
+def _rev_rows(sur: pd.DataFrame, d: pd.Timestamp) -> pd.DataFrame:
+    rm = pd.Timestamp(year=d.year, month=d.month, day=1)
+    return sur[sur['revenue_month'] <= rm]
+
+
+def signal_rev_accel(sur: pd.DataFrame, d: pd.Timestamp) -> pd.Series:
+    """營收加速：最新 YoY（log）減三期前的 YoY——基本面動能的二階項。"""
+    rows = _rev_rows(sur, d)
+    out = {}
+    for sid, g in rows.groupby('stock_id'):
+        g = g.sort_values('revenue_month')
+        rm = pd.Timestamp(year=d.year, month=d.month, day=1)
+        if g['revenue_month'].iloc[-1] != rm or len(g) < 4:
+            continue
+        y = g['yoy'].values
+        if np.isnan(y[-1]) or np.isnan(y[-4]):
+            continue
+        out[sid] = float(y[-1] - y[-4])
+    return pd.Series(out, dtype=float)
+
+
+def signal_rev_streak(sur: pd.DataFrame, d: pd.Timestamp, cap: int = 24) -> pd.Series:
+    """營收連續成長：最近連續幾個月 YoY > 0（最多 24），品質／穩定度的代理。"""
+    rows = _rev_rows(sur, d)
+    out = {}
+    rm = pd.Timestamp(year=d.year, month=d.month, day=1)
+    for sid, g in rows.groupby('stock_id'):
+        g = g.sort_values('revenue_month')
+        if g['revenue_month'].iloc[-1] != rm:
+            continue
+        n = 0
+        for v in g['yoy'].values[::-1]:
+            if np.isnan(v) or v <= 0 or n >= cap:
+                break
+            n += 1
+        out[sid] = float(n)
+    return pd.Series(out, dtype=float)
+
+
+SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m', 'volchg', 'rev_accel', 'rev_streak')
 
 
 TSMC_WEIGHT_FALLBACK = 0.35       # 歷史不足 120 個交易日時（2018 上半年）用的固定假設；之後一律用估計值
@@ -297,6 +383,18 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
         return signal_mom(mkt, d)
     if signal == 'win3':
         return signal_win3(mkt, d)
+    if signal == 'lowvol':
+        return signal_lowvol(mkt, d)
+    if signal == 'hi52':
+        return signal_hi52(mkt, d)
+    if signal == 'rev1m':
+        return signal_rev1m(mkt, d)
+    if signal == 'volchg':
+        return signal_volchg(mkt, d)
+    if signal == 'rev_accel':
+        return signal_rev_accel(sur, d)
+    if signal == 'rev_streak':
+        return signal_rev_streak(sur, d)
     raise ValueError(f'未知訊號 {signal}')
 
 

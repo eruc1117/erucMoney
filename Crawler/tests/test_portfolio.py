@@ -194,6 +194,25 @@ def test_estimate_tsmc_weight_recovers_known_mix():
     assert ps.estimate_tsmc_weight(mkt, days[100]) is None
 
 
+def test_family_signals_shapes_and_point_in_time():
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    lv, hi, rv, vc = ps.signal_lowvol(mkt, d), ps.signal_hi52(mkt, d), ps.signal_rev1m(mkt, d), ps.signal_volchg(mkt, d)
+    for s in (lv, hi, rv, vc):
+        assert '1111' in s.index and np.isfinite(s['1111'])
+    assert (lv <= 0).all() and (hi <= 1.0 + 1e-9).all()
+    assert rv['1111'] == pytest.approx(-mkt.ar.loc[:d, '1111'].iloc[-21:].sum())
+    assert ps.signal_hi52(mkt, pd.Timestamp('2023-09-01')).empty          # 不足 252 日
+    months = pd.date_range('2021-01-01', '2024-07-01', freq='MS')
+    rev = pd.DataFrame(_rev('1111', months, growth=0.03) + _rev('2222', months, growth=-0.01))
+    sur = ps.surprises(rev)
+    acc, streak = ps.signal_rev_accel(sur, d), ps.signal_rev_streak(sur, d)
+    assert set(acc.index) == {'1111', '2222'} and streak['1111'] > streak['2222'] == 0
+    # 訊號日所在月還沒公布的（revenue_month 在下個月）不會被用到
+    assert ps.signal_rev_streak(sur, pd.Timestamp('2024-09-11')).empty
+    assert len(ps.scores_on('rev_accel+mom', mkt, sur, d, pd.Index(['1111', '2222']))) == 2
+
+
 def test_liq_weighting_caps_single_name():
     liq = pd.Series({'a': 1000.0, 'b': 10.0, 'c': 10.0})
     w = ps._weights(['a', 'b', 'c'], 1.0, 'liq', liq, cap=0.5)
