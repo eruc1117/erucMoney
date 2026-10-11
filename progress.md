@@ -1,12 +1,14 @@
 # 交接筆記
 
-**更新：** 2026-10-09
+**更新：** 2026-10-11
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 62：條件 AND／OR 組合（未提交；61 已提交 0696277）。引擎已啟動（紙上、停損 0、限價 ±2%），等今晚 18:40 排程第一次真的跑、10/13 第一份清單
+Iteration 63：月調倉淨值曲線可選區間（未提交；62 已提交 b9a4635）。引擎已啟動（紙上、停損 0、限價 ±2%），等今晚 18:40 排程第一次真的跑、10/13 第一份清單
 
 ## 產出
+- Screen 與 meeting_front_end 的 PortfolioLab.jsx（NavChart 區間）、AI/Doc/Iterations/Iteration-63.md
+（以下為 62，已提交）
 - Crawler/trading_strategy.py（群組：is_group／leaves／_validate_when／_eval）、tests/test_trading_strategy.py（5 項）、rules_anon_evidence.py（--template combo）；Screen 與 meeting_front_end 的 RuleBuilder.jsx（加條件、且／或、兩個模板）；AI/Doc/Iterations/Iteration-62.md
 （以下為 61，已提交）
 - Crawler/trading_strategy.py、tests/test_trading_strategy.py（3 項）、rules_anon_evidence.py；api.py `POST /trading/sim/rules`；Server/routes/sim.js `/sim/rules`、sim.test.js（7 項）
@@ -41,7 +43,7 @@ Iteration 62：條件 AND／OR 組合（未提交；61 已提交 0696277）。�
 - 2026-10-09：使用者決定**啟動引擎（紙上）**，規則改成停損 0（關閉）、限價 ±2%——依回放結果；RULES_DEFAULT 程式預設仍是 15%／0.5%，實際生效的是 trading_engine_state.rules
 
 ## 未解
-- Iteration 62 未提交（本 repo 與 meeting_front_end）；pytest 220、兩個 build、匿名 rules-anon-combo 都過；Node 沒改
+- Iteration 63 未提交（本 repo 與 meeting_front_end）；兩個 build 過；純前端沒跑 jest／pytest
 - 條件規則沒做：NOT、跨股票條件、對 0050 的相對強弱、成交量條件、部位比例動作、規則送進引擎實際執行
 - 引擎第一次 run_daily（2026-10-09 15:42）因當天日線未進而略過；要看 18:40 之後 trading_events 有沒有 signal／orders（10/13 訊號日才會有清單）
 - 開了引擎之後，紙上交易的成交方式從「照單全收」變成「限價 ±2%」，和回測的對照會差約 0.5%／年（回放估）
