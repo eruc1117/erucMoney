@@ -24,7 +24,7 @@
 import argparse
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import numpy as np
@@ -355,22 +355,25 @@ def tag_run(run_id: int, tag: Optional[str]) -> None:
 def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Optional[date] = None, top_n: int = 20, buffer: int = 40,
         universe_n: int = 300, excl_limit_pct: float = 0.10, tsmc_weight: Optional[float] = None, costs: dict = COSTS,
         name: Optional[str] = None, notes: str = '', save: bool = True, tranches: int = 1, weighting: str = 'equal',
-        _cache: Optional[dict] = None) -> dict:
-    """tsmc_weight：None（不持台積電）、數字（固定權重）、'est'（每次調倉用 estimate_tsmc_weight 估 0050 的台積電權重）。"""
+        _cache: Optional[dict] = None, warmup_days: int = 0) -> dict:
+    """tsmc_weight：None（不持台積電）、數字（固定權重）、'est'（每次調倉用 estimate_tsmc_weight 估 0050 的台積電權重）。
+    warmup_days：行情與營收從 start 往前多載這麼多天（動能要 252 個交易日歷史），調倉仍從 start 開始——
+    沒有暖機的話，期間開頭約 10 個月會因訊號不足而不調倉（開發期 2018 年、保留期 2024-10～2025-05 都是這樣）。"""
     seg_start, seg_end = SEGMENTS.get(segment, (None, None))
     start = start or seg_start
     end = end or seg_end or date.today()
     if start is None:
         raise ValueError('要給 segment 或 start')
     t0 = datetime.now()
-    key = (start, end)
+    load_start = start - timedelta(days=int(warmup_days)) if warmup_days else start
+    key = (load_start, end)
     if _cache is not None and _cache.get('key') == key:
         mkt, sur = _cache['mkt'], _cache['sur']
     else:
-        prices = ps.load_prices(start, end)
+        prices = ps.load_prices(load_start, end)
         meta = ps.load_universe_meta()
         mkt = ps.Market(prices, meta)
-        sur = ps.surprises(ps.load_revenue(start))
+        sur = ps.surprises(ps.load_revenue(load_start))
         if _cache is not None:
             _cache.update({'key': key, 'mkt': mkt, 'sur': sur})
     sim = simulate(mkt, sur, signal, start, end, top_n, buffer, universe_n, excl_limit_pct, tsmc_weight, costs, tranches, weighting)
@@ -382,6 +385,8 @@ def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Op
                 'skew_m': round(d['skew'], 3), 'kurt_m': round(d['kurt'], 3)})
     params = {'signal': signal, 'top_n': top_n, 'buffer': buffer, 'universe_n': universe_n, 'excl_limit_pct': excl_limit_pct,
               'tsmc_weight': tsmc_weight, 'costs': costs, 'segment': segment, 'tranches': tranches, 'weighting': weighting}
+    if warmup_days:
+        params['warmup_days'] = int(warmup_days)
     name = name or f'{signal}-{segment}-top{top_n}' + (f'-t{tranches}' if tranches > 1 else f'-b{buffer}') + (f'-u{universe_n}' if universe_n != 300 else '') + ('-liq' if weighting == 'liq' else '') + (f'-tsmc{tsmc_weight}' if tsmc_weight else '')
     run_id = save_run(n, name, signal, segment, start, met_end(met), params, met, sim['positions'], notes,
                       series=series_frame(sim['nav'], bench)) if save else None

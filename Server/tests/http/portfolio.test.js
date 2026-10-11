@@ -31,6 +31,18 @@ describe('FastAPI 在線', () => {
     expect(r.body.thresholds.dsr).toBe(0.95)
     expect(r.body.holdout_opened).toBe(false)
   })
+  it('GET /portfolio/official 匿名可讀；POST /official/update 匿名 401、一般使用者 403（Iteration 64）', async () => {
+    const r = await request(app).get('/portfolio/official')
+    expect(r.status).toBe(200)
+    expect(r.body.official.live_run_id).toBe(68)
+    expect((await request(app).post('/portfolio/official/update')).status).toBe(401)
+    const { calendarToken, bearer, localToken } = require('../helpers/tokens')
+    expect((await request(app).post('/portfolio/official/update').set(bearer(calendarToken({ id: 7901, username: 'nobody' })))).status).toBe(403)
+    const ok = await request(app).post('/portfolio/official/update').set(bearer(localToken({ id: 1, role: 'admin' })))
+    expect(ok.status).toBe(200)
+    expect(ok.body.end).toBe('2026-10-08')
+  })
+
   it('GET /portfolio/paper 回模擬帳戶檢討（匿名可讀）', async () => {
     const r = await request(app).get('/portfolio/paper')
     expect(r.status).toBe(200)

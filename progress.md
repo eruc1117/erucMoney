@@ -4,9 +4,13 @@
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 63：月調倉淨值曲線可選區間（未提交；62 已提交 b9a4635）。引擎已啟動（紙上、停損 0、限價 ±2%），等今晚 18:40 排程第一次真的跑、10/13 第一份清單
+Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69（0050 分割已修、加暖機）取代 #67——**年化主動 −6.1%、輸給 0050**。提交中引擎已啟動（紙上、停損 0、限價 ±2%），等今晚 18:40 排程第一次真的跑、10/13 第一份清單
 
 ## 產出
+- Crawler/portfolio_official.py、tests/test_portfolio_official.py、fix_0050_split.py、holdout_preview_evidence.py、migration 027、scheduler 18:50、api.py `/portfolio/official*`、Node 代理與測試
+- Screen/src/pages/OfficialStrategy.jsx、components/NavRangeChart.jsx（從 PortfolioLab 抽出）、App／Sidebar；meeting_front_end 同步（nav「預測」群組 official）
+- AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
+（以下為 63，已提交 51f59be）
 - Screen 與 meeting_front_end 的 PortfolioLab.jsx（NavChart 區間）、AI/Doc/Iterations/Iteration-63.md
 （以下為 62，已提交）
 - Crawler/trading_strategy.py（群組：is_group／leaves／_validate_when／_eval）、tests/test_trading_strategy.py（5 項）、rules_anon_evidence.py（--template combo）；Screen 與 meeting_front_end 的 RuleBuilder.jsx（加條件、且／或、兩個模板）；AI/Doc/Iterations/Iteration-62.md
@@ -40,9 +44,13 @@ Iteration 63：月調倉淨值曲線可選區間（未提交；62 已提交 b9a4
 - 2026-10-09：引擎**不自動開**。開了之後紙上交易的規則從「次日開盤照單全收」變成「限價＋停損」，和回測（無停損）的對照會變——開不開、要不要第二本模擬帳戶，由使用者決定
 - 2026-10-09：預測用候選回測的年化主動報酬與追蹤誤差推常態區間；caveat 寫在回應裡（DSR 0.13）
 - 2026-10-09：回放只在候選期間（清單來自 portfolio_positions run 44），保留期不開；回放結果不寫 portfolio_runs（不是新實驗，不算 N）
+- 2026-10-11：使用者決定**候選 #44 升為正式策略、開保留期**；升格後發現 0050 分割未還原與回測無暖機，使用者決定**修完重跑保留期**：#69 取代 #67（void，留著當證據）
 - 2026-10-09：使用者決定**啟動引擎（紙上）**，規則改成停損 0（關閉）、限價 ±2%——依回放結果；RULES_DEFAULT 程式預設仍是 15%／0.5%，實際生效的是 trading_engine_state.rules
 
 ## 未解
+- **正式策略在保留期沒打敗 0050**（#69：年化主動 −6.1%、IR −0.45、2025／2026 都落後）：要不要讓引擎繼續照它下單、要不要回研究階段，由使用者決定
+- live 列 #68（2018-01 起）沒暖機、2018 年前 10 個月空手；要不要加暖機重算（等於動開發期紀錄）未決定
+- 公告日「同月」不是 bug（revenue_month 鍵是公布月，Iteration 49 已定），`win3` 也不用公告日——先前的懷疑撤回
 - Iteration 63 未提交（本 repo 與 meeting_front_end）；兩個 build 過；純前端沒跑 jest／pytest
 - 條件規則沒做：NOT、跨股票條件、對 0050 的相對強弱、成交量條件、部位比例動作、規則送進引擎實際執行
 - 引擎第一次 run_daily（2026-10-09 15:42）因當天日線未進而略過；要看 18:40 之後 trading_events 有沒有 signal／orders（10/13 訊號日才會有清單）
@@ -54,7 +62,7 @@ Iteration 63：月調倉淨值曲線可選區間（未提交；62 已提交 b9a4
 - 同一工作區兩個 session 會互相 commit 到對方檔案、覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
-10/13 收盤後（18:40 排程）看「程式交易 → 觀察」：應有 signal 事件、約 21 張調倉委託；10/14 開盤成交後看 fill 事件與模擬帳戶持股
+使用者看保留期 −6.1% 的結果決定：引擎繼續紙上跑（10/13 第一份清單）還是停下來回研究階段；要研究就先用 `/experiment` 寫假設，不要再搜參數
 
 ## 階段
 - [x] 階段 1 全市場股票池與日線、含息大盤
@@ -62,4 +70,4 @@ Iteration 63：月調倉淨值曲線可選區間（未提交；62 已提交 b9a4
 - [x] 階段 3 訊號搜尋與候選（N = 66，候選 #44）
 - [~] 階段 4 紙上交易：模擬帳戶已開（2026-10-09），每日 18:40 結算，等每月清單累積
 - [~] 階段 5 程式交易：引擎已啟動（紙上，停損 0、限價 ±2%），等 10/13 第一份清單；凱基未接
-- [ ] 階段 6 保留期一次判定（使用者決定何時開）
+- [x] 階段 6 保留期：2026-10-11 開（#67 資料錯作廢、#69 重跑）：年化主動 −6.1%，**沒過門檻**；正式策略頁與每日淨值上線

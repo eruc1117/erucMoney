@@ -35,7 +35,7 @@ def test_start_registers_every_job_with_expected_times(monkeypatch):
     by = {j['id']: j for j in fake.jobs}
     assert set(by) == {'job_stock', 'job_news', 'job_vote', 'job_freshness', 'job_exogenous_6', 'job_exogenous_19',
                        'job_gap_predict', 'job_us_predict', 'job_news_models', 'job_weekly_forecast', 'job_model_review',
-                       'job_market_daily', 'job_portfolio_paper'}
+                       'job_market_daily', 'job_portfolio_paper', 'job_portfolio_official'}
     f = lambda k: _fields(by[k]['trigger'])
     sc, vc, nc = SCHEDULE['stock_cron'], SCHEDULE['vote_cron'], SCHEDULE['news_cron']
     assert (f('job_stock')['hour'], f('job_stock')['minute']) == (str(sc['hour']), str(sc['minute']))
@@ -53,6 +53,7 @@ def test_start_registers_every_job_with_expected_times(monkeypatch):
     assert (f('job_model_review')['hour'], f('job_model_review')['minute']) == ('21', '0')
     assert (f('job_market_daily')['hour'], f('job_market_daily')['minute']) == ('18', '30')     # 全市場日線在追蹤股之後
     assert (f('job_portfolio_paper')['hour'], f('job_portfolio_paper')['minute']) == ('18', '40')  # 紙上交易在日線之後
+    assert (f('job_portfolio_official')['hour'], f('job_portfolio_official')['minute']) == ('18', '50')  # 正式策略淨值在紙上交易之後
     assert (18, 30) > (sc['hour'], sc['minute'])
     assert int(f('job_model_review')['hour']) > vc['hour']                                       # 評估在投票之後
     # 不重入：每個工作 max_instances=1，且都有 misfire 寬限
@@ -77,7 +78,8 @@ def catch_up_env(monkeypatch, tmp_path):
     monkeypatch.setattr(scheduler, 'job_weekly_forecast', lambda trigger='schedule': ran.append(f'weekly:{trigger}'))
     monkeypatch.setattr(scheduler, '_catch_up_news', lambda: False)
     monkeypatch.setattr(weekly_forecast, 'due', lambda: False)
-    last = {'stock_daily_prices': None, 'voting_results': None, 'market_daily_prices': None, 'portfolio_paper_nav': None}
+    last = {'stock_daily_prices': None, 'voting_results': None, 'market_daily_prices': None, 'portfolio_paper_nav': None, 'portfolio_official': None}
+    monkeypatch.setattr(scheduler, 'job_portfolio_official', lambda: ran.append('official'))
     monkeypatch.setattr(scheduler, '_max_trade_date', lambda table, col='trade_date': last[table])
     return ran, last, tmp_path
 
@@ -112,6 +114,18 @@ def test_catch_up_market_daily_when_stale(catch_up_env):
     last['portfolio_paper_nav'] = '2026-09-24'    # 紙上交易結算也停在昨天 → 18:40 已過，補（在日線之後）
     scheduler._catch_up()
     assert ran == ['market', 'paper']
+
+
+@freeze_time('2026-09-25 19:30:00')
+def test_catch_up_official_when_nav_behind_market(catch_up_env):
+    ran, last, _ = catch_up_env
+    last['stock_daily_prices'] = '2026-09-25'; last['market_daily_prices'] = '2026-09-25'; last['portfolio_paper_nav'] = '2026-09-25'
+    last['portfolio_official'] = '2026-09-24'    # 正式策略淨值停在昨天、行情已到今天 → 18:50 已過，補
+    scheduler._catch_up()
+    assert ran == ['official']
+    ran.clear(); last['portfolio_official'] = None   # 沒升格 → 不碰
+    scheduler._catch_up()
+    assert ran == []
 
 
 @freeze_time('2026-09-25 21:05:00')

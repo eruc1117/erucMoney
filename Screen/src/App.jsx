@@ -28,6 +28,7 @@ import PortfolioLab       from './pages/PortfolioLab'
 import WorkProgress       from './pages/WorkProgress'
 import AlgoTrading        from './pages/AlgoTrading'
 import TradingSim         from './pages/TradingSim'
+import OfficialStrategy   from './pages/OfficialStrategy'
 
 const PAGE_TITLES = {
   overview:   '市場總覽',
@@ -40,6 +41,7 @@ const PAGE_TITLES = {
   compare:    '預測比對',
   weekly:     '每週全模型預測',
   portfolio:  '月調倉（打敗大盤）',
+  official:   '正式策略（候選 #44 升格，每日更新淨值）',
   trading:    '程式交易（規則引擎：紙上／凱基）',
   simulate:   '交易模擬（歷史回放、自訂指令）',
   history:    '查詢紀錄',
@@ -93,6 +95,7 @@ export default function App() {
           {page === 'compare'    && <PredictionCompare />}
           {page === 'weekly'     && <WeeklyForecast onSelectStock={goToStock} />}
           {page === 'portfolio'  && <PortfolioLab />}
+          {page === 'official'   && <OfficialStrategy />}
           {page === 'trading'    && <AlgoTrading />}
           {page === 'simulate'   && <TradingSim />}
           {page === 'history'    && <QueryHistory onSelectStock={goToStock} />}

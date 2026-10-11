@@ -315,6 +315,9 @@ export const getPortfolioCandidate = () => request('/portfolio/candidate')
 export const getPortfolioRuns = () => request('/portfolio/runs')
 export const getPortfolioRun = (id, step = 1) => request(`/portfolio/runs/${id}?step=${step}`)
 export const getPortfolioPaper = () => request('/portfolio/paper')
+// 正式策略（Iteration 64）
+export const getPortfolioOfficial = () => request('/portfolio/official')
+export const updatePortfolioOfficial = () => request('/portfolio/official/update', { method: 'POST', timeout: 180000 })
 
 // ── 程式交易（Iteration 57）：清單 → 下單指令；執行紀錄 ──
 // GET /trading/plan?cash=&min_trade=

@@ -576,6 +576,20 @@ def post_trading_engine_run(day: Optional[str] = None):
     return trading_engine.run_daily(date.fromisoformat(day) if day else None)
 
 
+@app.get("/portfolio/official")
+def get_portfolio_official():
+    """正式策略（Iteration 64）：候選／保留期／live 的指標、live 淨值曲線（每日更新）、逐年、本月清單、紙上帳戶摘要。"""
+    import portfolio_official
+    return portfolio_official.status()
+
+
+@app.post("/portfolio/official/update")
+def post_portfolio_official_update():
+    """手動跑一次每日更新（排程 18:50 也是跑這個）。"""
+    import portfolio_official
+    return portfolio_official.update_daily()
+
+
 @app.get("/portfolio/runs")
 def get_portfolio_runs():
     """實驗日誌全部：每一次回測一列，N 只增不減（失敗的也在）。"""

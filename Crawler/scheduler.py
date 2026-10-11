@@ -202,6 +202,16 @@ def job_portfolio_paper():
     logger.info("[排程/paper] 成交 %d 份清單、結算 %d 日、新清單 %s", len(r['filled']), r['marked'], r['new_list'])
 
 
+def job_portfolio_official():
+    """每日 18:50：正式策略的 live 列重算到最新行情（Iteration 64）。沒升格就略過；行情沒新的也略過。"""
+    import portfolio_official
+    r = portfolio_official.update_daily(date.today())
+    if r.get('skipped'):
+        logger.info("[排程/official] 略過：%s", r['skipped'])
+        return
+    logger.info("[排程/official] live 更新到 %s：%d 點、年化主動 %+.2f%%", r['end'], r['points'], r['ann_active'] * 100)
+
+
 def job_news():
     """每小時：爬取公開 RSS／鉅亨網 API 新聞（含 22 檔個股定向），寫入 user_news，
     並對每檔追蹤股票計算情緒特徵落地 news_features（model2 內建 upsert）。
@@ -534,6 +544,13 @@ def _catch_up():
                 logger.info("[排程/catch-up] 紙上交易結算最後日 %s 早於今天，補跑", last)
                 job_portfolio_paper(); ran.append("paper")
 
+        if passed(18, 50):
+            last_official = _max_trade_date("portfolio_official", "last_update_end")
+            last_mkt = _max_trade_date("market_daily_prices")
+            if last_official and last_mkt and last_official < last_mkt:
+                logger.info("[排程/catch-up] 正式策略淨值最後到 %s，行情到 %s，補跑", last_official, last_mkt)
+                job_portfolio_official(); ran.append("official")
+
         vc = SCHEDULE["vote_cron"]
         if passed(vc["hour"], vc["minute"]):
             last = _max_trade_date("voting_results", "vote_date")
@@ -577,6 +594,14 @@ def start():
         job_market_daily,
         trigger=CronTrigger(hour=18, minute=30, timezone="Asia/Taipei"),
         id="job_market_daily", name="全市場日線+含息大盤（交易所檔）",
+        max_instances=1, misfire_grace_time=3600,
+    )
+
+    # 正式策略（Iteration 64）：紙上交易之後重算 live 淨值
+    scheduler.add_job(
+        job_portfolio_official,
+        trigger=CronTrigger(hour=18, minute=50, timezone="Asia/Taipei"),
+        id="job_portfolio_official", name="正式策略：live 淨值每日更新",
         max_instances=1, misfire_grace_time=3600,
     )
 
@@ -662,7 +687,7 @@ def start():
     )
 
     logger.info("排程器啟動：股價每日 %02d:%02d ／ 新聞每小時 :%02d ／ 投票每日 %02d:%02d"
-                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 紙上交易 18:40 ／ 外生資料 06:10 與 19:10"
+                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 紙上交易 18:40 ／ 正式策略 18:50 ／ 外生資料 06:10 與 19:10"
                 " ／ 台股跳空預測 06:20 ／ 美股跳空預測 20:00 ／ 新聞訊號 20:10 ／ 模型評估每日 21:00"
                 " ／ 每週日 08:00 全模型預測（Ctrl+C 停止）",
                 stock_cron["hour"], stock_cron["minute"],

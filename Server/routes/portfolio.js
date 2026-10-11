@@ -3,11 +3,14 @@
  *
  * GET /portfolio/candidate      目前候選（開發期／驗證期／全期間）、全期間淨值曲線與最後持股
  * GET /portfolio/paper          紙上交易：模擬帳戶、對 0050 檢討、成交、持股
+ * GET /portfolio/official       正式策略（Iteration 64）：候選／保留期／live 指標、每日更新的淨值曲線、本月清單
+ * POST /portfolio/official/update  admin：手動跑一次每日更新
  * GET /portfolio/runs           實驗日誌全部（每一次回測一列，N 只增不減）
  * GET /portfolio/runs/:id       單一 run：指標、參數、淨值曲線、最後持股
  */
 const { Router } = require('express')
 const { proxyToFastAPI } = require('../lib/proxy')
+const { requireRole } = require('../lib/auth')
 
 const router = Router()
 const CRAWLER_DOWN = res => res.status(503).json({ detail: '爬蟲服務未啟動，請執行 python main.py --mode server' })
@@ -17,6 +20,12 @@ router.get('/candidate', (_req, res) => {
 })
 router.get('/paper', (_req, res) => {
   proxyToFastAPI({ port: 8000, path: '/portfolio/paper', res, onError: () => CRAWLER_DOWN(res) })
+})
+router.get('/official', (_req, res) => {
+  proxyToFastAPI({ port: 8000, path: '/portfolio/official', res, onError: () => CRAWLER_DOWN(res) })
+})
+router.post('/official/update', requireRole('admin'), (_req, res) => {
+  proxyToFastAPI({ port: 8000, path: '/portfolio/official/update', method: 'POST', body: {}, res, onError: () => CRAWLER_DOWN(res) })
 })
 router.get('/runs', (_req, res) => {
   proxyToFastAPI({ port: 8000, path: '/portfolio/runs', res, onError: () => CRAWLER_DOWN(res) })

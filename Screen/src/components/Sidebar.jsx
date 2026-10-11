@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { key: 'compare',    icon: '📊', label: '預測比對' },
   { key: 'weekly',     icon: '📅', label: '週預測' },
   { key: 'portfolio',  icon: '🏆', label: '月調倉' },
+  { key: 'official',   icon: '🏁', label: '正式策略' },
   { key: 'trading',    icon: '🎯', label: '程式交易' },
   { key: 'simulate',   icon: '🧪', label: '交易模擬' },
   { key: 'history',    icon: '📋', label: '查詢紀錄' },
