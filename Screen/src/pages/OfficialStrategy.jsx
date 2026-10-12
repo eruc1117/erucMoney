@@ -112,7 +112,7 @@ export default function OfficialStrategy() {
       </div>
 
       <div className="card" style={{ marginBottom: '1.1rem' }}>
-        <div className="card-header"><span className="card-title">淨值曲線：組合 vs 0050（{live?.period_start} ~ {live?.period_end}，每日更新）</span>{live?.metrics ? <span className="muted" style={{ fontSize: '.82rem' }}>年化 {pct(live.metrics.cagr_port, 1)} 對 {pct(live.metrics.cagr_bench, 1)} · 最大回撤 {pct(live.metrics.mdd_port, 1)} 對 {pct(live.metrics.mdd_bench, 1)}</span> : null}</div>
+        <div className="card-header"><span className="card-title">淨值曲線：組合 vs 0050 vs 大盤（{live?.period_start} ~ {live?.period_end}，每日更新）</span>{live?.metrics ? <span className="muted" style={{ fontSize: '.82rem' }}>年化 {pct(live.metrics.cagr_port, 1)} 對 {pct(live.metrics.cagr_bench, 1)} · 最大回撤 {pct(live.metrics.mdd_port, 1)} 對 {pct(live.metrics.mdd_bench, 1)}</span> : null}</div>
         <NavRangeChart series={data.live_series} periodStart={live?.period_start} periodEnd={live?.period_end} extraPresets={[['保留期', '2024-10-01', live?.period_end]]} />
       </div>
 

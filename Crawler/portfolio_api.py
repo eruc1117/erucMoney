@@ -22,6 +22,31 @@ def _run_row(r) -> dict:
 _COLS = "id, run_at, experiment_n, name, signal, segment, period_start, period_end, params, metrics, n_rebalances, notes, tag"
 
 
+INDEX_SYMBOL = 'TAIEX_TR'
+
+
+def _index_series(cur, dates: list) -> dict:
+    """含息大盤（index_daily_prices 的 TAIEX_TR）對齊到淨值曲線的日期，第一天歸一到 1。
+
+    回測的 nav／bench 都是「起點 = 1」，大盤也用同一個起點才能畫在同一張圖；指數缺的交易日
+    （證交所檔偶爾漏一天）沿用前一日的值，起點之前沒有指數就整條留空（前端不畫）。"""
+    if not dates:
+        return {}
+    cur.execute("SELECT trade_date, close_price FROM index_daily_prices WHERE symbol = %s AND trade_date BETWEEN %s AND %s ORDER BY trade_date",
+                (INDEX_SYMBOL, dates[0], dates[-1]))
+    closes = {d: float(c) for d, c in cur.fetchall() if c is not None}
+    if not closes:
+        return {}
+    out, last = {}, None
+    for d in dates:
+        last = closes.get(d, last)
+        out[d] = last
+    base = out[dates[0]]
+    if not base:
+        return {}
+    return {d: (round(v / base, 6) if v is not None else None) for d, v in out.items()}
+
+
 def list_runs() -> dict:
     with get_conn() as conn:
         with conn.cursor() as cur:
@@ -44,6 +69,7 @@ def get_run(run_id: int, step: int = 1) -> Optional[dict]:
             run = _run_row(row)
             cur.execute("SELECT trade_date, nav, bench FROM portfolio_run_series WHERE run_id = %s ORDER BY trade_date", (run_id,))
             pts = cur.fetchall()
+            idx = _index_series(cur, [d for d, _, _ in pts])
             cur.execute("SELECT max(rebalance_date) FROM portfolio_positions WHERE run_id = %s", (run_id,))
             last = cur.fetchone()[0]
             positions = []
@@ -54,7 +80,7 @@ def get_run(run_id: int, step: int = 1) -> Optional[dict]:
                               'target_weight': float(w), 'filled': f, 'exec_date': str(e) if e else None}
                              for s, rk, sv, w, f, e in cur.fetchall()]
     step = max(1, step)
-    series = [{'d': str(d), 'nav': float(n), 'bench': float(b)} for i, (d, n, b) in enumerate(pts) if i % step == 0 or i == len(pts) - 1]
+    series = [{'d': str(d), 'nav': float(n), 'bench': float(b), 'idx': idx.get(d)} for i, (d, n, b) in enumerate(pts) if i % step == 0 or i == len(pts) - 1]
     return {'run': run, 'series': series, 'positions': positions, 'last_rebalance': str(last) if last else None,
             'thresholds': THRESHOLDS}
 

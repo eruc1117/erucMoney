@@ -425,7 +425,7 @@ export default function PortfolioLab() {
         <div className="two-col">
           <div className="card">
             <div className="card-header">
-              <span className="card-title">淨值曲線：組合 vs 0050（{full.run.period_start} ~ {full.run.period_end}）</span>
+              <span className="card-title">淨值曲線：組合 vs 0050 vs 大盤（{full.run.period_start} ~ {full.run.period_end}）</span>
               {fm && <span className="muted" style={{ fontSize: '.82rem' }}>年化 {pct(fm.cagr_port, 1)} 對 {pct(fm.cagr_bench, 1)} · 最大回撤 {pct(fm.mdd_port, 1)} 對 {pct(fm.mdd_bench, 1)}</span>}
             </div>
             <NavRangeChart series={full.series} periodStart={full.run.period_start} periodEnd={full.run.period_end} />

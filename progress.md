@@ -1,12 +1,18 @@
 # 交接筆記
 
-**更新：** 2026-10-11
+**更新：** 2026-10-12
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
+Iteration 65（未提交）：月調倉頁與正式策略頁的淨值曲線加含息大盤（TAIEX_TR）第三條線；純顯示，N 不動
+（以下為 64，已提交 bb791d6）
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69（0050 分割已修、加暖機）取代 #67——**年化主動 −6.1%、輸給 0050**。提交中引擎已啟動（紙上、停損 0、限價 ±2%），等今晚 18:40 排程第一次真的跑、10/13 第一份清單
 
 ## 產出
+- Crawler/portfolio_api.py（`_index_series`、series 每點 `idx`）、tests/test_portfolio.py（+1）、nav_index_evidence.py（證據，checks.json nav-index-evidence）
+- Screen 與 meeting_front_end 的 components/NavRangeChart.jsx（第三條線、區間摘要加大盤）、pages/OfficialStrategy.jsx、pages/PortfolioLab.jsx（標題）
+- AI/Doc/Iterations/Iteration-65.md、AI/Doc/README.md
+（以下為 64，已提交）
 - Crawler/portfolio_official.py、tests/test_portfolio_official.py、fix_0050_split.py、holdout_preview_evidence.py、migration 027、scheduler 18:50、api.py `/portfolio/official*`、Node 代理與測試
 - Screen/src/pages/OfficialStrategy.jsx、components/NavRangeChart.jsx（從 PortfolioLab 抽出）、App／Sidebar；meeting_front_end 同步（nav「預測」群組 official）
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
@@ -32,6 +38,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-58.md、Iteration-59.md、AI/Doc/README.md、Server/README.md；Iteration-57.md 審查後改測試項數
 
 ## 已完成
+- 大盤線（65）：pytest 225、Screen build、meeting_front_end build、nav-index-evidence 都過（checks.json 2026-10-12）；evidence-reviewer 23 verified／0 incorrect／9 unresolved（資料庫數字，已補證據腳本）；jest 沒跑（Node 沒改）。live #68 全期間組合 10.38／0050 7.22／大盤 6.11；保留期 #69 組合 2.206／0050 2.491／大盤 2.272——保留期輸 0050 也輸大盤
 - 階段 1～3（48～53）：候選 #44，N = 66
 - 階段 4 紙上交易（54）：2026-10-09 開戶 100 萬；第一份清單 10/13 算、10/14 成交
 - harness 與工作進度頁（55）、買多少股分頁（56）、程式交易手動指令（57，a4eac0f／meeting_front_end d4566c3）
@@ -48,6 +55,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 2026-10-09：使用者決定**啟動引擎（紙上）**，規則改成停損 0（關閉）、限價 ±2%——依回放結果；RULES_DEFAULT 程式預設仍是 15%／0.5%，實際生效的是 trading_engine_state.rules
 
 ## 未解
+- 大盤線只是參考，指標與門檻仍對 0050；要不要把「對大盤的主動報酬」也算進指標，沒決定
+- Iteration 65 未提交；MoneyCrawlerApi 要重啟新欄位才會出現在頁面上
 - **正式策略在保留期沒打敗 0050**（#69：年化主動 −6.1%、IR −0.45、2025／2026 都落後）：要不要讓引擎繼續照它下單、要不要回研究階段，由使用者決定
 - live 列 #68（2018-01 起）沒暖機、2018 年前 10 個月空手；要不要加暖機重算（等於動開發期紀錄）未決定
 - 公告日「同月」不是 bug（revenue_month 鍵是公布月，Iteration 49 已定），`win3` 也不用公告日——先前的懷疑撤回

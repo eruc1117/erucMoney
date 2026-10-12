@@ -314,3 +314,21 @@ def test_save_run_increments_n_and_prior_variance(clean_db):
     assert db.query("SELECT rank, signal_value FROM portfolio_positions WHERE stock_id = '2330'")[0] == (None, None)
     log = pb.experiment_log()
     assert list(log['experiment_n']) == [1, 2] and log.iloc[0]['notes'] == 'first'
+
+
+def test_index_series_aligns_ffills_and_rebases():
+    """含息大盤對齊淨值曲線日期：第一天歸一到 1、指數缺的日子沿用前一日、起點沒有指數就整條留空。"""
+    import datetime as dt
+    import portfolio_api as pa
+
+    class Cur:
+        def __init__(self, rows): self.rows = rows
+        def execute(self, sql, params=None): pass
+        def fetchall(self): return self.rows
+
+    d = [dt.date(2024, 1, 2), dt.date(2024, 1, 3), dt.date(2024, 1, 4)]
+    out = pa._index_series(Cur([(d[0], 100.0), (d[2], 110.0)]), d)
+    assert out == {d[0]: 1.0, d[1]: 1.0, d[2]: 1.1}
+    assert pa._index_series(Cur([(d[1], 100.0)]), d) == {}   # 起點那天沒有指數 → 無法歸一，整條不給
+    assert pa._index_series(Cur([]), d) == {}
+    assert pa._index_series(Cur([(d[0], 100.0)]), []) == {}

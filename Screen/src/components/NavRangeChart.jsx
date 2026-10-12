@@ -1,5 +1,6 @@
-// 淨值曲線（可選區間）——月調倉頁與正式策略頁共用（Iteration 63 抽出；64 加 extraPresets）
-// 選了區間後兩條線都從區間起點重新歸一到 1，並算這段的組合／0050／主動報酬；全期間的指標仍以日誌為準。
+// 淨值曲線（可選區間）——月調倉頁與正式策略頁共用（Iteration 63 抽出；64 加 extraPresets；65 加含息大盤）
+// 選了區間後三條線都從區間起點重新歸一到 1，並算這段的組合／0050／大盤／主動報酬；全期間的指標仍以日誌為準。
+// 大盤是 series 每點的 idx（後端從 index_daily_prices 的 TAIEX_TR 對齊），舊 run 沒有就只畫兩條。
 import { useEffect, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
 
@@ -33,19 +34,23 @@ export default function NavRangeChart({ series, periodStart, periodEnd, extraPre
   const end = range.end && range.end < periodEnd ? range.end : periodEnd
   const sub = series.filter(p => p.d >= start && p.d <= end && p.nav != null && p.bench != null)
   const first = sub[0]
-  const rebased = first ? sub.map(p => ({ d: p.d, nav: Number(p.nav) / Number(first.nav), bench: Number(p.bench) / Number(first.bench) })) : []
+  // 大盤的起點取區間內第一個有值的點（指數偶爾缺日），缺的點留 null，Apex 會斷線不會畫成 0
+  const firstIdx = sub.find(p => p.idx != null)
+  const rebased = first ? sub.map(p => ({ d: p.d, nav: Number(p.nav) / Number(first.nav), bench: Number(p.bench) / Number(first.bench), idx: firstIdx && p.idx != null ? Number(p.idx) / Number(firstIdx.idx) : null })) : []
+  const hasIdx = !!firstIdx
+  const lastIdx = hasIdx ? [...rebased].reverse().find(p => p.idx != null) : null
   const last = rebased[rebased.length - 1]
   const years = first && last ? (new Date(last.d) - new Date(first.d)) / (365.25 * 86400e3) : 0
   const ann = v => (years >= 1 ? Math.pow(v, 1 / years) - 1 : null)
   const toPts = key => rebased.map(p => [new Date(p.d).getTime(), p[key]])
-  const data = [{ name: '組合', data: toPts('nav') }, { name: '0050 含息', data: toPts('bench') }]
+  const data = [{ name: '組合', data: toPts('nav') }, { name: '0050 含息', data: toPts('bench') }, ...(hasIdx ? [{ name: '加權指數含息（大盤）', data: toPts('idx') }] : [])]
   const options = {
     chart: { type: 'line', toolbar: { show: false }, animations: { enabled: false }, background: 'transparent' },
-    stroke: { width: [2.5, 1.5], curve: 'straight', dashArray: [0, 4] },
-    colors: ['#2f80ed', '#9aa4b2'],
+    stroke: { width: [2.5, 1.5, 1.5], curve: 'straight', dashArray: [0, 4, 0] },
+    colors: ['#2f80ed', '#9aa4b2', '#e8a33d'],
     xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
     yaxis: { labels: { formatter: v => v.toFixed(2) }, title: { text: '淨值（區間起點 1）' } },
-    tooltip: { x: { format: 'yyyy-MM-dd' }, y: { formatter: v => v.toFixed(3) } },
+    tooltip: { x: { format: 'yyyy-MM-dd' }, y: { formatter: v => (v == null ? '–' : v.toFixed(3)) } },
     legend: { position: 'top' },
     grid: { borderColor: 'rgba(128,128,128,0.2)' },
     theme: { mode: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light' },
@@ -61,8 +66,8 @@ export default function NavRangeChart({ series, periodStart, periodEnd, extraPre
       </div>
       {last ? (
         <div className="muted" style={{ fontSize: '.82rem', padding: '.45rem 1.25rem 0' }}>
-          {first.d} ～ {last.d}：組合 <strong className={tone(last.nav - 1)}>{pct(last.nav - 1, 1)}</strong>、0050 <strong>{pct(last.bench - 1, 1)}</strong>、主動 <strong className={tone(last.nav / last.bench - 1)}>{pct(last.nav / last.bench - 1, 1)}</strong>
-          {years >= 1 ? <>　· 年化 {pct(ann(last.nav), 1)} 對 {pct(ann(last.bench), 1)}</> : null}
+          {first.d} ～ {last.d}：組合 <strong className={tone(last.nav - 1)}>{pct(last.nav - 1, 1)}</strong>、0050 <strong>{pct(last.bench - 1, 1)}</strong>{lastIdx ? <>、大盤 <strong>{pct(lastIdx.idx - 1, 1)}</strong></> : null}、主動（對 0050） <strong className={tone(last.nav / last.bench - 1)}>{pct(last.nav / last.bench - 1, 1)}</strong>
+          {years >= 1 ? <>　· 年化 {pct(ann(last.nav), 1)} 對 0050 {pct(ann(last.bench), 1)}{lastIdx ? <> 對大盤 {pct(ann(lastIdx.idx), 1)}</> : null}</> : null}
         </div>
       ) : <div className="card-body muted">這段區間沒有資料點（起點要早於迄點、都在 {periodStart} ～ {periodEnd} 內）</div>}
       {rebased.length > 1 ? <div className="chart-pad"><ReactApexChart type="line" series={data} options={options} height={320} /></div> : null}

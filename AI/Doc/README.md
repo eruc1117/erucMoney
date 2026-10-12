@@ -61,6 +61,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-65.md](./Iterations/Iteration-65.md) | 月調倉與正式策略的淨值曲線加**含息大盤**（`index_daily_prices` TAIEX_TR，`get_run` series 多 `idx`、第一天歸一、缺日沿用前一日）；正式策略全期間 10.38 對 0050 7.22 對大盤 6.11，**保留期 #69 輸 0050 也輸大盤**（2.206／2.491／2.272）；不跑回測、N 不動；pytest 225、兩個 build 過 |
 | [Iteration-64.md](./Iterations/Iteration-64.md) | **候選 #44 升為正式策略**：保留期開一次（#67）、live 列每日 18:50 重算（#68，migration 027 `portfolio_official`）、新頁「正式策略」（匿名可讀）；**抓到 0050 2025-06-18 一拆四沒還原、回測沒暖機**（修 adj_close、`run` 加 `warmup_days`），保留期重跑 #69 取代 #67：**年化主動 −6.1%、IR −0.45，正式策略在保留期輸給 0050** |
 | [Iteration-63.md](./Iterations/Iteration-63.md) | 月調倉頁淨值曲線可選區間（全期間／開發期／驗證期／最近 1、3 年／自訂起迄），區間內重新歸一並顯示組合／0050／主動報酬與年化 |
 | [Iteration-62.md](./Iterations/Iteration-62.md) | **條件 AND／OR 組合**：`when` 可為 `{op: and|or, conds:[…]}`（巢狀兩層、每層 1～8），`_eval` 遞迴求值；含日期條件的規則當天開盤判斷、指標看前一日收盤；頁面每條規則「＋ 加條件」與「且／或」切換，模板加「定投在均線下」「雙重確認」 |
