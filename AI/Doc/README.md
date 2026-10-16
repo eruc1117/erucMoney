@@ -15,6 +15,7 @@
 | [LSTM-Improvement.md](./LSTM-Improvement.md) | LSTM 準確率改進方案（IMP-001 ~ IMP-006） |
 | [../../UnifiedModel/results/news_models.md](../../UnifiedModel/results/news_models.md) | 新聞訊號三模型的走查與五道關卡（Iteration 47，`train_news_models.py` 產出） |
 | [ModelAccuracy.md](./ModelAccuracy.md) | 模型預測準確度報告（線上台帳 vs 離線走查）與改進方向（2026-09-20） |
+| [Papers.md](./Papers.md) | 論文紀錄（2026-10-14 起）：打敗大盤計畫的文獻基礎，每篇寫「對專案的意思」與狀態（已測 #n／已採用／待測／待資料／不測）；新實驗要能指回一條 |
 | [Bugs/bugs.md](./Bugs/bugs.md) | Bug 紀錄與功能追加履歷 |
 | [../harness/README.md](../harness/README.md) | Claude Code harness（2026-10-09）：CLAUDE.md、rules、skills、agents、hooks、`progress.md` 交接筆記、`record_check.js` 驗證紀錄；儀表板「工作進度」頁 |
 
@@ -61,6 +62,14 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-73.md](./Iterations/Iteration-73.md) | **第七代：外資淨買超加進動能**（P18／P44）`win3+mom+fflow` 開發期 #94 +10.33%／0.875 兩項超過候選、驗證期 #96 +14.34%／1.054 低於候選 #38 1.4 pp、IR 亦低；`fflow` 與 `mom` ρ 0.06、持股交集 11／20，是獨立訊號；外資單獨 #93 −0.03%（追蹤誤差 7.3%，持股不是權值股、原因沒量到）、投信相加 #95 沒過門檻；N 96、候選不換 |
+| [Iteration-72.md](./Iterations/Iteration-72.md) | **第六代：扣掉產業的個股動能**（Grundy & Martin 2001，P48）`win3+relmom` 開發期 #90 +10.12%／0.785 兩項超過候選，驗證期 #92 +15.19%／1.07 與候選 #38（+15.71%／1.085）持平、落後較小——但與 `mom` 等級相關 0.95（構造使然）、實際持股交集中位數 18／20，#92 是候選家族的第二次抽樣而非獨立確認；產業動能相加 #89 +7.89%／0.624 低於候選、同月季節性 #91 +0.37%（只有 1～3 個 lag）；N 92、候選不換（使用者決定） |
+| [Iteration-71.md](./Iterations/Iteration-71.md) | **全市場三大法人買賣超資料路線**（P18 前置，不算 N）：改走交易所官方檔（證交所 T86、櫃買 insti/dailyTrade，一天兩次呼叫）而非 FinMind；解析器處理證交所 19 欄與櫃買 16／24 欄兩種版面、逐列驗證合計＝三法人相加；migration 028 `market_institutional_daily`、`institutional_data.py` 回補／每日 18:35 排程；pytest +4、真實檔煙霧測試五天過；回補完成（2,137 個交易日、332 萬列、失敗 0）、候選池覆蓋 99.9% |
+| [Iteration-70.md](./Iterations/Iteration-70.md) | **第五代：Amihud 非流動性**（P35）`win3+mom+illiq` 是 19 次文獻試驗裡第一條有效實作在開發期超過候選的（錯版 #72 不計）（#87 +11.09%／0.847 對 +8.64%／0.67），驗證期 #88 +14.14%／0.98 過年化主動與 IR 門檻（DSR 未達）但低於候選 #38（+15.71%／1.085）；持股流動性名次中位數 80 → 152、開發期優勢集中在 2021；隔夜短期持續 `ovn1m` #86 沒過門檻、隔夜／日內家族關閉；N 88、候選不換（使用者決定）；pytest 234 |
+| [Iteration-69.md](./Iterations/Iteration-69.md) | **文獻第二批（22 篇，P25～P46）與第四代**：資訊連續性 `win3+mom+cont` #83 +6.49%／0.515、日內動能 `win3+imom` #84 +7.00%／0.628（追蹤誤差與落後較小但報酬低於候選）、中期動能 12-7 `win3+mom127` #85 +3.07%／0.253——都低於候選、valid 不跑；valid 規則收緊為「過門檻且超過候選」；N 85 |
+| [Iteration-68.md](./Iterations/Iteration-68.md) | **第三代：以營收驚喜為條件的動能**（Novy-Marx 2015，P11）：`win3+momrev` 開發期 +4.69%／IR 0.38 低於候選 +8.64%／0.67、沒過門檻，候選池中位數 266 → 116 檔；家族關閉；N 82、valid 不跑；順帶發現 `win3` 在農曆年落 2 月上旬時整季失效（2019-02～04 候選也沒調倉）、SUE 類訊號有 10.4% 股票月反應日晚於訊號日；pytest 229 |
+| [Iteration-67.md](./Iterations/Iteration-67.md) | **第二代：三年期市場狀態閘門**（Cooper 2004 原定義，P6 第二次抽樣）在 2018–2024 一次都沒觸發（0050 三年報酬最低 +22.6%），#81 與候選 #30 完全相同；市場狀態閘門家族（一年反效果、三年不觸發）關閉；N 81、候選不換、valid 不跑；pytest 228 |
+| [Iteration-66.md](./Iterations/Iteration-66.md) | **文獻驅動的第三批實驗**（[Papers.md](./Papers.md) 24 條）：殘差動能（Blitz 2011）、營收 YoY 動能（Hung 2025）、市場狀態閘門（Cooper 2004／Du 2009）三條假設各跑一次，**都沒超過候選**；`win3+resmom` 修正版兩段過門檻（dev +7.49%／valid +16.30%）但開發期低於候選、且驗證期已被錯版 #76 看過一次；`tests` 抓到第一版殘差動能等於一個月反轉（#71／#72／#76 作實作錯誤留檔）；N 69 → 80、候選不換、保留期未開；pytest 227 |
 | [Iteration-65.md](./Iterations/Iteration-65.md) | 月調倉與正式策略的淨值曲線加**含息大盤**（`index_daily_prices` TAIEX_TR，`get_run` series 多 `idx`、第一天歸一、缺日沿用前一日）；正式策略全期間 10.38 對 0050 7.22 對大盤 6.11，**保留期 #69 輸 0050 也輸大盤**（2.206／2.491／2.272）；不跑回測、N 不動；pytest 225、兩個 build 過 |
 | [Iteration-64.md](./Iterations/Iteration-64.md) | **候選 #44 升為正式策略**：保留期開一次（#67）、live 列每日 18:50 重算（#68，migration 027 `portfolio_official`）、新頁「正式策略」（匿名可讀）；**抓到 0050 2025-06-18 一拆四沒還原、回測沒暖機**（修 adj_close、`run` 加 `warmup_days`），保留期重跑 #69 取代 #67：**年化主動 −6.1%、IR −0.45，正式策略在保留期輸給 0050** |
 | [Iteration-63.md](./Iterations/Iteration-63.md) | 月調倉頁淨值曲線可選區間（全期間／開發期／驗證期／最近 1、3 年／自訂起迄），區間內重新歸一並顯示組合／0050／主動報酬與年化 |

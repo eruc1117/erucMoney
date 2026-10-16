@@ -376,6 +376,13 @@ def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Op
         sur = ps.surprises(ps.load_revenue(load_start))
         if _cache is not None:
             _cache.update({'key': key, 'mkt': mkt, 'sur': sur})
+    # 三年期市場狀態閘門（Iteration 67）只需要 0050 的長歷史；不用 warmup_days：全市場日線只從 2018-01-02 起，暖機只多載 0050，
+    # estimate_tsmc_weight 要 200 列全市場資料、兩種載法都是 2018-10-26 才估得出來；但暖機會讓動能從 2018-01 就調倉（用 fallback 0.35），
+    # 和候選 #30（2018-11-12 第一次調倉）就不是同一個載入範圍。
+    # mkt 會被網格快取共用，所以不需要時要明確清掉，免得前一個 ~up3 設定的長歷史漏給後面的 ~up
+    mkt.bench_hist = ps.load_bench_history(load_start) if ps.needs_bench_history(signal) else None
+    # 法人買賣超（Iteration 73）同樣只在需要時掛上、不需要時清掉，免得快取的 mkt 帶著前一個設定的表
+    mkt.insti = ps.load_institutional(load_start, end) if ps.needs_institutional(signal) else None
     sim = simulate(mkt, sur, signal, start, end, top_n, buffer, universe_n, excl_limit_pct, tsmc_weight, costs, tranches, weighting)
     bench = mkt.adj[ps.BENCH].dropna()
     met, m_act = metrics(sim['nav'], bench, sim)

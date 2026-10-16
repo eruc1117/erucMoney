@@ -23,6 +23,7 @@
 - **交接筆記**：`progress.md`（任務／產出／已完成／決策／未解／下一步／階段）。做完一個有意義的階段就更新；下一個 session 從它接手。
 - **驗證結果**：`AI/progress/checks.json`——只能透過 `node AI/harness/record_check.js` 寫，不手改。儀表板「工作進度」頁讀它。
 - **實驗結果**：`UnifiedModel/results/`（腳本產生，不手改）；回測一律寫進資料表 `portfolio_runs`（N 只增不減，失敗的也算）。
+- **論文紀錄**：`AI/Doc/Papers.md`（每篇寫「對專案的意思」與狀態）；每一條新的回測假設都要能指回其中一列，跑完把狀態改成「已測 #n」。
 - **schema 變更**：`Server/migrations/NNN_*.sql`（冪等）；不直接對正式庫 `Stock` 下 ALTER／DELETE。見 `.claude/rules/migrations.md`。
 
 ## 慣例

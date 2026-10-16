@@ -59,7 +59,7 @@ def load_prices(start: date, end: date, extra_days: int = 130) -> pd.DataFrame:
 
 def load_universe_meta() -> pd.DataFrame:
     with get_conn() as conn:
-        m = pd.read_sql("SELECT stock_id, listing_date, delisted_date FROM market_universe", conn)
+        m = pd.read_sql("SELECT stock_id, listing_date, delisted_date, industry_type, market_type FROM market_universe", conn)
     m['listing_date'] = pd.to_datetime(m['listing_date'])
     m['delisted_date'] = pd.to_datetime(m['delisted_date'])
     return m.set_index('stock_id')
@@ -139,6 +139,10 @@ class Market:
         self.adj_open = self.open * factor
         lr = np.log(self.adj).diff()
         self.ar = lr.sub(lr[BENCH], axis=0) if BENCH in lr.columns else lr
+        # 日內 log 報酬（收盤 ÷ 開盤，同一天不用還原）減 0050 同項：給 `imom`（Iteration 69）。開盤 ≤ 0 的那天當缺值
+        li = np.log(self.close / self.open.where(self.open > 0))
+        self.ar_intra = li.sub(li[BENCH], axis=0) if BENCH in li.columns else li
+        self.ar_over = self.ar - self.ar_intra        # 隔夜異常報酬 = 總異常報酬 − 日內（還原收盤算的總報酬含除息調整）
         self.liq = self.turnover.rolling(60, min_periods=40).mean()
         up = (self.close / self.close.shift(1) - 1 >= LIMIT_UP)
         self.limit_up_20 = up.rolling(20, min_periods=1).sum()
@@ -338,10 +342,307 @@ def signal_rev_streak(sur: pd.DataFrame, d: pd.Timestamp, cap: int = 24) -> pd.S
     return pd.Series(out, dtype=float)
 
 
-SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m', 'volchg', 'rev_accel', 'rev_streak')
+# ── 第三批：文獻假設（Iteration 66，見 AI/Doc/Papers.md）────────────────────────
+
+def signal_resmom(mkt: Market, d: pd.Timestamp, long_days: int = 252, skip_days: int = 21) -> pd.Series:
+    """
+    殘差動能（Blitz, Huij & Martens 2011）：先把每檔過去 252 日的 log 報酬對 0050 做 OLS（α、β），
+    拿殘差在 12-1 窗口（跳過最近 21 日）的累積值除以殘差標準差當訊號。
+    和 `mom`（減 0050 的異常報酬，等於硬設 β = 1）的差別：β 高的股票不會只因為大盤漲就排前面，
+    文獻說這樣能把動能的因子暴露（這裡是對 0050 的追蹤誤差）壓低、風險調整後報酬提高。只用 d 以前的價格。
+
+    β 用**過原點**的迴歸（β = Σ r·r_b ÷ Σ r_b²），不帶截距：文獻是用 36 個月估 β、再看最近 12 個月的殘差，
+    我們只有 252 日的窗口，若在同一窗口帶截距，殘差總和恆為 0，「前 231 日殘差和」就等於「最近 21 日殘差的負值」，
+    訊號會變成一個月反轉而不是動能（#71、#72、#76 就是這個錯的版本，tests 抓到後改的，見 Iteration 66）。
+    """
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right')) - 1
+    if i - long_days < 0 or BENCH not in mkt.adj.columns:
+        return pd.Series(dtype=float)
+    lr = np.log(mkt.adj.iloc[i - long_days:i + 1]).diff().iloc[1:]
+    rb = lr[BENCH]
+    r = lr.drop(columns=[BENCH])
+    m = r.notna() & rb.notna().values[:, None]
+    n = m.sum()
+    rb_mat = pd.DataFrame(np.where(m, rb.values[:, None], np.nan), index=r.index, columns=r.columns)
+    r = r.where(m)
+    beta = (r * rb_mat).sum() / (rb_mat ** 2).sum().replace(0, np.nan)
+    e = r - beta * rb_mat
+    form = e.iloc[:len(e) - skip_days]
+    sd = form.std()
+    sig = form.sum(min_count=int(len(form) * 0.8)) / sd.replace(0, np.nan)
+    return sig.where(n >= int(long_days * 0.8)).dropna()
 
 
-TSMC_WEIGHT_FALLBACK = 0.35       # 歷史不足 120 個交易日時（2018 上半年）用的固定假設；之後一律用估計值
+def signal_rev_yoy3(sur: pd.DataFrame, d: pd.Timestamp) -> pd.Series:
+    """
+    營收動能（Hung, Lu & Yang 2025；Chen, Chen, Hsin & Lee 2014）：最近三期 YoY（log）的平均。
+    文獻用的是「營收年增率的水準與持續性」，不是驚喜（`sue`）也不是二階差（`rev_accel`）；三期平均是為了
+    壓掉單月的噪音。只用 revenue_month ≤ 訊號日所在月的資料（當月那一期 10 日前已公布）。
+    """
+    rows = _rev_rows(sur, d)
+    rm = pd.Timestamp(year=d.year, month=d.month, day=1)
+    out = {}
+    for sid, g in rows.groupby('stock_id'):
+        g = g.sort_values('revenue_month')
+        if g['revenue_month'].iloc[-1] != rm or len(g) < 3:
+            continue
+        y = g['yoy'].values[-3:]
+        if np.isnan(y).any():
+            continue
+        out[sid] = float(y.mean())
+    return pd.Series(out, dtype=float)
+
+
+def signal_momrev(mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.Series:
+    """
+    以營收為條件的動能（Novy-Marx 2015：價格動能來自對基本面驚喜的反應不足；Iteration 68）：
+    `mom` 的值，但只給當月 SUE > 0 的股票；SUE ≤ 0 或沒有 SUE 的不給值（組合裡會因此被排除）。
+    不是把營收和動能相加（那是 rev_accel+mom），是用營收當篩選條件。
+    """
+    m = signal_mom(mkt, d)
+    s = signal_sue(sur, d)
+    keep = s[s > 0].index
+    return m.reindex(m.index.intersection(keep)).dropna()
+
+
+# ── 第四批：文獻第二批（Iteration 69）────────────────────────────────────────
+
+def _mom_window(mkt: Market, d: pd.Timestamp, long_days: int, skip_days: int) -> Optional[slice]:
+    """`mom` 用的形成期：d 往前 long_days 個交易日到 skip_days 個交易日（含 d 當天往前數）；歷史不足回 None。"""
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right')) - 1
+    if i - long_days < 0:
+        return None
+    return slice(i - long_days + 1, i - skip_days + 1)
+
+
+def signal_cont(mkt: Market, d: pd.Timestamp, long_days: int = 252, skip_days: int = 21) -> pd.Series:
+    """
+    資訊連續性（Da, Gurun & Warachka 2014「Frog in the Pan」）：`mom` 同一個 12-1 窗口內，
+    異常報酬 > 0 的天數比例減 < 0 的天數比例。文獻的 ID = sign(PRET) × (%neg − %pos)，對贏家而言這裡的值 = −ID；
+    排名用、不乘 sign——和 `mom` 相加後，靠很多小漲累積的贏家排前面、靠幾次跳空的排後面。
+    有值的天數要達窗口的 80%，和 `mom` 的 min_count 一致。
+    """
+    sl = _mom_window(mkt, d, long_days, skip_days)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.ar.iloc[sl]
+    n = seg.count()
+    frac = ((seg > 0).sum() - (seg < 0).sum()) / n.replace(0, np.nan)
+    return frac.where(n >= int(len(seg) * 0.8)).dropna()
+
+
+def signal_imom(mkt: Market, d: pd.Timestamp, long_days: int = 252, skip_days: int = 21) -> pd.Series:
+    """
+    日內動能（Ho, Hsiao, Lo & Yang 2023，台灣；Lou, Polk & Skouras 2019）：12-1 窗口內日內異常報酬
+    （log(收盤 ÷ 開盤) 減 0050 同項）的累積。把 `mom` 的隔夜那一半拿掉；台灣文獻說日內動能為正且穩定、隔夜動能為負。
+    """
+    sl = _mom_window(mkt, d, long_days, skip_days)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.ar_intra.iloc[sl]
+    return seg.sum(min_count=int(len(seg) * 0.8)).dropna()
+
+
+def signal_mom127(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """中期動能 12-7（Novy-Marx 2012）：形成期前 252 到 126 個交易日的累積異常報酬，跳過最近六個月。"""
+    return signal_mom(mkt, d, long_days=252, skip_days=126)
+
+
+# ── 第五批（Iteration 70）──────────────────────────────────────────────────
+
+def signal_ovn1m(mkt: Market, d: pd.Timestamp, n: int = 21) -> pd.Series:
+    """
+    隔夜報酬的短期持續（Zhang, Tsai, Weng & Tsai 2023，台灣；Aboody 等 2018）：最近 n 個交易日（含 d）
+    隔夜異常報酬的累積。隔夜報酬被文獻當個股情緒代理，短期持續、長期反轉；候選的 `mom` 跳過的最近一個月，
+    這裡只拿它的隔夜那一半回來。
+    """
+    sl, _ = _window(mkt, d, n)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.ar_over.iloc[sl]
+    return seg.sum(min_count=int(n * 0.8)).dropna()
+
+
+def signal_illiq(mkt: Market, d: pd.Timestamp, n: int = 252) -> pd.Series:
+    """
+    Amihud (2002) 非流動性：過去 n 個交易日 |日報酬| ÷ 成交金額 的平均取 log。值高 = 單位成交金額推動的價格變動大 = 不流動；
+    文獻說預期報酬較高。在流動性前 300 的池子裡，這是往池內相對小、相對不流動的那端偏。
+    """
+    sl, _ = _window(mkt, d, n + 1)
+    if sl is None:
+        return pd.Series(dtype=float)
+    r = np.log(mkt.adj.iloc[sl]).diff().iloc[1:].abs()
+    tv = mkt.turnover.iloc[sl].iloc[1:].where(lambda x: x > 0)
+    ratio = r / tv
+    cnt = ratio.count()
+    return np.log(ratio.mean().where(cnt >= int(n * 0.8)).replace(0, np.nan)).dropna()
+
+
+# ── 第六批（Iteration 72）：產業與季節性 ─────────────────────────────────────
+
+INDUSTRY_MIN_MEMBERS = 5
+
+
+def _industry_of(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """在市股票 → 產業別（market_universe.industry_type）；沒有產業欄位或產業為空的回空。"""
+    if 'industry_type' not in mkt.meta.columns:
+        return pd.Series(dtype=object)
+    ind = mkt.meta.loc[mkt.active_on(d), 'industry_type'].dropna()
+    return ind[ind.astype(str).str.strip() != '']
+
+
+def signal_indmom(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """
+    產業動能（Moskowitz & Grinblatt 1999）：同產業所有在市股票的 12-1 動能（`mom`）等權平均，產業要有 ≥ INDUSTRY_MIN_MEMBERS 檔有值；
+    每檔股票拿自己產業的值。上市與上櫃各自的產業分類原樣用（名稱不同就是不同組）。
+    """
+    mom = signal_mom(mkt, d)
+    ind = _industry_of(mkt, d)
+    both = mom.index.intersection(ind.index)
+    if len(both) == 0:
+        return pd.Series(dtype=float)
+    df = pd.DataFrame({'mom': mom.reindex(both), 'ind': ind.reindex(both)})
+    g = df.groupby('ind')['mom']
+    avg = g.mean().where(g.count() >= INDUSTRY_MIN_MEMBERS)
+    return df['ind'].map(avg).dropna()
+
+
+def signal_relmom(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """扣掉產業的個股動能（Grundy & Martin 2001 的「stock-specific」精神，用產業平均當代理）：`mom` − `indmom`。"""
+    im = signal_indmom(mkt, d)
+    if im.empty:
+        return pd.Series(dtype=float)
+    return (signal_mom(mkt, d).reindex(im.index) - im).dropna()
+
+
+def signal_seas(mkt: Market, d: pd.Timestamp, lags: tuple = (1, 2, 3), day: int = 11) -> pd.Series:
+    """
+    同月季節性（Heston & Sadka 2008；Keloharju, Linnainmaa & Nyberg 2016）：過去 1～3 年「同一個調倉月」
+    （前 k 年同月 day 日之後第一個交易日起、到次月 day 日之後第一個交易日止）的累積異常報酬，有幾年算幾年（≥ 1）平均。
+    每個窗口要有 ≥ 80% 的交易日有值。只用 d 以前的資料（窗口都在一年以前）。
+    """
+    days = pd.DatetimeIndex(mkt.days)
+    parts = []
+    for k in lags:
+        y, m = d.year - k, d.month
+        y2, m2 = (y, m + 1) if m < 12 else (y + 1, 1)
+        start = pd.Timestamp(year=y, month=m, day=day)
+        if start < days[0]:                      # 窗口起點早於資料起點：半截窗口不算（strategy-critic，Iteration 72）
+            continue
+        s = days.searchsorted(start)
+        e = days.searchsorted(pd.Timestamp(year=y2, month=m2, day=day))
+        if s >= e or e > len(days) or days[min(e, len(days) - 1)] >= d:
+            continue
+        seg = mkt.ar.iloc[s + 1:e + 1]           # 訊號日收盤之後到下一個訊號日收盤
+        if len(seg) < 10:
+            continue
+        parts.append(seg.sum(min_count=int(len(seg) * 0.8)))
+    if not parts:
+        return pd.Series(dtype=float)
+    return pd.concat(parts, axis=1).mean(axis=1).dropna()
+
+
+# ── 第七批（Iteration 73）：法人買賣超 ──────────────────────────────────────────
+
+INSTI_COLS = ('foreign_net', 'trust_net')
+
+
+def needs_institutional(signal: str) -> bool:
+    return any(p in signal.split('+') for p in ('fflow', 'tflow'))
+
+
+def load_institutional(start: date, end: date, extra_days: int = 60) -> dict:
+    """market_institutional_daily → {'foreign_net': 寬表, 'trust_net': 寬表}（index 交易日、columns 股票；單位股）。start 往前多拉 extra_days 給 21 日窗口。
+    交易所檔沒列的股票日在寬表裡是缺值、不是 0（`_flow` 的 80% 門檻會把常缺的股票剔除）；候選池（流動性前 300）內缺列 0.06%，無影響；
+    若將來擴到名次 1,000 以外（缺 31%）要先決定缺列是否視為 0（Iteration 73 結果檔第三節）。"""
+    since = start - timedelta(days=extra_days)
+    with get_conn() as conn:
+        df = pd.read_sql("SELECT stock_id, trade_date, foreign_net, trust_net FROM market_institutional_daily WHERE trade_date BETWEEN %s AND %s",
+                         conn, params=(since, end))
+    df['trade_date'] = pd.to_datetime(df['trade_date'])
+    out = {}
+    for c in INSTI_COLS:
+        out[c] = df.pivot(index='trade_date', columns='stock_id', values=c).sort_index().astype(float)
+    return out
+
+
+def _flow(mkt: Market, d: pd.Timestamp, col: str, n: int = 21) -> pd.Series:
+    """
+    法人淨買超占成交金額的比例（Iteration 73 事前登記）：最近 n 個交易日（含 d）Σ(淨買超股數 × 收盤價) ÷ Σ 成交金額。
+    成交股數沒載進 Market，所以用金額近似；兩邊都要 ≥ 80% 的交易日有值。沒載法人表（mkt.insti 為 None）回空。
+    """
+    insti = getattr(mkt, 'insti', None)
+    if not insti or col not in insti:
+        return pd.Series(dtype=float)
+    sl, _ = _window(mkt, d, n)
+    if sl is None:
+        return pd.Series(dtype=float)
+    days = mkt.adj.index[sl]
+    net = insti[col].reindex(index=days, columns=mkt.close.columns)
+    px = mkt.close.loc[days]
+    tv = mkt.turnover.loc[days].where(lambda x: x > 0)
+    amt = (net * px)
+    ok = (amt.count() >= int(n * 0.8)) & (tv.count() >= int(n * 0.8))
+    ratio = amt.sum() / tv.sum().replace(0, np.nan)
+    return ratio.where(ok).dropna()
+
+
+def signal_fflow(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """外資（含外資自營商）最近 21 日淨買超占成交金額的比例（Barber 等 2009；P18）。"""
+    return _flow(mkt, d, 'foreign_net')
+
+
+def signal_tflow(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """投信最近 21 日淨買超占成交金額的比例（P18）。"""
+    return _flow(mkt, d, 'trust_net')
+
+
+def market_state_up(mkt: Market, d: pd.Timestamp, lookback_days: int = 252) -> Optional[bool]:
+    """
+    市場狀態（Cooper, Gutierrez & Hameed 2004；Du, Huang & Liao 2009 對台股）：0050 過去 lookback_days 個交易日的報酬 ≥ 0 為 UP。
+    文獻用三年；Iteration 66 事前決定先用一年，是為了和候選用同一個載入範圍（不暖機，只多載 130 天）。
+    三年期（Iteration 67，`~up3`）用 mkt.bench_hist（0050 從 stock_daily_prices 另外載的長序列，見 load_bench_history）算，
+    全市場載入範圍不變。歷史不足回 None（不閘門）。
+    """
+    hist = getattr(mkt, 'bench_hist', None)
+    if hist is not None:
+        hist = hist[hist.index <= d]
+        if len(hist) <= lookback_days:
+            return None
+        now, before = hist.iloc[-1], hist.iloc[-1 - lookback_days]
+    else:
+        i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right')) - 1
+        if i - lookback_days < 0 or BENCH not in mkt.adj.columns:
+            return None
+        now, before = mkt.adj[BENCH].iloc[i], mkt.adj[BENCH].iloc[i - lookback_days]
+    if pd.isna(now) or pd.isna(before) or before <= 0:
+        return None
+    return bool(now / before - 1 >= 0)
+
+
+def load_bench_history(start: date, years: int = 4) -> pd.Series:
+    """0050 還原收盤的長序列（start 往前 years 年），給三年期閘門用；index 是交易日。"""
+    since = date(start.year - years, start.month, 1)
+    with get_conn() as conn:
+        df = pd.read_sql("SELECT trade_date, adj_close FROM stock_daily_prices WHERE stock_id = %s AND trade_date >= %s AND adj_close > 0 ORDER BY trade_date",
+                         conn, params=(BENCH, since))
+    s = pd.Series(df['adj_close'].astype(float).values, index=pd.to_datetime(df['trade_date']))
+    return s[~s.index.duplicated()]
+
+
+STATE_GATE = '~up'    # 成分訊號加這個後綴：只在市場狀態 UP 時參與排名，DOWN 時整個成分拿掉（其餘成分照常）
+STATE_GATES = {'~up3': 756, '~up': 252}    # 後綴 → lookback（長的先比對，免得 ~up3 被當成 ~up）
+
+
+def needs_bench_history(signal: str) -> bool:
+    """三年期閘門需要比載入範圍更長的 0050 歷史。"""
+    return '~up3' in signal
+
+SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m', 'volchg', 'rev_accel', 'rev_streak',
+                  'resmom', 'rev_yoy3', 'momrev', 'cont', 'imom', 'mom127', 'ovn1m', 'illiq', 'indmom', 'relmom', 'seas', 'fflow', 'tflow')
+
+
+TSMC_WEIGHT_FALLBACK = 0.35       # 估不出來時的固定假設：全市場日線從 2018-01-02 起、迴歸要 200 列，所以 2018-10-26 前都用它（Iteration 67 實測）；之後一律用估計值
 
 
 def estimate_tsmc_weight(mkt: Market, d: pd.Timestamp, window: int = 250, top_n: int = 100,
@@ -395,14 +696,58 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
         return signal_rev_accel(sur, d)
     if signal == 'rev_streak':
         return signal_rev_streak(sur, d)
+    if signal == 'resmom':
+        return signal_resmom(mkt, d)
+    if signal == 'rev_yoy3':
+        return signal_rev_yoy3(sur, d)
+    if signal == 'momrev':
+        return signal_momrev(mkt, sur, d)
+    if signal == 'cont':
+        return signal_cont(mkt, d)
+    if signal == 'imom':
+        return signal_imom(mkt, d)
+    if signal == 'mom127':
+        return signal_mom127(mkt, d)
+    if signal == 'ovn1m':
+        return signal_ovn1m(mkt, d)
+    if signal == 'illiq':
+        return signal_illiq(mkt, d)
+    if signal == 'indmom':
+        return signal_indmom(mkt, d)
+    if signal == 'relmom':
+        return signal_relmom(mkt, d)
+    if signal == 'seas':
+        return signal_seas(mkt, d)
+    if signal == 'fflow':
+        return signal_fflow(mkt, d)
+    if signal == 'tflow':
+        return signal_tflow(mkt, d)
     raise ValueError(f'未知訊號 {signal}')
 
 
+def _gated_parts(signal: str, mkt: Market, d: pd.Timestamp) -> list[str]:
+    """拆 'a+b~up' 成成分清單；帶 ~up（一年）或 ~up3（三年）的成分只在市場狀態 UP（或算不出狀態）時留下。"""
+    parts, states = [], {}
+    for p in signal.split('+'):
+        for suffix, lookback in STATE_GATES.items():
+            if p.endswith(suffix):
+                if suffix not in states:
+                    states[suffix] = market_state_up(mkt, d, lookback)
+                p = None if states[suffix] is False else p[:-len(suffix)]
+                break
+        if p is not None:
+            parts.append(p)
+    return parts
+
+
 def scores_on(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp, ids: pd.Index) -> pd.Series:
-    """單一訊號直接回原值；'a+b' 是各訊號在候選池內的百分位排名平均（每個成分都要有值）。"""
-    parts = signal.split('+')
+    """單一訊號直接回原值；'a+b' 是各訊號在候選池內的百分位排名平均（每個成分都要有值）。
+    成分後綴 `~up`（STATE_GATE）：市場 DOWN 時拿掉那個成分；全部拿掉就回空（那個月不調倉）。"""
+    parts = _gated_parts(signal, mkt, d)
+    if not parts:
+        return pd.Series(dtype=float)
     if len(parts) == 1:
-        return _single(signal, mkt, sur, d).reindex(ids).dropna()
+        return _single(parts[0], mkt, sur, d).reindex(ids).dropna()
     ranks = [_single(p, mkt, sur, d).reindex(ids).rank(pct=True) for p in parts]
     return pd.concat(ranks, axis=1).dropna().mean(axis=1)
 

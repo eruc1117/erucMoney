@@ -1,0 +1,5 @@
+[
+  {"signal": "win3+mom+cont", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+imom", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+mom127", "tranches": 3, "tsmc_weight": "est"}
+]

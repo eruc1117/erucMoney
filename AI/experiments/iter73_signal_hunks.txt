@@ -1,0 +1,9 @@
+@@ -62 +62 @@ def load_universe_meta() -> pd.DataFrame:
+@@ -141,0 +142,4 @@ class Market:
+@@ -341 +345 @@ def signal_rev_streak(sur: pd.DataFrame, d: pd.Timestamp, cap: int = 24) -> pd.S
+@@ -342,0 +347,145 @@ SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m',
+@@ -344 +493,153 @@ SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m',
+@@ -397,0 +699,26 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
+@@ -400,0 +728,15 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
+@@ -402,2 +744,5 @@ def scores_on(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp, ids:
+@@ -405 +750 @@ def scores_on(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp, ids:

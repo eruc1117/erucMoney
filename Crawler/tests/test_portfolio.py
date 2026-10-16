@@ -213,6 +213,304 @@ def test_family_signals_shapes_and_point_in_time():
     assert len(ps.scores_on('rev_accel+mom', mkt, sur, d, pd.Index(['1111', '2222']))) == 2
 
 
+def test_resmom_strips_beta_and_is_point_in_time():
+    """殘差動能：一檔只是 β = 2 跟著 0050 漲（無 α）的股票，`mom` 會把它排很前面，`resmom` 不會；不足 252 日回空。"""
+    rng = np.random.default_rng(7)
+    days = pd.bdate_range('2023-01-02', periods=320)
+    rb = rng.normal(0.002, 0.008, len(days))                # 0050 一路漲（趨勢夠大，隨機種子不會翻成負）
+    r = {'hibeta': 2.0 * rb + rng.normal(0, 0.002, len(days)),       # 高 β、無 α
+         'alpha': rb + 0.001 + rng.normal(0, 0.002, len(days)),      # β = 1、正 α（真正的個股動能）
+         'flat': rb * 0.0 + rng.normal(0, 0.01, len(days)),
+         ps.BENCH: rb}
+    rows = []
+    for sid, ret in r.items():
+        px = 100 * np.cumprod(1 + ret)
+        for d, p in zip(days, px):
+            rows.append({'stock_id': sid, 'trade_date': d, 'open_price': p, 'high_price': p, 'low_price': p, 'close_price': p, 'adj_close': p, 'turnover_value': 1e8})
+    meta = pd.DataFrame({'stock_id': ['hibeta', 'alpha', 'flat'], 'listing_date': pd.NaT, 'delisted_date': pd.NaT}).set_index('stock_id')
+    mkt = ps.Market(pd.DataFrame(rows), meta)
+    d = days[-1]
+    mom, res = ps.signal_mom(mkt, d), ps.signal_resmom(mkt, d)
+    assert mom['hibeta'] > mom['flat']                  # 減 0050 的動能把高 β 當成強勢（flat 的異常報酬就是 −0050）
+    # 殘差動能看的是 α：有 α 的為正且排第一；高 β 無 α 的殘差只剩波動拖累（log 報酬的凸性），不會因為 β 高而排前面
+    assert res['alpha'] > 0 and res.idxmax() == 'alpha' and res['hibeta'] < res['alpha'] / 5
+    # α = 0.001／日 × 231 日 ÷ 殘差標準差 0.002 ≈ 115。若在同一窗口帶截距做 OLS，殘差總和恆為 0，
+    # 這個值會變成「最近 21 日殘差的負值 ÷ 標準差」，只剩 ±幾——這條斷言就是抓那個錯誤用的
+    assert res['alpha'] > 50
+    assert ps.signal_resmom(mkt, days[200]).empty       # 不足 252 日
+    # 只用 d 以前的資料：改動 d 之後的價格不影響訊號
+    mkt2 = ps.Market(pd.DataFrame(rows), meta)
+    mkt2.adj.iloc[-1] = mkt2.adj.iloc[-1] * 5
+    assert ps.signal_resmom(mkt2, days[-2]).equals(ps.signal_resmom(mkt, days[-2]))
+
+
+def test_rev_yoy3_and_market_state_gate():
+    months = pd.date_range('2021-01-01', '2024-07-01', freq='MS')
+    rev = pd.DataFrame(_rev('1111', months, growth=0.03) + _rev('2222', months, growth=-0.01))
+    sur = ps.surprises(rev)
+    d = pd.Timestamp('2024-07-11')
+    y = ps.signal_rev_yoy3(sur, d)
+    assert y['1111'] > 0 > y['2222']
+    assert y['1111'] == pytest.approx(sur[(sur.stock_id == '1111') & (sur.revenue_month <= '2024-07-01')]['yoy'].iloc[-3:].mean())
+    assert ps.signal_rev_yoy3(sur, pd.Timestamp('2024-09-11')).empty          # 當月那一期還沒有
+    # sur 裡有未來月份（2024-08、2024-09）時，7/11 的訊號不能用到它們
+    months_fut = pd.date_range('2021-01-01', '2024-09-01', freq='MS')
+    sur_fut = ps.surprises(pd.DataFrame(_rev('1111', months_fut, growth=0.03, jump_at=pd.Timestamp('2024-08-01'), jump=5.0) + _rev('2222', months_fut, growth=-0.01)))
+    assert ps.signal_rev_yoy3(sur_fut, d).equals(y)
+    # 市場狀態閘門：合成市場 0050 緩漲 → UP → `mom~up` 照常參與；人工把 0050 改成一年跌 → DOWN → 成分拿掉
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    ids = pd.Index(['1111', '2222', '3333', '4444'])
+    assert ps.market_state_up(mkt, d) is True
+    up = ps.scores_on('win3+mom~up', mkt, sur, d, ids)
+    assert up.equals(ps.scores_on('win3+mom', mkt, sur, d, ids))
+    mkt.adj[ps.BENCH] = mkt.adj[ps.BENCH].values[::-1]           # 把 0050 倒過來：過去一年是跌的
+    assert ps.market_state_up(mkt, d) is False
+    down = ps.scores_on('win3+mom~up', mkt, sur, d, ids)
+    assert down.equals(ps.scores_on('win3', mkt, sur, d, ids))
+    assert ps.scores_on('mom~up', mkt, sur, d, ids).empty          # 全部成分都被閘門拿掉 → 那個月不調倉
+    assert ps.market_state_up(mkt, pd.Timestamp('2023-08-01')) is None
+
+
+def test_three_year_gate_uses_bench_history():
+    """~up3：載入範圍只有 300 天時三年期算不出（不閘門）；掛上 0050 長序列 bench_hist 後用它算，且只看 ≤ d 的部分。"""
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    ids = pd.Index(['1111', '2222', '3333', '4444'])
+    assert ps.market_state_up(mkt, d, 756) is None
+    assert ps.scores_on('win3+mom~up3', mkt, sur_empty(), d, ids).equals(ps.scores_on('win3+mom', mkt, sur_empty(), d, ids))
+    days = pd.bdate_range('2020-01-01', '2024-12-31')
+    hist = pd.Series(np.linspace(200.0, 100.0, len(days)), index=days)          # 一路跌 → 三年 DOWN
+    mkt.bench_hist = hist
+    assert ps.market_state_up(mkt, d, 756) is False
+    assert ps.scores_on('win3+mom~up3', mkt, sur_empty(), d, ids).equals(ps.scores_on('win3', mkt, sur_empty(), d, ids))
+    up = hist[::-1].set_axis(days).copy()                                        # 一路漲 → UP
+    up[up.index > d] = 1.0                                                       # d 之後崩到 1：若沒切 ≤ d，三年報酬會變負
+    mkt.bench_hist = up
+    assert ps.market_state_up(mkt, d, 756) is True
+    assert ps.needs_bench_history('win3+mom~up3') and not ps.needs_bench_history('win3+mom~up')
+    assert ps._gated_parts('win3+mom~up3', mkt, d) == ['win3', 'mom']
+
+
+def test_momrev_keeps_only_positive_sue():
+    """以營收為條件的動能：值等於 mom，但只留當月 SUE > 0 的股票；沒有 SUE 或 SUE ≤ 0 的不給值。"""
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    sur = pd.DataFrame([{'stock_id': '1111', 'revenue_month': pd.Timestamp('2024-07-01'), 'sue': 1.2},
+                        {'stock_id': '2222', 'revenue_month': pd.Timestamp('2024-07-01'), 'sue': -0.3},
+                        {'stock_id': '3333', 'revenue_month': pd.Timestamp('2024-06-01'), 'sue': 2.0}])     # 上個月的，當月沒有
+    for c in ('announce_date', 'announce_ts', 'announce_source'):
+        sur[c] = pd.NaT if c != 'announce_source' else None
+    mom, mr = ps.signal_mom(mkt, d), ps.signal_momrev(mkt, sur, d)
+    assert list(mr.index) == ['1111'] and mr['1111'] == pytest.approx(mom['1111'])
+    ids = pd.Index(['1111', '2222', '3333', '4444'])
+    assert set(ps.scores_on('win3+momrev', mkt, sur, d, ids).index) == {'1111'}       # 組合裡其他股票因缺成分被排除
+
+
+def test_cont_prefers_many_small_gains_over_one_jump():
+    """資訊連續性：同樣的累積報酬，天天小漲的股票 cont 高、一次跳空的低；值在 [−1, 1]；只看 12-1 窗口、不足 252 日回空。"""
+    mkt, prices = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    days = mkt.adj.index
+    bench = mkt.adj[ps.BENCH]
+    i = days.get_loc(d)
+    # 1111：形成期每天比 0050 多 0.1%；2222：只在形成期中間一天多 23%（累積差不多），其餘和 0050 同步
+    steady = bench * (1.001 ** np.arange(len(days)))
+    jump = bench.copy()
+    jump.iloc[i - 150:] *= 1.23
+    for sid, s in (('1111', steady), ('2222', jump)):
+        mkt.adj[sid] = s.values
+        mkt.close[sid] = s.values
+    mkt.ar = np.log(mkt.adj).diff().sub(np.log(mkt.adj[ps.BENCH]).diff(), axis=0)
+    c = ps.signal_cont(mkt, d)
+    assert c['1111'] == pytest.approx(1.0) and abs(c['2222']) < 0.05
+    assert ps.signal_mom(mkt, d)['1111'] == pytest.approx(ps.signal_mom(mkt, d)['2222'], abs=0.05)   # 累積差不多，只有連續性不同
+    assert c.between(-1, 1).all()
+    assert ps.signal_cont(mkt, days[200]).empty
+    # 窗口外（最近 21 日）的大跌不影響
+    mkt.ar.iloc[i - 5, mkt.ar.columns.get_loc('1111')] = -0.5
+    assert ps.signal_cont(mkt, d)['1111'] == pytest.approx(1.0)
+
+
+def test_imom_counts_only_intraday_returns():
+    """日內動能：報酬全在隔夜（開盤跳上去、盤中不動）的股票 imom ≈ 0，全在盤中的股票 imom > 0；開盤 ≤ 0 當缺值。"""
+    mkt, prices = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    p = prices.copy()
+    g = 1.002
+    for sid, mode in (('1111', 'overnight'), ('2222', 'intraday')):
+        m = p['stock_id'] == sid
+        n = m.sum()
+        px = 100.0 * g ** np.arange(n)
+        p.loc[m, 'close_price'] = px
+        p.loc[m, 'adj_close'] = px
+        p.loc[m, 'open_price'] = px if mode == 'overnight' else px / g       # 隔夜型：開盤 = 收盤；日內型：開盤 = 前收
+    b = p['stock_id'] == ps.BENCH
+    p.loc[b, 'open_price'] = p.loc[b, 'close_price']                          # 0050 日內報酬 0，方便看絕對值
+    p.loc[(p['stock_id'] == '3333') & (p['trade_date'] == pd.Timestamp('2024-03-01')), 'open_price'] = 0.0
+    mkt2 = ps.Market(p, mkt.meta)
+    im = ps.signal_imom(mkt2, d)
+    assert im['1111'] == pytest.approx(0.0, abs=1e-9)
+    assert im['2222'] == pytest.approx(np.log(g) * (252 - 21), rel=1e-6)
+    assert np.isnan(mkt2.ar_intra.at[pd.Timestamp('2024-03-01'), '3333']) and '3333' in im.index   # 一天缺值不影響 min_count
+    assert ps.signal_imom(mkt2, mkt2.adj.index[200]).empty
+    # mom 對兩檔一樣（總報酬相同），imom 把隔夜型排到後面
+    mom = ps.signal_mom(mkt2, d)
+    assert mom['1111'] == pytest.approx(mom['2222'])
+
+
+def test_mom127_skips_last_six_months():
+    """中期動能 12-7：最近 126 個交易日的大漲不影響；形成期 = 252 到 126 日前。"""
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    i = mkt.adj.index.get_loc(d)
+    before = ps.signal_mom127(mkt, d)
+    mkt.ar.iloc[i - 100, mkt.ar.columns.get_loc('1111')] += 0.5
+    after = ps.signal_mom127(mkt, d)
+    assert after['1111'] == pytest.approx(before['1111'])
+    mkt.ar.iloc[i - 130, mkt.ar.columns.get_loc('1111')] += 0.5
+    assert ps.signal_mom127(mkt, d)['1111'] == pytest.approx(before['1111'] + 0.5)
+    assert ps.signal_mom127(mkt, mkt.adj.index[200]).empty
+    ids = pd.Index(['1111', '2222', '3333', '4444'])
+    assert len(ps.scores_on('win3+mom127', mkt, sur_empty(), d, ids)) == 4
+
+
+def test_ovn1m_counts_only_last_month_overnight():
+    """隔夜短期持續：報酬全在隔夜的股票 ovn1m = 21 天的隔夜報酬，全在盤中的 ≈ 0；只看最近 21 天；不足回空。"""
+    mkt, prices = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    p = prices.copy()
+    g = 1.002
+    for sid, mode in (('1111', 'overnight'), ('2222', 'intraday')):
+        m = p['stock_id'] == sid
+        px = 100.0 * g ** np.arange(m.sum())
+        p.loc[m, 'close_price'] = px
+        p.loc[m, 'adj_close'] = px
+        p.loc[m, 'open_price'] = px if mode == 'overnight' else px / g
+    b = p['stock_id'] == ps.BENCH
+    p.loc[b, 'open_price'] = p.loc[b, 'close_price']
+    bench_adj = p.loc[b].set_index('trade_date')['adj_close']
+    mkt2 = ps.Market(p, mkt.meta)
+    ov = ps.signal_ovn1m(mkt2, d)
+    i = mkt2.adj.index.get_loc(d)
+    bench_ovn = np.log(bench_adj).diff().iloc[i - 20:i + 1].sum()                      # 0050 的報酬全在隔夜（開盤 = 收盤）
+    assert ov['1111'] == pytest.approx(21 * np.log(g) - bench_ovn, rel=1e-6)
+    assert ov['2222'] == pytest.approx(-bench_ovn, rel=1e-6)
+    assert ps.signal_ovn1m(mkt2, mkt2.adj.index[10]).empty
+    # 22 天前的隔夜跳空不算
+    mkt2.ar_over.iloc[i - 21, mkt2.ar_over.columns.get_loc('1111')] += 1.0
+    assert ps.signal_ovn1m(mkt2, d)['1111'] == pytest.approx(ov['1111'], rel=1e-6)
+
+
+def test_illiq_is_higher_for_thin_stocks_and_point_in_time():
+    """Amihud 非流動性：同樣的報酬、成交金額小 10 倍的股票 illiq 高 log(10)；不足 252 日回空；成交金額 0 的日子當缺值。"""
+    mkt, prices = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    p = prices.copy()
+    for sid in ('1111', '2222'):
+        m = p['stock_id'] == sid
+        p.loc[m, 'close_price'] = p.loc[p['stock_id'] == '3333', 'close_price'].values
+        p.loc[m, 'adj_close'] = p.loc[m, 'close_price']
+        p.loc[m, 'turnover_value'] = 1e8 if sid == '1111' else 1e7
+    p.loc[(p['stock_id'] == '1111') & (p['trade_date'] == pd.Timestamp('2024-03-01')), 'turnover_value'] = 0.0
+    mkt2 = ps.Market(p, mkt.meta)
+    il = ps.signal_illiq(mkt2, d)
+    assert il['2222'] - il['1111'] == pytest.approx(np.log(10), abs=0.02)      # 一天缺值讓平均略不同
+    assert ps.signal_illiq(mkt2, mkt2.adj.index[200]).empty
+    # 點時：d 之後的資料與 253 天前的資料都不影響；d 當天的成交金額會
+    i = mkt2.adj.index.get_loc(d)
+    c2 = mkt2.turnover.columns.get_loc('2222')
+    mkt2.turnover.iloc[i + 1, c2] = 1.0
+    mkt2.turnover.iloc[i - 253, c2] = 1.0
+    assert ps.signal_illiq(mkt2, d)['2222'] == pytest.approx(il['2222'])
+    mkt2.turnover.iloc[i, c2] = 1.0
+    assert ps.signal_illiq(mkt2, d)['2222'] > il['2222']
+    ids = pd.Index(['1111', '2222', '3333', '4444'])
+    assert len(ps.scores_on('win3+mom+illiq', mkt2, sur_empty(), d, ids)) == 4
+
+
+def test_indmom_and_relmom_use_industry_means_with_min_members():
+    """產業動能：同產業 ≥ 5 檔才有值、值 = 產業 mom 平均；relmom = mom − indmom；沒有產業欄位回空。"""
+    stocks = tuple(f'{1000 + i}' for i in range(8))
+    meta = pd.DataFrame({'stock_id': list(stocks), 'listing_date': pd.NaT, 'delisted_date': pd.NaT,
+                         'industry_type': ['半導體業'] * 5 + ['航運業'] * 2 + [None]}).set_index('stock_id')
+    mkt, _ = _market(n_days=300, start='2023-06-01', stocks=stocks, meta=meta)
+    d = pd.Timestamp('2024-07-11')
+    mom = ps.signal_mom(mkt, d)
+    im = ps.signal_indmom(mkt, d)
+    assert set(im.index) == set(stocks[:5])                                   # 航運只有 2 檔、第八檔沒產業 → 沒值
+    assert im.iloc[0] == pytest.approx(mom[list(stocks[:5])].mean())
+    rm = ps.signal_relmom(mkt, d)
+    assert rm['1000'] == pytest.approx(mom['1000'] - im['1000'])
+    assert abs(rm[list(stocks[:5])].sum()) < 1e-9                             # 同產業相對動能和為 0
+    plain, _ = _market(n_days=300, start='2023-06-01')                       # meta 沒有 industry_type
+    assert ps.signal_indmom(plain, d).empty and ps.signal_relmom(plain, d).empty
+    ids = pd.Index(stocks)
+    assert set(ps.scores_on('win3+mom+indmom', mkt, sur_empty(), d, ids).index) == set(stocks[:5])
+
+
+def test_seas_averages_same_month_windows_of_prior_years():
+    """同月季節性：前 1～3 年「同月 11 日之後到次月 11 日之後」的累積異常報酬平均；只有一年歷史就用一年；窗口外的報酬不影響。"""
+    mkt, _ = _market(n_days=800, start='2021-01-04')
+    days = mkt.adj.index
+    d = days[days.searchsorted(pd.Timestamp('2024-01-11'))]
+    col = mkt.ar.columns.get_loc('1111')
+    # 2023-01-12 ~ 2023-02-13 與 2022-01-12 ~ 2022-02-11 各塞一個 +0.5；2021 的窗口在資料前（start 2021-01-04 有，塞 +0.2）
+    def window(y):
+        s = days.searchsorted(pd.Timestamp(year=y, month=1, day=11))
+        e = days.searchsorted(pd.Timestamp(year=y, month=2, day=11))
+        return s + 1, e + 1
+    base = {y: mkt.ar.iloc[slice(*window(y)), col].sum() for y in (2021, 2022, 2023)}
+    before = ps.signal_seas(mkt, d)['1111']
+    assert before == pytest.approx(np.mean(list(base.values())))
+    s1, _ = window(2023)
+    mkt.ar.iloc[s1, col] += 0.5
+    assert ps.signal_seas(mkt, d)['1111'] == pytest.approx(before + 0.5 / 3)
+    mkt.ar.iloc[s1 - 1, col] += 5.0                                           # 窗口起點的前一天（訊號日當天）不算
+    assert ps.signal_seas(mkt, d)['1111'] == pytest.approx(before + 0.5 / 3)
+    d2 = days[days.searchsorted(pd.Timestamp('2022-03-11'))]                   # 只有 2021 一年可回看
+    one = ps.signal_seas(mkt, d2)
+    assert not one.empty and ps.signal_seas(mkt, days[5]).empty
+    # 窗口起點早於資料起點（資料 2021-01-04 起，前一年 2020-12-11 沒有）→ 半截窗口不算、回空
+    d4 = days[days.searchsorted(pd.Timestamp('2021-12-13'))]
+    assert ps.signal_seas(mkt, d4).empty
+    d5 = days[days.searchsorted(pd.Timestamp('2022-01-11'))]                   # 2021-01-11 起的窗口完整 → 有值
+    assert not ps.signal_seas(mkt, d5).empty
+
+
+def test_fflow_is_net_buy_value_over_turnover_in_last_21_days():
+    """法人流量：Σ(淨買超股數 × 收盤) ÷ Σ 成交金額，最近 21 日含訊號日；沒掛法人表回空；有值天數不足 80% 不給值；d 之後的不算。"""
+    mkt, _ = _market(n_days=120, start='2024-01-02')
+    d = pd.Timestamp('2024-05-13')
+    assert ps.signal_fflow(mkt, d).empty                                        # mkt.insti 沒掛
+    days = mkt.adj.index
+    i = days.get_loc(d)
+    win = days[i - 20:i + 1]
+    fn = pd.DataFrame(0.0, index=days, columns=mkt.close.columns)
+    fn.loc[win, '1111'] = 1000.0                                                # 每天淨買 1,000 股
+    fn.loc[days[i + 1], '1111'] = 1e9                                           # 訊號日之後的大買不算
+    fn.loc[win[:10], '2222'] = 500.0                                            # 只有 10 天有值
+    fn.loc[win[10:], '2222'] = np.nan
+    mkt.insti = {'foreign_net': fn, 'trust_net': fn * 0}
+    ff = ps.signal_fflow(mkt, d)
+    expect = (1000.0 * mkt.close.loc[win, '1111']).sum() / mkt.turnover.loc[win, '1111'].sum()
+    assert ff['1111'] == pytest.approx(expect)
+    assert '2222' not in ff.index
+    fn.loc[win[:16], '3333'] = 1.0                                               # 16/21 ≥ 80% → 有值；15/21 → 沒有
+    fn.loc[win[16:], '3333'] = np.nan
+    fn.loc[win[:15], '4444'] = 1.0
+    fn.loc[win[15:], '4444'] = np.nan
+    ff2 = ps.signal_fflow(mkt, d)
+    assert '3333' in ff2.index and '4444' not in ff2.index
+    assert ps.signal_tflow(mkt, d)['1111'] == 0.0
+    assert ps.needs_institutional('win3+mom+fflow') and not ps.needs_institutional('win3+mom')
+    ids = pd.Index(['1111', '3333', '4444'])
+    assert set(ps.scores_on('win3+mom+fflow', mkt, sur_empty(), d, ids).index) <= {'1111', '3333', '4444'}
+
+
+def sur_empty():
+    return pd.DataFrame(columns=['stock_id', 'revenue_month', 'yoy', 'surprise', 'sue', 'announce_date', 'announce_ts', 'announce_source'])
+
+
 def test_liq_weighting_caps_single_name():
     liq = pd.Series({'a': 1000.0, 'b': 10.0, 'c': 10.0})
     w = ps._weights(['a', 'b', 'c'], 1.0, 'liq', liq, cap=0.5)

@@ -1,0 +1,8 @@
+[
+  {"signal": "mom", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "resmom", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+resmom", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "rev_yoy3", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+mom+rev_yoy3", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+mom~up", "tranches": 3, "tsmc_weight": "est"}
+]

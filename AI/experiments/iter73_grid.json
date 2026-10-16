@@ -1,0 +1,5 @@
+[
+  {"signal": "fflow", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+mom+fflow", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+mom+tflow", "tranches": 3, "tsmc_weight": "est"}
+]

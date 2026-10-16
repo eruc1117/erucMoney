@@ -54,7 +54,8 @@ CNBC／MarketWatch RSS（原文頁為樣板，內文抓不到）。
 | 資料集 | FinMind 方法 | 對應 DB 表 |
 |--------|-------------|-----------|
 | 個股每日行情 | `taiwan_stock_daily()` | `stock_daily_prices` |
-| 三大法人買賣超 | `taiwan_stock_institutional_investors()` | `stock_chip_analysis` |
+| 三大法人買賣超（26 檔追蹤股） | `taiwan_stock_institutional_investors()` | `stock_chip_analysis` |
+| 三大法人買賣超（**全市場**，Iteration 71） | 不走 FinMind：證交所 `fund/T86`（selectType=ALLBUT0999）＋櫃買 `insti/dailyTrade`（type=Daily、sect=EW），一天兩次呼叫；`Crawler/institutional_data.py` | `market_institutional_daily`（2018-01 起；單位股；外資含外資自營商；寫入前驗證合計 = 三法人相加） |
 | 個股基本資訊 | `taiwan_stock_info()` | `stock_info` |
 
 ### 欄位對照（taiwan_stock_daily → stock_daily_prices）

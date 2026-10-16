@@ -301,3 +301,136 @@ def fetch_tpex_exright(start: date, end: date) -> dict:
 
 def fetch_twse_capital_reduction(start: date, end: date) -> dict:
     return _get_json(TWSE_TWTAUU, {'startDate': start.strftime('%Y%m%d'), 'endDate': end.strftime('%Y%m%d'), 'response': 'json'})
+
+
+# ── 三大法人買賣超（兩市，Iteration 71）────────────────────────────────────────
+
+TWSE_T86 = 'https://www.twse.com.tw/rwd/zh/fund/T86'
+TPEX_INSTI = 'https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade'
+INSTI_MISMATCH_TOLERANCE = 0.01     # 「三大法人合計 ≠ 外資＋投信＋自營」的列超過這個比例就當格式變了
+
+
+class ExchangeFormatError(Exception):
+    pass
+
+
+def fetch_twse_institutional(d: date) -> dict:
+    return _get_json(TWSE_T86, {'date': d.strftime('%Y%m%d'), 'selectType': 'ALLBUT0999', 'response': 'json'})
+
+
+def fetch_tpex_institutional(d: date) -> dict:
+    return _get_json(TPEX_INSTI, {'type': 'Daily', 'sect': 'EW', 'date': d.strftime('%Y/%m/%d'), 'response': 'json'})
+
+
+def _insti_row(sid: str, trade_date: date, source: str, fb, fs, fn, tb, ts, tn, db, ds, dn, total) -> Optional[dict]:
+    fn, tn, dn, total = _int(fn), _int(tn), _int(dn), _int(total)
+    if fn is None or tn is None or dn is None or total is None:
+        return None
+    return {'stock_id': sid, 'trade_date': trade_date, 'source': source,
+            'foreign_buy': _int(fb), 'foreign_sell': _int(fs), 'foreign_net': fn,
+            'trust_buy': _int(tb), 'trust_sell': _int(ts), 'trust_net': tn,
+            'dealer_buy': _int(db), 'dealer_sell': _int(ds), 'dealer_net': dn, 'total_net': total}
+
+
+def _check_identity(rows: list[dict], where: str) -> list[dict]:
+    """交易所原表的合計欄要等於三個法人淨買超相加；不等的列超過容忍比例就 raise（欄位對錯了），少量不等的列丟掉。"""
+    if not rows:
+        return rows
+    bad = [r for r in rows if r['foreign_net'] + r['trust_net'] + r['dealer_net'] != r['total_net']]
+    if len(bad) / len(rows) > INSTI_MISMATCH_TOLERANCE:
+        raise ExchangeFormatError(f'{where}：{len(bad)}/{len(rows)} 列合計不等於三法人相加，欄位對應可能變了（例：{bad[0]}）')
+    if bad:
+        logger.warning('[exchange] %s：%d 列合計不等於三法人相加，丟掉', where, len(bad))
+        keep = set(map(id, bad))
+        rows = [r for r in rows if id(r) not in keep]
+    return rows
+
+
+def _sum(*cells) -> Optional[int]:
+    vals = [_int(c) for c in cells]
+    if any(v is None for v in vals):
+        return None
+    return sum(vals)
+
+
+def parse_twse_institutional(payload: dict) -> list[dict]:
+    """
+    fund/T86（selectType=ALLBUT0999）→ 個股列。2017-12-18 起 19 欄：外陸資（不含外資自營商）買/賣/淨、外資自營商買/賣/淨、
+    投信買/賣/淨、自營商淨、自營商(自行)買/賣/淨、自營商(避險)買/賣/淨、三大法人合計。外資 = 外陸資 + 外資自營商。
+    休市日 stat 不是 OK，回 []。
+    """
+    if not isinstance(payload, dict) or str(payload.get('stat', '')).lower() != 'ok':
+        return []
+    trade_date = _ymd(payload.get('date'))
+    fields = payload.get('fields') or []
+    if trade_date is None or not fields:
+        return []
+    ix = {k: _field_index(fields, *v) for k, v in {
+        'id': ('證券代號',),
+        'f_b': ('外陸資買進股數(不含外資自營商)', '外資買進股數'), 'f_s': ('外陸資賣出股數(不含外資自營商)', '外資賣出股數'),
+        'f_n': ('外陸資買賣超股數(不含外資自營商)', '外資買賣超股數'),
+        'fd_b': ('外資自營商買進股數',), 'fd_s': ('外資自營商賣出股數',), 'fd_n': ('外資自營商買賣超股數',),
+        't_b': ('投信買進股數',), 't_s': ('投信賣出股數',), 't_n': ('投信買賣超股數',),
+        'd_n': ('自營商買賣超股數',), 'ds_b': ('自營商買進股數(自行買賣)',), 'ds_s': ('自營商賣出股數(自行買賣)',),
+        'dh_b': ('自營商買進股數(避險)',), 'dh_s': ('自營商賣出股數(避險)',),
+        'total': ('三大法人買賣超股數',),
+    }.items()}
+    missing = [k for k, v in ix.items() if v < 0 and k not in ('fd_b', 'fd_s', 'fd_n')]
+    if missing:
+        raise ExchangeFormatError(f'T86 欄位找不到 {missing}：{fields}')
+    has_fd = ix['fd_n'] >= 0
+    rows = []
+    for r in payload.get('data') or []:
+        sid = str(_cell(r, ix['id']) or '').strip()
+        if not sid:
+            continue
+        c = lambda k: _cell(r, ix[k])   # noqa: E731
+        if has_fd:
+            fb, fs, fn = _sum(c('f_b'), c('fd_b')), _sum(c('f_s'), c('fd_s')), _sum(c('f_n'), c('fd_n'))
+        else:
+            fb, fs, fn = c('f_b'), c('f_s'), c('f_n')
+        row = _insti_row(sid, trade_date, 'twse', fb, fs, fn, c('t_b'), c('t_s'), c('t_n'),
+                         _sum(c('ds_b'), c('dh_b')), _sum(c('ds_s'), c('dh_s')), c('d_n'), c('total'))
+        if row:
+            rows.append(row)
+    return _check_identity(rows, f'T86 {trade_date}')
+
+
+def parse_tpex_institutional(payload: dict) -> list[dict]:
+    """
+    insti/dailyTrade（type=Daily、sect=EW）→ 個股列。兩種版面：
+      16 欄（2018 年前後）：代號、名稱、外資及陸資買/賣/淨、投信買/賣/淨、自營淨、自營(自行)買/賣/淨、自營(避險)買/賣/淨、合計；
+      24 欄（之後）：欄名只剩「買進股數／賣出股數／買賣超股數」重複七組，只能按位置——
+        外資及陸資(不含自營商)、外資自營商、外資及陸資合計、投信、自營商(自行)、自營商(避險)、自營商合計、三大法人合計。
+    休市日 data 是空的，回 []。
+    """
+    if not isinstance(payload, dict):
+        return []
+    table = next((t for t in payload.get('tables') or [] if t.get('data')), None)
+    if table is None:
+        return []
+    trade_date = roc_date(table.get('date') or payload.get('date'))
+    fields = table.get('fields') or []
+    if trade_date is None:
+        return []
+    rows = []
+    if len(fields) == 16:
+        for r in table['data']:
+            sid = str(_cell(r, 0) or '').strip()
+            if not sid:
+                continue
+            row = _insti_row(sid, trade_date, 'tpex', r[2], r[3], r[4], r[5], r[6], r[7],
+                             _sum(r[9], r[12]), _sum(r[10], r[13]), r[8], r[15])
+            if row:
+                rows.append(row)
+    elif len(fields) == 24:
+        for r in table['data']:
+            sid = str(_cell(r, 0) or '').strip()
+            if not sid:
+                continue
+            row = _insti_row(sid, trade_date, 'tpex', r[8], r[9], r[10], r[11], r[12], r[13], r[20], r[21], r[22], r[23])
+            if row:
+                rows.append(row)
+    else:
+        raise ExchangeFormatError(f'櫃買三大法人表 {trade_date} 有 {len(fields)} 欄，不是 16 或 24：{fields}')
+    return _check_identity(rows, f'TPEx insti {trade_date}')
