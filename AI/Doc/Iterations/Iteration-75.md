@@ -38,6 +38,7 @@
 ## 變更檔案
 
 修改：`Crawler/trading_sim.py`（`simulate`／`run_text` 多 `source`、結果多 `source`、caveat）、`Crawler/trading_strategy.py`（`simulate_rules` 多 `source`、拿掉 `from trading_sim import load_prices_any`）、`Crawler/api.py`（`SimRequest`／`RulesRequest` 多 `source`／`seed`、`_sim_source`）、`Server/routes/sim.js`（`sourceFields`）、`Server/tests/helpers/fastapi-mock.js`（sim 兩個 handler 回 `source`）、`Server/tests/http/sim.test.js`（+5）、`Screen/src/pages/TradingSim.jsx`（資料下拉、種子、說明、警示）、`Screen/src/components/RuleBuilder.jsx`（警示）、`AI/Doc/README.md`、`progress.md`
+統一前端：`../meeting_front_end/src/stock/{pages/TradingSim.jsx, components/RuleBuilder.jsx, components/SourceBanner.jsx}` 同一份已複製、`checks.json` `mfe-build-75` 過；該 repo 的 commit／push 由使用者執行（auto mode 擋下）
 新增：`Crawler/synthetic_market.py`、`Crawler/tests/test_synthetic_market.py`（5 項）、`Screen/src/components/SourceBanner.jsx`、`AI/Doc/Iterations/Iteration-75.md`
 資料表：無
 審查：evidence-reviewer 第一輪 40／0／3 PASS（unresolved 三條：N 未查表、模擬器 diff、「微秒級」——已補查表、diff 與計時，見規則與讀法）
