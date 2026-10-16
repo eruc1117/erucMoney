@@ -1,9 +1,11 @@
 # 交接筆記
 
-**更新：** 2026-10-16（Iteration 73）
+**更新：** 2026-10-16（Iteration 74）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
+Iteration 74（已提交）：使用者「找方案在交易模擬建立大量假資料進行測試」→「方案 A，測試資料不要汙染到真實股票資料」：合成行情（幾何隨機漫步）＋ `monkeypatch` 攔下 `market_days`／`load_prices`／`load_bench` 與 `get_conn`，8 年 × 61 檔上 5 種子 × 50 條隨機規則、5 種子 × 200 筆隨機指令的帳務不變量全過、不連任何資料庫；`test_trading_fuzz.py` 15 項、pytest 256、jest-unit 44；模擬器本體未動、N 不動、不用重啟。審查見「已完成」。
+（以下為 73）
 Iteration 73（已提交 4b8c8a8）：第七代——法人買賣超：`win3+mom+fflow`（外資 21 日淨買超占成交金額比例相加）#94 dev **+10.33%／0.875 兩項超過候選**、#96 valid +14.34%／1.054 低於候選 1.4 pp、IR 亦低；`fflow` 與 `mom` ρ 0.06、持股交集 11／20，是獨立訊號；外資單獨 #93 −0.03%（追蹤誤差 7.3%，持股名次中位數 153、不是權值股）、投信相加 #95 沒過門檻。N 96、候選不換。Iteration 71 回補完成（2,137 天、332 萬列、失敗 0、候選池覆蓋 99.9%）。
 （以下為 72）
 Iteration 72（已提交 4b8c8a8）：使用者「月調倉方案繼續找」→ 第六代（產業與季節性）：`win3+relmom`（扣掉產業的個股動能，P48）#90 dev **+10.12%／0.785 兩項超過候選**、#92 valid +15.19%／1.07 與候選持平（少 0.5 pp）、落後較小——目前最接近候選的一組，但與 `mom` ρ 0.95；產業動能相加 #89 低於候選；同月季節性 #91 沒過門檻（只有 1～3 個 lag）。N 92、候選不換。
@@ -25,6 +27,7 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
+- （74）Crawler/tests/helpers/fake_market.py（`make_market`、`patch`、`random_rules`、`random_instructions`、`check_invariants`）、tests/test_trading_fuzz.py（15 項，無 db marker）；AI/experiments/iter74_fuzz_stats.py → UnifiedModel/results/trading_fuzz_iter74.md；AI/Doc/Iterations/Iteration-74.md、README
 - （73）AI/experiments/iter73_hypothesis.md、iter73_grid.json、iter73_results.py、iter73_dev.log、iter73_valid.log；UnifiedModel/results/portfolio_iter73_insti.md；portfolio_runs #93～#96；Crawler/portfolio_signal.py（`needs_institutional`、`load_institutional`、`_flow`、`signal_fflow`、`signal_tflow`）、portfolio_backtest.py（`run` 掛 `mkt.insti`）、tests/test_portfolio.py（+1，34 項）、tests/test_scheduler.py（加 18:35 工作）；AI/Doc/Iterations/Iteration-73.md、Iteration-71.md（回補完成）、README、Papers.md（P18／P44、第五節第七代、第六節）；market_institutional_daily 3,321,740 列
 - （72）AI/experiments/iter72_hypothesis.md、iter72_grid.json、iter72_results.py、iter72_dev.log、iter72_valid.log；UnifiedModel/results/portfolio_iter72_industry.md；portfolio_runs #89～#92；Crawler/portfolio_signal.py（`load_universe_meta` 多 industry_type／market_type、`signal_indmom`、`signal_relmom`、`signal_seas`）、tests（+2，33 項）；AI/Doc/Iterations/Iteration-72.md、README、Papers.md（P47～P50、P31、第五節第六代）
 - （71）Server/migrations/028_market_institutional.sql；Crawler/institutional_data.py、scrapers/exchange_daily.py（三大法人 fetch／parse／`ExchangeFormatError`）、scheduler.py（`job_institutional_daily` 18:35）、tests/test_institutional.py（+4）；Server/tests/db/migrations.test.js（28）；AI/Doc/DataSources.md、Papers.md（P18）、Iterations/Iteration-71.md、README
@@ -52,6 +55,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
 
 ## 已完成
+- 假資料測試（74）：pytest-74 256 過、jest-unit-74 44 過（checks.json 2026-10-16）；合成市場 61 檔 × 2,408 日、一字鎖 397 股票日；規則模擬 5 種子成交 19／34／382／176／367、每趟約 1 秒；指令模擬 5 種子成交 46／37／53／26／38、略過全是「現金不夠」「沒有持股可賣」、`trades + skipped == 200`；evidence-reviewer-74 兩輪 43/4/7 → 17/0/8 PASS（unresolved 是暫存區量測數字與過程敘述，已標待確認）
 - 審查（71／73）：strategy-critic-73 PASS（九條已處理）；evidence-reviewer-71 三輪 29/8/4 → 36/1/3 → 12/0/1 PASS；evidence-reviewer-73 三輪 34/2/6 → 60/5/6 → 25/0/1 PASS（checks.json 2026-10-16）
 - 第七代（73）：#93 `fflow` −0.03%／−0.004／TE 7.3%；#94 `win3+mom+fflow` +10.33%／0.875／TE 11.8%／落後 −11.5%；#96 valid +14.34%／1.054／13.6%／−15.4%／月勝率 69%（候選 #38 +15.71%／1.085／14.5%／−16.7%／66%）；#95 `win3+mom+tflow` +4.23%／0.346；ρ(mom, fflow) 0.06、持股交集 11／20；回補 2,137 天失敗 0（22:06～01:31）、2018-12-22 是補班日 582 列低於 --check 門檻不是缺、前 300 名缺 0.06%；pytest-portfolio-73 34 過、pytest 241 過（2026-10-16）；N = 96
 - 審查（72）：strategy-critic-72 PASS（八條已處理）；evidence-reviewer-72 三輪 51/3/3 → 58/1/5 → 32/2/2，第三輪兩條行號／措辭已改，unresolved 交使用者（checks.json 2026-10-15）
@@ -69,6 +73,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 回放結論（59）：照單全收 +346%（0050 +189%）；停損 15／25／35% 都輸；限價 ±2% 只差 0.5%／年
 
 ## 決策
+- 2026-10-16（74）：交易模擬的大量測試資料走記憶體 monkeypatch，不灌測試庫——`market_days` 要每天 ≥ 500 列才算交易日，8 年要 108 萬列、22 秒（待確認，量測腳本在暫存區），且使用者要求不汙染真實股票資料；`patch` 同時把 `get_conn` 換成丟例外，漏接的資料庫存取當場失敗。方案 C（灌測試庫給儀表板手動操作）不做
 - 2026-10-16（73）：投信淨買超、外資淨買超單獨兩個家族關閉；`win3+mom+fflow` 候選不換、交使用者決定；三個「開發期贏、驗證期略輸」的方向（illiq、relmom、fflow）**不做事後組合**
 - 2026-10-15（72）：valid 規則統一為「兩項都超過 #30」（Iteration 70 登記檔兩段不一致的修正）；產業動能相加、同月季節性（1～3 lag）家族關閉；`win3+relmom` 候選不換、交使用者決定；不做 relmom × illiq × rev_accel 的事後組合
 - 2026-10-15（71）：三大法人全市場表走交易所官方檔不走 FinMind——2,100 個交易日逐日呼叫 FinMind 要 3.5 小時以上且要 token，交易所檔沒有額度；和 market_daily_prices 同一條路線。外資含外資自營商、自營商含避險；寫入前驗合計
@@ -100,6 +105,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 法人籌碼（Papers P18）全市場資料不在庫裡（`stock_foreign_holding` 只有 26 檔），要先補 FinMind 三大法人買賣超
 - 波動管理（P10／P12，引擎沒有現金腿）、動能季節性（P5，月份定義要讀全文）都還沒跑
 - live 列 #68 沒暖機、2018 年前 10 個月空手；大盤線只是參考，指標仍對 0050
+- `fake_market.patch` 只攔 `db.connection`、`portfolio_paper`、`trading_replay` 三處的 `get_conn`；日後有新模組在模組層 `from db.connection import get_conn` 且被模擬器用到，要加進清單（沒加的話 pytest 下會連到 `CRAWLER_TEST_DB` 測試庫、不是正式庫 `Stock`，但就不再是「不連庫」）
 - 條件規則沒做 NOT／跨股票／成交量；公開模擬沒做匯入 CSV；凱基未接；第二本模擬帳戶沒做
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
