@@ -4,7 +4,7 @@
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 75（已提交 c8492fb、已 push；meeting_front_end 三檔已同步、mfe-build-75 過，該 repo 待使用者 commit／push；MoneyCrawlerApi 與 MoneyApi 已於 2026-10-16 重啟）：使用者「交易模擬 可以選測試的資料」→ 資料來源抽成物件（`synthetic_market.DbSource`／`SyntheticSource(seed)`），兩個模擬器多 `source`，API／Node 多 `source`／`seed`，前端「資料」下拉＋種子＋橘色警示；合成行情在後端記憶體現場產生、不讀不寫任何庫；預設仍真實行情。pytest 261、jest 190、vite build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**。審查見「已完成」。
+Iteration 75（已提交 c8492fb、已 push；meeting_front_end 三檔已同步、mfe-build-75 過，該 repo 已提交 dfb7b48 並 push；MoneyCrawlerApi 與 MoneyApi 已於 2026-10-16 重啟）：使用者「交易模擬 可以選測試的資料」→ 資料來源抽成物件（`synthetic_market.DbSource`／`SyntheticSource(seed)`），兩個模擬器多 `source`，API／Node 多 `source`／`seed`，前端「資料」下拉＋種子＋橘色警示；合成行情在後端記憶體現場產生、不讀不寫任何庫；預設仍真實行情。pytest 261、jest 190、vite build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**。審查見「已完成」。
 （以下為 74）
 Iteration 74（已提交）：使用者「找方案在交易模擬建立大量假資料進行測試」→「方案 A，測試資料不要汙染到真實股票資料」：合成行情（幾何隨機漫步）＋ `monkeypatch` 攔下 `market_days`／`load_prices`／`load_bench` 與 `get_conn`，8 年 × 61 檔上 5 種子 × 50 條隨機規則、5 種子 × 200 筆隨機指令的帳務不變量全過、不連任何資料庫；`test_trading_fuzz.py` 15 項、pytest 256、jest-unit 44；模擬器本體未動、N 不動、不用重啟。審查見「已完成」。
 （以下為 73）
