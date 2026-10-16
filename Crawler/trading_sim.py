@@ -19,6 +19,7 @@ from datetime import date, datetime
 from typing import Optional
 
 import portfolio_paper as pp
+import synthetic_market as sm
 import trading_replay as rp
 import trading_rules as tr
 
@@ -91,8 +92,10 @@ def load_prices_any(ids: list, start: date, end: date) -> dict:
     return prices
 
 
-def simulate(instructions: list, start: date, end: date, capital: float = 1_000_000) -> dict:
-    """照指令在實際日線上成交，逐日結算對 0050。回指標、淨值序列、成交、略過的指令、期末持股。"""
+def simulate(instructions: list, start: date, end: date, capital: float = 1_000_000, source=None) -> dict:
+    """照指令在實際日線上成交，逐日結算對 0050。回指標、淨值序列、成交、略過的指令、期末持股。
+    source：資料來源（synthetic_market.DbSource／SyntheticSource），None = 真實行情；合成資料時 caveat 會標明。"""
+    src = source or sm.DbSource()
     if end < start:
         return {'available': False, 'reason': 'end 要晚於 start'}
     if (end - start).days > MAX_YEARS * 366:
@@ -104,12 +107,12 @@ def simulate(instructions: list, start: date, end: date, capital: float = 1_000_
     bad = [it for it in instructions if not (start <= it['date'] <= end)]
     if bad:
         return {'available': False, 'reason': f"{len(bad)} 筆指令的日期不在期間內（例：第 {bad[0]['line']} 行 {bad[0]['date']}）"}
-    days = pp.market_days(start, end)
+    days = src.market_days(start, end)
     if len(days) < 2:
-        return {'available': False, 'reason': '這段期間沒有全市場行情（資料從 2018-01 起）'}
+        return {'available': False, 'reason': src.empty_reason}
     ids = sorted({it['stock_id'] for it in instructions})
-    prices = load_prices_any(ids, start, end)
-    bench = rp.load_bench(start, end)
+    prices = src.load_prices_any(ids, start, end)
+    bench = src.load_bench(start, end)
     have_quote = {s for d in prices for s in prices[d]}
     unknown = [s for s in ids if s not in have_quote]
 
@@ -180,17 +183,17 @@ def simulate(instructions: list, start: date, end: date, capital: float = 1_000_
     final_holdings = [{'stock_id': s, 'shares': n, 'last': last_close.get(s), 'value': round(n * last_close.get(s, 0.0), 2),
                        'avg_cost': round(cost_total[s] / cost_shares[s], 2) if cost_shares.get(s) else None} for s, n in sorted(held.items())]
     return {'available': True, 'start': str(start), 'end': str(end), 'capital': capital, 'n_instructions': len(instructions), 'n_days': len(days),
-            'metrics': m, 'series': rp._series(sim, capital), 'trades': trades, 'skipped': sorted(skipped, key=lambda x: x['line']),
+            'source': src.describe(), 'metrics': m, 'series': rp._series(sim, capital), 'trades': trades, 'skipped': sorted(skipped, key=lambda x: x['line']),
             'final': {'cash': round(cash, 2), 'holdings': final_holdings, 'value': round(cash + sum(h['value'] for h in final_holdings), 2)},
             'realized_pnl': round(sum((t['pnl'] or 0) for t in trades), 2), 'costs': round(cost_sum, 2),
-            'caveat': '指令日當天開盤市價成交（沒行情順延）；價格是還原價、持股含息，和 0050 含息對稱；手續費 0.0855%、賣出稅 0.3%、沒有滑價。這是「照你說的做會怎樣」，不是建議。'}
+            'caveat': (sm.SYNTHETIC_CAVEAT + ' ' if src.kind == 'synthetic' else '') + '指令日當天開盤市價成交（沒行情順延）；價格是還原價、持股含息，和 0050 含息對稱；手續費 0.0855%、賣出稅 0.3%、沒有滑價。這是「照你說的做會怎樣」，不是建議。'}
 
 
-def run_text(text: str, start: date, end: date, capital: float = 1_000_000) -> dict:
+def run_text(text: str, start: date, end: date, capital: float = 1_000_000, source=None) -> dict:
     p = parse_instructions(text)
     if p['errors'] and not p['instructions']:
         return {'available': False, 'reason': '指令全部看不懂', 'errors': p['errors']}
-    out = simulate(p['instructions'], start, end, capital)
+    out = simulate(p['instructions'], start, end, capital, source)
     out['errors'] = p['errors']
     out['parsed'] = [{**it, 'date': str(it['date'])} for it in p['instructions']]
     return out

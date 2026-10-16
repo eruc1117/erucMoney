@@ -3,6 +3,7 @@
 // 用在 TradingSim（公開頁）。runRules 由頁面給（公開頁用 /sim/rules）。
 import { useEffect, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
+import SourceBanner from './SourceBanner'
 
 const RULES_KEY = 'sim_rules'
 const money = v => (v == null ? '–' : Number(v).toLocaleString('zh-TW', { maximumFractionDigits: 0 }))
@@ -194,6 +195,7 @@ export default function RuleBuilder({ form, stocks, runRules }) {
 
       {r ? (
         <div style={{ marginTop: '1rem' }}>
+          <SourceBanner source={r.source} />
           {r.missing?.length ? <div className="note-box" style={{ color: 'var(--orange)' }}>沒有行情的代號（規則不會觸發）：{r.missing.join('、')}</div> : null}
           <div className="stat-grid">
             <div className="stat-tile"><div className="k">總報酬</div><div className="v"><span className={m.total_return > 0 ? 'up' : m.total_return < 0 ? 'down' : ''}>{spct(m.total_return)}</span></div><div className="s">{r.start} ～ {r.end} · 資金 {money(r.capital)} → 期末 {money(r.final.value)}</div></div>

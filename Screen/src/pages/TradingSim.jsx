@@ -11,6 +11,7 @@ import ReactApexChart from 'react-apexcharts'
 import { getSimReplay, runSim, runRules, getTrackedStocks } from '../services/api'
 import ReplayPanel from '../components/ReplayPanel'
 import RuleBuilder from '../components/RuleBuilder'
+import SourceBanner from '../components/SourceBanner'
 
 const TAB_KEY = 'sim_tab'
 const TEXT_KEY = 'sim_text'
@@ -23,7 +24,10 @@ const EXAMPLE = `# 一行一筆：日期 買/賣 代號 數量（10股、2張、
 2024-04-01 買 2454 1張
 2024-06-03 賣 2330 全部
 2024-09-02 賣 2454 500股`
-const DEFAULT_FORM = { start: '2024-01-02', end: '2024-09-30', capital: 1000000 }
+const DEFAULT_FORM = { start: '2024-01-02', end: '2024-09-30', capital: 1000000, source: 'real', seed: 1 }
+// 資料來源（Iteration 75）：real = 真實行情；synthetic = 合成測試資料（後端記憶體隨機漫步，不碰資料庫，任何代號都有行情；同種子每次一樣）
+const SOURCES = [['real', '真實行情'], ['synthetic', '測試資料（合成）']]
+
 const UNITS = [['股', '股'], ['張', '張（1000 股）'], ['元', '元（金額）'], ['全部', '全部（賣出）']]
 
 const money = v => (v == null ? '–' : Number(v).toLocaleString('zh-TW', { maximumFractionDigits: 0 }))
@@ -186,6 +190,8 @@ function InstructionsTab() {
         <div className="ctrl-group"><div className="ctrl-label">起</div><input type="date" className="ctrl-select" value={form.start} onChange={e => setForm({ ...form, start: e.target.value })} /></div>
         <div className="ctrl-group"><div className="ctrl-label">迄</div><input type="date" className="ctrl-select" value={form.end} onChange={e => setForm({ ...form, end: e.target.value })} /></div>
         <div className="ctrl-group"><div className="ctrl-label">資金（NT$）</div><input type="number" className="ctrl-select" style={{ width: 130, textAlign: 'right' }} step={100000} value={form.capital} onChange={e => setForm({ ...form, capital: Number(e.target.value) })} /></div>
+        <div className="ctrl-group"><div className="ctrl-label">資料</div><select className="ctrl-select" value={form.source || 'real'} onChange={e => setForm({ ...form, source: e.target.value })}>{SOURCES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></div>
+        {form.source === 'synthetic' ? <div className="ctrl-group"><div className="ctrl-label">種子</div><input type="number" className="ctrl-select" style={{ width: 80, textAlign: 'right' }} min={0} max={1000000000} step={1} value={form.seed ?? 1} onChange={e => setForm({ ...form, seed: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} /></div> : null}
         {mode !== 'rules' ? <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button> : null}
         {mode === 'rules' ? null : mode === 'text' ? <><button className="btn-secondary" onClick={() => setText(EXAMPLE)}>放範例</button><button className="btn-secondary" onClick={() => setText('')}>清空</button></> : <button className="btn-secondary" onClick={() => setRows([])}>清空清單</button>}
       </div>
@@ -197,12 +203,15 @@ function InstructionsTab() {
             <Sub>一行一筆：日期 買/賣 代號 數量。數量可以是 10股、2張（= 2000 股）、50000元（執行那天開盤換算）、全部（賣出）；# 之後是註解。</Sub>
           </>
         )}
-        <Sub>只讀、不登入、不動任何帳戶。資料從 2018-01 起；價格是還原價（含息），手續費 0.0855%、賣出稅 0.3%、無滑價。日期不是交易日就順延到下一個有行情的日子。</Sub>
+        {form.source === 'synthetic'
+          ? <Sub>測試資料：後端用隨機漫步現場產生假行情（2010-01 起、任何代號都有、0050 也是假的），不讀資料庫、不寫任何東西；同一個種子每次結果一樣。費率同真實模式。</Sub>
+          : <Sub>只讀、不登入、不動任何帳戶。資料從 2018-01 起；價格是還原價（含息），手續費 0.0855%、賣出稅 0.3%、無滑價。日期不是交易日就順延到下一個有行情的日子。</Sub>}
         {error ? <div className="down" style={{ fontSize: '.86rem', marginTop: '.4rem' }}>{error}</div> : null}
       </div>
 
       {r && mode !== 'rules' ? (
         <>
+          <SourceBanner source={r.source} />
           {r.errors?.length ? <div className="note-box" style={{ color: 'var(--orange)' }}>看不懂、已略過的行：{r.errors.map(e => `第 ${e.line} 行「${e.text.trim()}」（${e.reason}）`).join('；')}</div> : null}
           <div className="stat-grid">
             <div className="stat-tile"><div className="k">總報酬</div><div className="v"><span className={m.total_return > 0 ? 'up' : m.total_return < 0 ? 'down' : ''}>{spct(m.total_return)}</span></div><div className="s">{r.start} ～ {r.end} · 資金 {money(r.capital)} → 期末 {money(r.final.value)}</div></div>

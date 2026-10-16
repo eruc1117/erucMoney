@@ -20,9 +20,9 @@ from typing import Optional
 import pandas as pd
 
 import portfolio_paper as pp
+import synthetic_market as sm
 import trading_replay as rp
 import trading_rules as tr
-from trading_sim import load_prices_any
 
 MAX_RULES = 50
 MAX_YEARS = 8
@@ -242,7 +242,9 @@ def _check_leaf(w: dict, i: int, closes: pd.Series, ind: dict, held: int, avg_co
     return None
 
 
-def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_000) -> dict:
+def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_000, source=None) -> dict:
+    """source：資料來源（synthetic_market.DbSource／SyntheticSource），None = 真實行情。"""
+    src = source or sm.DbSource()
     errs = validate_rules(rules)
     if errs:
         return {'available': False, 'reason': '規則有問題', 'errors': errs}
@@ -253,14 +255,14 @@ def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_0
               'only_if_flat': r.get('only_if_flat', r['then']['side'] == 'buy' and not has_date_leaf(r['when'])),
               'cooldown': int(r.get('cooldown') or 0)} for r in rules]
     at_open = [has_date_leaf(r['when']) for r in rules]      # 含日期類條件的規則在當天開盤判斷（指標用前一日收盤），其餘收盤判斷、隔天開盤
-    days = pp.market_days(start, end)
+    days = src.market_days(start, end)
     if len(days) < 2:
-        return {'available': False, 'reason': '這段期間沒有全市場行情（資料從 2018-01 起）'}
+        return {'available': False, 'reason': src.empty_reason}
     ids = sorted({r['stock_id'] for r in rules})
     # 指標要暖機：多抓 420 天（250 日均線也夠）
     warm_start = date.fromordinal(start.toordinal() - 420)
-    prices = load_prices_any(ids, warm_start, end)
-    bench = rp.load_bench(start, end)
+    prices = src.load_prices_any(ids, warm_start, end)
+    bench = src.load_bench(start, end)
     closes, ind = {}, {}
     for s in ids:
         ser = pd.Series({d: prices[d][s]['close'] for d in sorted(prices) if s in prices[d] and prices[d][s].get('close')})
@@ -376,10 +378,10 @@ def simulate_rules(rules: list, start: date, end: date, capital: float = 1_000_0
                        'avg_cost': round(avg_cost(s), 2) if avg_cost(s) else None} for s, n in sorted(held.items())]
     return {'available': True, 'start': str(start), 'end': str(end), 'capital': capital, 'n_rules': len(rules), 'n_days': len(days),
             'rules': [{'i': i, 'text': rule_text(r), 'fired': fired[i], 'max_times': r['max_times']} for i, r in enumerate(rules)],
-            'missing': missing, 'metrics': m, 'series': rp._series(sim, capital), 'trades': trades, 'triggers': triggers[-400:],
+            'missing': missing, 'source': src.describe(), 'metrics': m, 'series': rp._series(sim, capital), 'trades': trades, 'triggers': triggers[-400:],
             'final': {'cash': round(cash, 2), 'holdings': final_holdings, 'value': round(cash + sum(h['value'] for h in final_holdings), 2)},
             'realized_pnl': round(sum((t['pnl'] or 0) for t in trades), 2), 'costs': round(cost_sum, 2),
-            'caveat': '條件在收盤判斷、下一個交易日開盤市價成交（日期類當天開盤）；指標用還原收盤；手續費 0.0855%、賣出稅 0.3%、無滑價。規則是你設的，這只回答「照這些規則做會怎樣」，過去成立不代表未來。'}
+            'caveat': (sm.SYNTHETIC_CAVEAT + ' ' if src.kind == 'synthetic' else '') + '條件在收盤判斷、下一個交易日開盤市價成交（日期類當天開盤）；指標用還原收盤；手續費 0.0855%、賣出稅 0.3%、無滑價。規則是你設的，這只回答「照這些規則做會怎樣」，過去成立不代表未來。'}
 
 
 def _can_fire(r, idx, fired, last_fire, di, held) -> bool:

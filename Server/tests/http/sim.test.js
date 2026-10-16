@@ -40,6 +40,34 @@ describe('條件規則 /sim/rules（Iteration 61）', () => {
   })
 })
 
+describe('資料來源 source／seed（Iteration 75）', () => {
+  it('有給才轉：synthetic + seed 原樣進 body；沒給就不帶', async () => {
+    const text = '2022-01-03 買 2330 10股'
+    const r = await request(app).post('/sim/run').send({ text, start: '2022-01-01', end: '2022-03-31', source: 'synthetic', seed: 9 })
+    expect(r.status).toBe(200)
+    expect(r.body.source).toEqual({ kind: 'synthetic', seed: 9 })
+    const call = fake.calls.filter(c => c.path === '/trading/sim').pop()
+    expect(call.body).toEqual({ text, start: '2022-01-01', end: '2022-03-31', capital: 1000000, source: 'synthetic', seed: 9 })
+    const rules = [{ stock_id: '2330', when: { type: 'price_above', x: 1 }, then: { side: 'buy', qty: 1, unit: '股' } }]
+    const r2 = await request(app).post('/sim/rules').send({ rules, start: '2022-01-01', end: '2022-03-31', source: 'synthetic', seed: '12' })
+    expect(r2.status).toBe(200)
+    expect(fake.calls.filter(c => c.path === '/trading/sim/rules').pop().body).toMatchObject({ source: 'synthetic', seed: 12 })
+    const r3 = await request(app).post('/sim/rules').send({ rules, start: '2022-01-01', end: '2022-03-31' })
+    expect(r3.status).toBe(200)
+    expect(fake.calls.filter(c => c.path === '/trading/sim/rules').pop().body).toEqual({ rules, start: '2022-01-01', end: '2022-03-31', capital: 1000000 })
+  })
+  it.each([
+    [{ source: 'fake' }, 'source'],
+    [{ source: 'synthetic', seed: -1 }, 'seed'],
+    [{ source: 'synthetic', seed: 1.5 }, 'seed'],
+    [{ seed: 1e10 }, 'seed'],
+  ])('%j → 400', async (extra, word) => {
+    const r = await request(app).post('/sim/run').send({ text: '2022-01-03 買 2330 10股', start: '2022-01-01', end: '2022-03-31', ...extra })
+    expect(r.status).toBe(400)
+    expect(r.body.detail).toContain(word)
+  })
+})
+
 describe('參數驗證（不打 FastAPI）', () => {
   it.each([
     [{ start: '2024-01-02', end: '2024-09-30' }, 'text'],

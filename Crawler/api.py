@@ -511,6 +511,16 @@ class SimRequest(BaseModel):
     start: str
     end: str
     capital: float = 1_000_000
+    source: str = 'real'        # real｜synthetic（合成測試資料，Iteration 75）
+    seed: int = 0
+
+
+def _sim_source(body):
+    import synthetic_market
+    try:
+        return synthetic_market.get_source(body.source, body.seed)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post("/trading/sim")
@@ -525,7 +535,7 @@ def post_trading_sim(body: SimRequest):
         raise HTTPException(status_code=400, detail='指令文字最多 4000 字')
     if body.capital <= 0:
         raise HTTPException(status_code=400, detail='capital 要 > 0')
-    return trading_sim.run_text(body.text, s, e, body.capital)
+    return trading_sim.run_text(body.text, s, e, body.capital, _sim_source(body))
 
 
 class RulesRequest(BaseModel):
@@ -533,6 +543,8 @@ class RulesRequest(BaseModel):
     start: str
     end: str
     capital: float = 1_000_000
+    source: str = 'real'
+    seed: int = 0
 
 
 @app.post("/trading/sim/rules")
@@ -548,7 +560,7 @@ def post_trading_sim_rules(body: RulesRequest):
     errs = trading_strategy.validate_rules(body.rules)
     if errs:
         raise HTTPException(status_code=400, detail='；'.join(errs[:5]))
-    return trading_strategy.simulate_rules(body.rules, s, e, body.capital)
+    return trading_strategy.simulate_rules(body.rules, s, e, body.capital, _sim_source(body))
 
 
 class EngineConfig(BaseModel):
