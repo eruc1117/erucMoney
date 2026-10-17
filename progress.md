@@ -4,7 +4,7 @@
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 77（未提交）：使用者「點擊展開時，也要顯示折線圖顯式對比」→ `BeatMarketList` 展開時再抓 `/portfolio/runs/:id?step=3`，用 `NavRangeChart` 畫組合／0050／大盤三條線（有 `has_series` 才抓；74 列裡 43 列有曲線、31 列早期只存指標顯示說明）；純前端、不用重啟；vite-build-77／mfe-build-77／mfe-eslint-77 過。審查見「已完成」。
+Iteration 77（已提交 63aae25、已 push；meeting_front_end 已提交 da8c14c、已 push）：使用者「點擊展開時，也要顯示折線圖顯式對比」→ `BeatMarketList` 展開時再抓 `/portfolio/runs/:id?step=3`，用 `NavRangeChart` 畫組合／0050／大盤三條線（有 `has_series` 才抓；74 列裡 43 列有曲線、31 列早期只存指標顯示說明）；純前端、不用重啟；vite-build-77／mfe-build-77／mfe-eslint-77 過。審查見「已完成」。
 （以下為 76）
 Iteration 76（已提交 bb9d59a，未 push；meeting_front_end 已提交 2ad71ce，未 push）：使用者「打敗大盤：目前候選對門檻，有贏過大盤的，都列在頂端，點擊後再展開購買的股票細節」→ 月調倉頁最上面新卡「贏過大盤的回測」（年化主動 > 0 且非作廢、依主動報酬排序、標三項門檻過幾項、段別篩選），點一列展開那次回測每個訊號日的持股（新端點 `GET /portfolio/runs/{id}/positions`：全部調倉＋名稱＋最常買到）。純讀取、N 不動（96）。pytest 263、jest 191、vite／mfe build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**；meeting_front_end 三檔已同步並提交 2ad71ce。審查見「已完成」。
 （以下為 75）
