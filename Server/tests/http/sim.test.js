@@ -80,3 +80,21 @@ describe('參數驗證（不打 FastAPI）', () => {
     expect(r.body.detail).toContain(word)
   })
 })
+
+describe('策略範本 /sim/presets 與 /sim/compare（Iteration 79）', () => {
+  it('GET /sim/presets → 200，只轉 stock／start／capital 三個參數', async () => {
+    const r = await request(app).get('/sim/presets?stock=2454&start=2024-01-02&capital=500000&junk=1')
+    expect(r.status).toBe(200)
+    expect(r.body.presets[0].key).toBe('buyhold')
+    expect(fake.calls.find(c => c.path === '/trading/sim/presets').query).toEqual({ stock: '2454', start: '2024-01-02', capital: '500000' })
+  })
+  it('POST /sim/compare → 200，stock_id 轉大寫、capital 預設 100 萬、source 有給才轉；代號／日期／來源壞掉 400', async () => {
+    const r = await request(app).post('/sim/compare').send({ stock_id: ' 00878 ', start: '2024-01-02', end: '2024-09-30', source: 'synthetic', seed: 3 })
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ available: true, stock_id: '00878', n_presets: 1, source: { kind: 'synthetic', seed: 3 } })
+    expect(fake.calls.find(c => c.path === '/trading/sim/presets/compare').body).toEqual({ stock_id: '00878', start: '2024-01-02', end: '2024-09-30', capital: 1000000, source: 'synthetic', seed: 3 })
+    expect((await request(app).post('/sim/compare').send({ stock_id: '23', start: '2024-01-02', end: '2024-09-30' })).status).toBe(400)
+    expect((await request(app).post('/sim/compare').send({ stock_id: '2330', start: '2024/01/02', end: '2024-09-30' })).status).toBe(400)
+    expect((await request(app).post('/sim/compare').send({ stock_id: '2330', start: '2024-01-02', end: '2024-09-30', source: 'fake' })).status).toBe(400)
+  })
+})

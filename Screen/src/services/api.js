@@ -342,6 +342,9 @@ export const getSimReplay = (params) => {
 export const runSim = (payload) => request('/sim/run', { method: 'POST', body: JSON.stringify(payload), timeout: 180000 })
 // 條件規則（Iteration 61）：POST /sim/rules { rules, start, end, capital }
 export const runRules = (payload) => request('/sim/rules', { method: 'POST', body: JSON.stringify(payload), timeout: 180000 })
+// 策略範本（Iteration 79）：GET /sim/presets?stock&start&capital（十種範本套在某檔上的規則）、POST /sim/compare { stock_id, start, end, capital, source?, seed? }（全部範本各跑一次的比較表）
+export const getSimPresets = (stock, start, capital) => request(`/sim/presets?stock=${encodeURIComponent(stock)}&start=${encodeURIComponent(start || '')}&capital=${encodeURIComponent(capital || 1000000)}`)
+export const compareSimPresets = (payload) => request('/sim/compare', { method: 'POST', body: JSON.stringify(payload), timeout: 180000 })
 // 回放（Iteration 59）：GET /trading/engine/replay?start&end&capital&stop_loss_pct&rel_dd_guard&limit_slip&max_attempts
 export const getEngineReplay = (params) => {
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== '').map(([k, v]) => [k, String(v)]))

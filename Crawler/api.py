@@ -563,6 +563,46 @@ def post_trading_sim_rules(body: RulesRequest):
     return trading_strategy.simulate_rules(body.rules, s, e, body.capital, _sim_source(body))
 
 
+@app.get("/trading/sim/presets")
+def get_trading_sim_presets(stock: str = '2330', start: str = '', capital: float = 1_000_000):
+    """策略範本（Iteration 79）：十種常見規則式策略套在某檔上的規則清單（買進金額依資金換算、起始日買進用 start）。"""
+    import trading_presets
+    sid = str(stock).strip().upper()
+    if not (4 <= len(sid) <= 6):
+        raise HTTPException(status_code=400, detail='stock 要是 4～6 碼代號')
+    try:
+        s = date.fromisoformat(start) if start else date.today()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='start 要是 YYYY-MM-DD')
+    if capital <= 0:
+        raise HTTPException(status_code=400, detail='capital 要 > 0')
+    return {'stock_id': sid, 'start': str(s), 'capital': capital, 'presets': trading_presets.list_presets(sid, s, capital), 'caveat': trading_presets.CAVEAT}
+
+
+class CompareRequest(BaseModel):
+    stock_id: str
+    start: str
+    end: str
+    capital: float = 1_000_000
+    source: str = 'real'
+    seed: int = 0
+
+
+@app.post("/trading/sim/presets/compare")
+def post_trading_sim_presets_compare(body: CompareRequest):
+    """把全部策略範本套在同一檔、同一期間、同一筆資金各跑一次，回比較表（公開、只讀）。"""
+    import trading_presets
+    sid = str(body.stock_id).strip().upper()
+    if not (4 <= len(sid) <= 6):
+        raise HTTPException(status_code=400, detail='stock_id 要是 4～6 碼代號')
+    try:
+        s, e = date.fromisoformat(body.start), date.fromisoformat(body.end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='start／end 要是 YYYY-MM-DD')
+    if body.capital <= 0:
+        raise HTTPException(status_code=400, detail='capital 要 > 0')
+    return trading_presets.compare(sid, s, e, body.capital, _sim_source(body))
+
 class EngineConfig(BaseModel):
     enabled: Optional[bool] = None
     mode: Optional[str] = None

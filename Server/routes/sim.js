@@ -7,6 +7,10 @@
  *        自訂交易指令：使用者寫幾行「日期 買/賣 代號 數量」，設定期間與資金，跑完給收益對 0050
  *   POST /sim/rules { rules:[{stock_id, when:{type,…}, then:{side,qty,unit}, max_times?, only_if_flat?, cooldown?}], start, end, capital, source?, seed? }
  *        條件規則：條件 → 買／賣，逐日判斷、觸發隔天開盤成交（Iteration 61）
+ *   GET  /sim/presets?stock&start&capital
+ *        策略範本（Iteration 79）：十種常見規則式策略套在某檔上的規則清單，後端 trading_presets 是單一來源
+ *   POST /sim/compare { stock_id, start, end, capital, source?, seed? }
+ *        把全部範本套在同一檔、同一期間各跑一次，回比較表
  *   source：real（預設，真實行情）｜synthetic（合成測試資料，記憶體隨機漫步，不碰資料庫）；seed 是合成資料的種子（Iteration 75）
  *
  * 兩個都只讀資料庫、不寫；算一次約 1～3 秒，所以設了輸入上限（文字 4000 字、期間 8 年）並靠全域 rate-limit 擋濫用。
@@ -67,6 +71,29 @@ router.post('/rules', (req, res) => {
   const cap = capital == null || capital === '' ? 1000000 : Number(capital)
   if (!(cap > 0) || cap > 1e12) return res.status(400).json({ detail: 'capital 要是 > 0 的數字' })
   proxyToFastAPI({ port: 8000, path: '/trading/sim/rules', method: 'POST', body: { rules, start, end, capital: cap, ...sf.extra }, res, onError: () => CRAWLER_DOWN(res) })
+})
+
+const STOCK = /^[0-9A-Z]{4,6}$/i
+
+router.get('/presets', (req, res) => {
+  const qs = new URLSearchParams()
+  for (const k of ['stock', 'start', 'capital']) {
+    if (req.query[k] != null && req.query[k] !== '') qs.set(k, String(req.query[k]))
+  }
+  const q = qs.toString()
+  proxyToFastAPI({ port: 8000, path: `/trading/sim/presets${q ? `?${q}` : ''}`, res, onError: () => CRAWLER_DOWN(res) })
+})
+
+router.post('/compare', (req, res) => {
+  const { stock_id, start, end, capital } = req.body ?? {}
+  const sf = sourceFields(req.body ?? {})
+  if (!sf.ok) return res.status(400).json({ detail: sf.detail })
+  const sid = String(stock_id || '').trim().toUpperCase()
+  if (!STOCK.test(sid)) return res.status(400).json({ detail: 'stock_id 要是 4～6 碼代號' })
+  if (!DATE.test(String(start || '')) || !DATE.test(String(end || ''))) return res.status(400).json({ detail: 'start／end 要是 YYYY-MM-DD' })
+  const cap = capital == null || capital === '' ? 1000000 : Number(capital)
+  if (!(cap > 0) || cap > 1e12) return res.status(400).json({ detail: 'capital 要是 > 0 的數字' })
+  proxyToFastAPI({ port: 8000, path: '/trading/sim/presets/compare', method: 'POST', body: { stock_id: sid, start, end, capital: cap, ...sf.extra }, res, onError: () => CRAWLER_DOWN(res) })
 })
 
 module.exports = router

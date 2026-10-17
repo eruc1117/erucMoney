@@ -8,7 +8,7 @@
 // 統一前端（erucmoney.com）放在「預測」群組，匿名可用；儀表板這邊登入後也看得到。
 import { useEffect, useMemo, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
-import { getSimReplay, runSim, runRules, getTrackedStocks } from '../services/api'
+import { getSimReplay, runSim, runRules, getTrackedStocks, getSimPresets, compareSimPresets } from '../services/api'
 import ReplayPanel from '../components/ReplayPanel'
 import RuleBuilder from '../components/RuleBuilder'
 import SourceBanner from '../components/SourceBanner'
@@ -196,7 +196,7 @@ function InstructionsTab() {
         {mode === 'rules' ? null : mode === 'text' ? <><button className="btn-secondary" onClick={() => setText(EXAMPLE)}>放範例</button><button className="btn-secondary" onClick={() => setText('')}>清空</button></> : <button className="btn-secondary" onClick={() => setRows([])}>清空清單</button>}
       </div>
       <div style={{ padding: '.4rem 1.25rem 1rem' }}>
-        {mode === 'rules' ? <RuleBuilder form={form} stocks={stocks} runRules={runRules} /> : mode === 'simple' ? <SimpleBuilder rows={rows} setRows={setRows} form={form} stocks={stocks} /> : (
+        {mode === 'rules' ? <RuleBuilder form={form} stocks={stocks} runRules={runRules} getPresets={getSimPresets} comparePresets={compareSimPresets} /> : mode === 'simple' ? <SimpleBuilder rows={rows} setRows={setRows} form={form} stocks={stocks} /> : (
           <>
             <textarea className="form-textarea" rows={9} value={text} onChange={e => setText(e.target.value)} spellCheck={false}
                       style={{ width: '100%', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '.86rem', lineHeight: 1.6 }} />

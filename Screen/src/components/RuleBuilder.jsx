@@ -1,7 +1,7 @@
 // 條件規則（Iteration 61；62 加 AND／OR 群組）：「條件 → 買／賣」的模組化輸入。一條規則可有多個條件用「且」或「或」連起來；
 // 含日期條件的規則在當天開盤判斷（指標看前一日收盤），其餘收盤判斷、隔天開盤成交。
-// 用在 TradingSim（公開頁）。runRules 由頁面給（公開頁用 /sim/rules）。
-import { useEffect, useState } from 'react'
+// 用在 TradingSim（公開頁）。runRules／getPresets／comparePresets 由頁面給（公開頁用 /sim/rules、/sim/presets、/sim/compare）。
+import { useEffect, useRef, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
 import SourceBanner from './SourceBanner'
 
@@ -65,27 +65,8 @@ function withDefaults(rule) {
 }
 function newRule(stock = '2330') { return { stock_id: stock, when: { type: 'cross_above_ma', n: 20 }, then: { side: 'buy', qty: 100000, unit: '元' }, max_times: 1, only_if_flat: true, cooldown: 0 } }
 
-// 模板（stock 由表單帶入）
-const TEMPLATES = [
-  { key: 'ma', label: '均線進出', hint: '向上穿過 20 日均線買 10 萬，跌破就賣光', make: s => [
-    { ...newRule(s), when: { type: 'cross_above_ma', n: 20 }, then: { side: 'buy', qty: 100000, unit: '元' }, max_times: null, only_if_flat: true },
-    { ...newRule(s), when: { type: 'cross_below_ma', n: 20 }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false }] },
-  { key: 'stop', label: '停損停利', hint: '起始日買 10 萬；比成本低 10% 賣光、高 20% 賣光', make: (s, start) => [
-    { ...newRule(s), when: { type: 'on_date', date: start }, then: { side: 'buy', qty: 100000, unit: '元' }, max_times: 1, only_if_flat: false },
-    { ...newRule(s), when: { type: 'loss_from_cost', x: 10 }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false },
-    { ...newRule(s), when: { type: 'gain_from_cost', x: 20 }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false }] },
-  { key: 'dip', label: '逢低加碼', hint: '每月 5 日買 1 萬；5 日跌 5% 以上再加 2 萬（最多 10 次）', make: s => [
-    { ...newRule(s), when: { type: 'monthly_day', d: 5 }, then: { side: 'buy', qty: 10000, unit: '元' }, max_times: null, only_if_flat: false },
-    { ...newRule(s), when: { type: 'change_below', n: 5, x: -5 }, then: { side: 'buy', qty: 20000, unit: '元' }, max_times: 10, only_if_flat: false, cooldown: 5 }] },
-  { key: 'rsi', label: 'RSI 反轉', hint: 'RSI(14) < 30 買 5 萬，> 70 賣光', make: s => [
-    { ...newRule(s), when: { type: 'rsi_below', n: 14, x: 30 }, then: { side: 'buy', qty: 50000, unit: '元' }, max_times: null, only_if_flat: true, cooldown: 5 },
-    { ...newRule(s), when: { type: 'rsi_above', n: 14, x: 70 }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false, cooldown: 5 }] },
-  { key: 'dcama', label: '定投在均線下', hint: '每月 5 日 且 前一日收盤在 60 日均線之下 才買 2 萬（AND）', make: s => [
-    { ...newRule(s), when: { op: 'and', conds: [{ type: 'monthly_day', d: 5 }, { type: 'below_ma', n: 60 }] }, then: { side: 'buy', qty: 20000, unit: '元' }, max_times: null, only_if_flat: false }] },
-  { key: 'confirm', label: '雙重確認', hint: '穿過 20 日均線 且 RSI(14) > 50 才買 10 萬；跌破 20 日均線 或 比成本低 10% 就賣光', make: s => [
-    { ...newRule(s), when: { op: 'and', conds: [{ type: 'cross_above_ma', n: 20 }, { type: 'rsi_above', n: 14, x: 50 }] }, then: { side: 'buy', qty: 100000, unit: '元' }, max_times: null, only_if_flat: true },
-    { ...newRule(s), when: { op: 'or', conds: [{ type: 'cross_below_ma', n: 20 }, { type: 'loss_from_cost', x: 10 }] }, then: { side: 'sell', unit: '全部' }, max_times: null, only_if_flat: false }] },
-]
+// 策略範本（Iteration 79）：定義在後端 Crawler/trading_presets.py（單一來源），這裡用 getPresets 抓已套好股票與金額的規則；
+// 「比較全部策略」用 comparePresets 把十種範本套在同一檔、同一期間各跑一次。
 
 function CondRow({ w, first, op, onChange, onRemove, onToggleOp, canRemove }) {
   const c = CONDITIONS[w.type]
@@ -155,15 +136,55 @@ function RulesChart({ series }) {
   return <div className="chart-pad"><ReactApexChart type="line" series={data} options={options} height={300} /></div>
 }
 
+function CompareTable({ c, presets, onApply }) {
+  const items = [...c.items].sort((a, b) => (b.metrics.total_return ?? -9) - (a.metrics.total_return ?? -9))
+  return (
+    <div className="card" style={{ marginTop: '1rem' }}>
+      <div className="card-header"><div className="card-title">{c.n_presets} 種策略範本在 {c.stock_id} 上的比較</div><Sub>{c.start} ～ {c.end} · 資金 {money(c.capital)} · 0050 含息同期 {spct(c.bench_return)} · 依總報酬排序 · 「套用」把那組規則放進上面的編輯器</Sub></div>
+      <SourceBanner source={c.source} />
+      <div style={{ overflowX: 'auto' }}>
+        <table className="data-table" style={{ fontSize: '.84rem' }}>
+          <thead><tr><th>策略</th><th>做法</th><th className="num">成交（買／賣）</th><th className="num">總報酬</th><th className="num">主動（對 0050）</th><th className="num">年化主動</th><th className="num">最大回撤</th><th className="num">月勝率</th><th className="num">期末現金</th><th></th></tr></thead>
+          <tbody>{items.map(it => { const m = it.metrics; const p = presets.find(x => x.key === it.key); return (
+            <tr key={it.key}><td><strong>{it.label}</strong>{it.missing?.length ? <Sub>沒有行情</Sub> : null}</td><td className="muted" style={{ whiteSpace: 'normal', maxWidth: 340 }}>{it.hint}</td>
+              <td className="num">{it.trades}（{it.buys}／{it.sells}）</td>
+              <td className="num"><span className={m.total_return > 0 ? 'up' : m.total_return < 0 ? 'down' : ''}>{spct(m.total_return)}</span></td>
+              <td className="num"><span className={m.active_return > 0 ? 'up' : m.active_return < 0 ? 'down' : ''}>{spct(m.active_return)}</span></td>
+              <td className="num">{spct(m.ann_active)}</td><td className="num">{pct(m.mdd_port)}</td><td className="num">{m.monthly_win_rate == null ? '–' : pct(m.monthly_win_rate, 0)}</td>
+              <td className="num">{money(it.final_cash)}</td>
+              <td>{p ? <button className="btn-secondary" onClick={() => onApply(p.rules)}>套用</button> : null}</td></tr>) })}</tbody>
+        </table>
+      </div>
+      <div className="note-box">{c.caveat}</div>
+    </div>
+  )
+}
+
 const RESULT_LABEL = { triggered: ['yellow', '觸發'], filled: ['green', '成交'], unfilled: ['yellow', '未成交'], rejected: ['red', '拒絕'], skipped: ['', '略過'] }
 
-export default function RuleBuilder({ form, stocks, runRules }) {
-  const [rules, setRules] = useState(() => readJSON(RULES_KEY, null) || TEMPLATES[0].make('2330', form.start))
+export default function RuleBuilder({ form, stocks, runRules, getPresets, comparePresets }) {
+  const [rules, setRules] = useState(() => readJSON(RULES_KEY, null) || [])
   const [tplStock, setTplStock] = useState('2330')
+  const [presets, setPresets] = useState([])
+  const [cmp, setCmp] = useState(null)
+  const [cmpBusy, setCmpBusy] = useState(false)
+  const [cmpError, setCmpError] = useState('')
+  const filled = useRef(false)                       // 第一次抓到範本時，若編輯器是空的就放第一個範本（之後使用者清空就讓它空）
   const [r, setR] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => { writeLS(RULES_KEY, JSON.stringify(rules)) }, [rules])
+  useEffect(() => {
+    let on = true
+    const stock = codeOf(tplStock)
+    if (stock.length < 4) return undefined
+    getPresets(stock, form.start, form.capital).then(({ data }) => {
+      if (!on || !Array.isArray(data?.presets)) return
+      setPresets(data.presets)
+      if (!filled.current) { filled.current = true; setRules(prev => (prev.length ? prev : data.presets[0].rules)) }
+    })
+    return () => { on = false }
+  }, [tplStock, form.start, form.capital, getPresets])
   const update = (i, nr) => setRules(rules.map((x, j) => (j === i ? nr : x)))
 
   async function run() {
@@ -176,22 +197,33 @@ export default function RuleBuilder({ form, stocks, runRules }) {
     if (!data.available) { setError(`沒辦法模擬：${data.reason}${data.errors?.length ? `：${data.errors.join('；')}` : ''}`); setR(null); return }
     setR(data)
   }
+  async function compare() {
+    setCmpBusy(true); setCmpError('')
+    const { data, error } = await comparePresets({ stock_id: codeOf(tplStock), ...form })
+    setCmpBusy(false)
+    if (error) { setCmpError(error); return }
+    if (!data.available) { setCmpError(`沒辦法比較：${data.reason}${data.errors?.length ? `：${data.errors.join('；')}` : ''}`); setCmp(null); return }
+    setCmp(data)
+  }
   const m = r?.metrics
   return (
     <>
       <datalist id="sim-stocks">{(stocks || []).map(s => <option key={s.stock_id} value={`${s.stock_id} ${s.stock_name || ''}`.trim()} />)}</datalist>
       <div style={{ display: 'flex', gap: '.5rem', flexWrap: 'wrap', alignItems: 'flex-end', padding: '.6rem .9rem', border: '1px solid var(--border-soft)', borderRadius: 8, marginBottom: '.7rem' }}>
-        <div className="ctrl-group"><div className="ctrl-label">模板</div>
-          <div className="btn-group">{TEMPLATES.map(t => <button key={t.key} className="btn-period" title={t.hint} onClick={() => setRules(t.make(codeOf(tplStock), form.start))}>{t.label}</button>)}</div>
+        <div className="ctrl-group"><div className="ctrl-label">策略範本</div>
+          <div className="btn-group">{presets.length ? presets.map(p => <button key={p.key} className="btn-period" title={p.hint} onClick={() => setRules(p.rules)}>{p.label}</button>) : <span className="muted" style={{ fontSize: '.8rem', padding: '.35rem .5rem' }}>範本載入中…</span>}</div>
         </div>
         <div className="ctrl-group"><div className="ctrl-label">套在哪檔</div><input className="ctrl-select" list="sim-stocks" style={{ width: 130 }} value={tplStock} onChange={e => setTplStock(e.target.value)} /></div>
         <button className="btn-secondary" onClick={() => setRules([...rules, newRule(codeOf(tplStock))])}>＋ 加一條規則</button>
         <button className="btn-secondary" onClick={() => setRules([])}>清空</button>
         <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button>
-        <Sub>條件每天收盤判斷、隔天開盤成交；每月固定日／指定日期當天開盤。「最多次數」空白 = 不限；「沒持股才買」避免每天加碼。</Sub>
+        <button className="btn-secondary" disabled={cmpBusy || !presets.length} title="把全部範本套在「套在哪檔」那檔、同一期間與資金各跑一次，列成一張表" onClick={compare}>{cmpBusy ? '比較中…' : '比較全部策略'}</button>
+        <Sub>條件每天收盤判斷、隔天開盤成交；每月固定日／指定日期當天開盤。「最多次數」空白 = 不限；「沒持股才買」避免每天加碼。範本的買進金額依上面的資金換算；範本是常見做法的定義，不是推薦。</Sub>
       </div>
       {rules.length ? rules.map((x, i) => <RuleRow key={i} r={x} onChange={nr => update(i, nr)} onRemove={() => setRules(rules.filter((_, j) => j !== i))} />) : <Empty>還沒有規則。套個模板或加一條。</Empty>}
       {error ? <div className="down" style={{ fontSize: '.86rem', marginTop: '.4rem' }}>{error}</div> : null}
+      {cmpError ? <div className="down" style={{ fontSize: '.86rem', marginTop: '.4rem' }}>{cmpError}</div> : null}
+      {cmp ? <CompareTable c={cmp} presets={presets} onApply={rs => setRules(rs)} /> : null}
 
       {r ? (
         <div style={{ marginTop: '1rem' }}>
