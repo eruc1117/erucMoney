@@ -1,11 +1,13 @@
 // 贏過大盤的回測清單（Iteration 76）
 // ───────────────────────────────────────────────────────────────────────────
 // 實驗日誌裡年化主動報酬 > 0（贏過 0050 含息）的每一次回測，照主動報酬排序列在月調倉頁最上面；
-// 點一列展開那次回測每個訊號日買了哪些股票（GET /portfolio/runs/:id/positions——點開才抓、抓過就留著）。
+// 點一列展開那次回測每個訊號日買了哪些股票（GET /portfolio/runs/:id/positions——點開才抓、抓過就留著），
+// 並畫淨值折線圖對比組合／0050 含息／大盤（Iteration 77：GET /portfolio/runs/:id 的 series，每 3 日一點；沒存曲線的舊回測只顯示說明）。
 // 「贏過」只是對手輸了，不等於過門檻：年化主動 ≥ 3%、IR ≥ 0.5、DSR ≥ 0.95 三項另外標在每列。
 // 作廢（tag = void，例如 0050 分割沒還原那次保留期）的不列，免得假的 +131% 排在第一；實驗日誌本身仍是全部。
 import { Fragment, useState } from 'react'
-import { getPortfolioRunPositions } from '../services/api'
+import { getPortfolioRunPositions, getPortfolioRun } from '../services/api'
+import NavRangeChart from './NavRangeChart'
 
 function num(v, d = 2) { return v === null || v === undefined || Number.isNaN(Number(v)) ? '–' : Number(v).toFixed(d) }
 function pct(v, d = 2) {
@@ -31,6 +33,21 @@ function gates(m, t) {
   const dsr = Number(m.dsr) >= t.dsr
   const passed = [ann, ir, dsr].filter(Boolean).length
   return { ann, ir, dsr, passed, all: passed === 3 }
+}
+
+function Chart({ r, detail }) {
+  if (!r.has_series) return <div className="muted" style={{ fontSize: '.82rem', marginBottom: 8 }}>這次回測沒有存淨值曲線（早期只存指標；`portfolio_backtest.py --attach-series` 可補），下面只有持股。</div>
+  if (!detail || detail.loading) return <div className="muted" style={{ fontSize: '.82rem', marginBottom: 8 }}>載入淨值曲線…</div>
+  if (detail.error) return <div style={{ color: 'var(--orange)', fontSize: '.82rem', marginBottom: 8 }}>{detail.error}</div>
+  const m = detail.run?.metrics || {}
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div className="muted" style={{ fontSize: '.82rem' }}>
+        淨值曲線：組合 vs 0050 含息 vs 大盤（{detail.run?.period_start} ~ {detail.run?.period_end}）· 年化 {pct(m.cagr_port, 1)} 對 0050 {pct(m.cagr_bench, 1)} · 最大回撤 {pct(m.mdd_port, 1)} 對 {pct(m.mdd_bench, 1)}
+      </div>
+      <NavRangeChart series={detail.series} periodStart={detail.run?.period_start} periodEnd={detail.run?.period_end} storageKey={`pf_beat_nav_${r.id}`} />
+    </div>
+  )
 }
 
 function Holdings({ data }) {
@@ -78,6 +95,7 @@ export default function BeatMarketList({ runs, t }) {
   const [onlyPass, setOnlyPass] = useState(false)
   const [open, setOpen] = useState(null)      // 展開的 run id
   const [cache, setCache] = useState({})      // run id → /positions 回應（loading／error／資料）
+  const [detail, setDetail] = useState({})    // run id → /runs/:id 回應（淨值曲線；沒存曲線的不抓）
   const all = beaters(runs)
   const segs = SEG_ORDER.filter(s => all.some(r => r.segment === s))
   const segLabel = s => all.find(r => r.segment === s)?.segment_label || s
@@ -89,6 +107,10 @@ export default function BeatMarketList({ runs, t }) {
     if (next && !cache[next]) {
       setCache(c => ({ ...c, [next]: { loading: true } }))
       getPortfolioRunPositions(next).then(res => setCache(c => ({ ...c, [next]: res.error ? { error: res.error } : res.data })))
+    }
+    if (next && r.has_series && !detail[next]) {
+      setDetail(d => ({ ...d, [next]: { loading: true } }))
+      getPortfolioRun(next, 3).then(res => setDetail(d => ({ ...d, [next]: res.error ? { error: res.error } : res.data })))
     }
   }
 
@@ -103,7 +125,7 @@ export default function BeatMarketList({ runs, t }) {
         <label className="muted" style={{ fontSize: '.82rem', display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}>
           <input type="checkbox" checked={onlyPass} onChange={e => setOnlyPass(e.target.checked)} /> 只看三項門檻都過的
         </label>
-        <Sub>贏過 = 年化主動報酬 &gt; 0（對手 0050 含息）；同一組參數在開發期、驗證期各是一列。點一列展開那次回測每個訊號日買了什麼。</Sub>
+        <Sub>贏過 = 年化主動報酬 &gt; 0（對手 0050 含息）；同一組參數在開發期、驗證期各是一列。點一列展開：淨值折線圖（組合／0050／大盤）與每個訊號日買了什麼。</Sub>
       </div>
       <div style={{ overflowX: 'auto', maxHeight: 560, overflowY: 'auto' }}>
         <table className="data-table" style={{ fontSize: '.84rem' }}>
@@ -148,6 +170,7 @@ export default function BeatMarketList({ runs, t }) {
                   {isOpen ? (
                     <tr>
                       <td colSpan={11} style={{ background: 'rgba(128,128,128,0.06)', padding: '10px 14px' }}>
+                        <Chart r={r} detail={detail[r.id]} />
                         {!d || d.loading ? <span className="muted">載入持股…</span>
                           : d.error ? <span style={{ color: 'var(--orange)' }}>{d.error}</span>
                           : <Holdings data={d} />}
