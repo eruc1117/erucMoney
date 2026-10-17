@@ -4,7 +4,7 @@
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 76（未提交）：使用者「打敗大盤：目前候選對門檻，有贏過大盤的，都列在頂端，點擊後再展開購買的股票細節」→ 月調倉頁最上面新卡「贏過大盤的回測」（年化主動 > 0 且非作廢、依主動報酬排序、標三項門檻過幾項、段別篩選），點一列展開那次回測每個訊號日的持股（新端點 `GET /portfolio/runs/{id}/positions`：全部調倉＋名稱＋最常買到）。純讀取、N 不動（96）。pytest 263、jest 191、vite／mfe build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**；meeting_front_end 三檔已同步（待 commit／push）。審查見「已完成」。
+Iteration 76（已提交 bb9d59a，未 push；meeting_front_end 已提交 2ad71ce，未 push）：使用者「打敗大盤：目前候選對門檻，有贏過大盤的，都列在頂端，點擊後再展開購買的股票細節」→ 月調倉頁最上面新卡「贏過大盤的回測」（年化主動 > 0 且非作廢、依主動報酬排序、標三項門檻過幾項、段別篩選），點一列展開那次回測每個訊號日的持股（新端點 `GET /portfolio/runs/{id}/positions`：全部調倉＋名稱＋最常買到）。純讀取、N 不動（96）。pytest 263、jest 191、vite／mfe build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**；meeting_front_end 三檔已同步並提交 2ad71ce。審查見「已完成」。
 （以下為 75）
 Iteration 75（已提交 c8492fb、已 push；meeting_front_end 三檔已同步、mfe-build-75 過，該 repo 已提交 dfb7b48 並 push；MoneyCrawlerApi 與 MoneyApi 已於 2026-10-16 重啟）：使用者「交易模擬 可以選測試的資料」→ 資料來源抽成物件（`synthetic_market.DbSource`／`SyntheticSource(seed)`），兩個模擬器多 `source`，API／Node 多 `source`／`seed`，前端「資料」下拉＋種子＋橘色警示；合成行情在後端記憶體現場產生、不讀不寫任何庫；預設仍真實行情。pytest 261、jest 190、vite build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**。審查見「已完成」。
 （以下為 74）
