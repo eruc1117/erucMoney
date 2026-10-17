@@ -383,6 +383,8 @@ def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Op
     mkt.bench_hist = ps.load_bench_history(load_start) if ps.needs_bench_history(signal) else None
     # 法人買賣超（Iteration 73）同樣只在需要時掛上、不需要時清掉，免得快取的 mkt 帶著前一個設定的表
     mkt.insti = ps.load_institutional(load_start, end) if ps.needs_institutional(signal) else None
+    # 估值表（Iteration 80）同上
+    mkt.val = ps.load_valuation(load_start, end) if ps.needs_valuation(signal) else None
     sim = simulate(mkt, sur, signal, start, end, top_n, buffer, universe_n, excl_limit_pct, tsmc_weight, costs, tranches, weighting)
     bench = mkt.adj[ps.BENCH].dropna()
     met, m_act = metrics(sim['nav'], bench, sim)

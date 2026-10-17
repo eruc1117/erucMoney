@@ -194,6 +194,19 @@ def job_institutional_daily():
     logger.info("[排程/insti] %s：上市 %d、上櫃 %d 列，非股票池略過 %d", today, r["twse"], r["tpex"], r["dropped"])
 
 
+def job_valuation_daily():
+    """每日 18:37（法人之後）：交易所官方檔更新全市場個股估值——本益比、殖利率、股價淨值比（market_valuation_daily，Iteration 78）。
+    一天兩次呼叫（上市＋上櫃）；漏跑由 valuation_data.py --backfill 補（已有資料的日子跳過）。"""
+    import valuation_data
+
+    today = date.today()
+    r = valuation_data.update_day(today)
+    if r.get("holiday"):
+        logger.info("[排程/val] %s 休市，略過", today)
+        return
+    logger.info("[排程/val] %s：上市 %d、上櫃 %d 列，非股票池略過 %d", today, r["twse"], r["tpex"], r["dropped"])
+
+
 def job_portfolio_paper():
     """每日 18:40（全市場日線 18:30 之後）：紙上交易——成交上一個清單、結算今天淨值、訊號日算新清單（Iteration 54，階段 4）。
     漏跑會在下次補齊（每一步以日期判斷）。模擬帳戶沒開就略過。"""
@@ -618,6 +631,14 @@ def start():
         max_instances=1, misfire_grace_time=3600,
     )
 
+    # 全市場個股估值（Iteration 78）：法人之後兩分鐘，同樣是交易所檔
+    scheduler.add_job(
+        job_valuation_daily,
+        trigger=CronTrigger(hour=18, minute=37, timezone="Asia/Taipei"),
+        id="job_valuation_daily", name="全市場個股估值：本益比／殖利率／淨值比（交易所檔）",
+        max_instances=1, misfire_grace_time=3600,
+    )
+
     # 正式策略（Iteration 64）：紙上交易之後重算 live 淨值
     scheduler.add_job(
         job_portfolio_official,
@@ -708,7 +729,7 @@ def start():
     )
 
     logger.info("排程器啟動：股價每日 %02d:%02d ／ 新聞每小時 :%02d ／ 投票每日 %02d:%02d"
-                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 三大法人 18:35 ／ 紙上交易 18:40 ／ 正式策略 18:50 ／ 外生資料 06:10 與 19:10"
+                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 三大法人 18:35 ／ 估值 18:37 ／ 紙上交易 18:40 ／ 正式策略 18:50 ／ 外生資料 06:10 與 19:10"
                 " ／ 台股跳空預測 06:20 ／ 美股跳空預測 20:00 ／ 新聞訊號 20:10 ／ 模型評估每日 21:00"
                 " ／ 每週日 08:00 全模型預測（Ctrl+C 停止）",
                 stock_cron["hour"], stock_cron["minute"],

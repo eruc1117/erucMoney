@@ -1,0 +1,4 @@
+# git diff 4b8c8a8 -U0 -- Crawler/portfolio_signal.py，只留 hunk 標頭列（Iteration 78，2026-10-17；base = 4b8c8a8，Iteration 66～73 的提交）
+@@ -599,0 +600,43 @@ def signal_tflow(mkt: Market, d: pd.Timestamp) -> pd.Series:
+@@ -642 +685,2 @@ SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m',
+@@ -724,0 +769,4 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.

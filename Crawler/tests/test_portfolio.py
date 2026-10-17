@@ -507,6 +507,62 @@ def test_fflow_is_net_buy_value_over_turnover_in_last_21_days():
     assert set(ps.scores_on('win3+mom+fflow', mkt, sur_empty(), d, ids).index) <= {'1111', '3333', '4444'}
 
 
+def test_vmom_divides_mom_by_same_window_vol_and_momx_drops_top_decile_vol():
+    """波動處理的動能（Iteration 78）：vmom ＝ mom ÷ 同 12-1 窗口的日異常報酬標準差；momx ＝ mom 但波動最高十分位不給值；歷史不足回空。"""
+    mkt, prices = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    mom = ps.signal_mom(mkt, d)
+    sl = ps._mom_window(mkt, d, 252, 21)
+    seg = mkt.ar.iloc[sl]
+    vm = ps.signal_vmom(mkt, d)
+    assert set(vm.index) == {s for s in mom.index if seg[s].std() > 0}         # 0050 對自己的異常報酬恆為 0，波動 0 不給值
+    for sid in vm.index:
+        assert vm[sid] == pytest.approx(mom[sid] / seg[sid].std())
+    assert ps.signal_vmom(mkt, mkt.adj.index[200]).empty and ps.signal_momx(mkt, mkt.adj.index[200]).empty
+    # 把一檔做成極端波動：momx 不給它值，其他檔的值和 mom 一樣；vmom 把它排到後面
+    p = prices.copy()
+    m = (p['stock_id'] == '1111') & (p['trade_date'] <= d)
+    wild = p.loc[m, 'adj_close'].values * np.where(np.arange(m.sum()) % 2 == 0, 1.3, 0.7)
+    p.loc[m, 'adj_close'] = wild
+    p.loc[m, 'close_price'] = wild
+    mkt2 = ps.Market(p, mkt.meta)
+    mom2, mx2, vm2 = ps.signal_mom(mkt2, d), ps.signal_momx(mkt2, d), ps.signal_vmom(mkt2, d)
+    assert '1111' in mom2.index and '1111' not in mx2.index
+    others = [s for s in mom2.index if s != '1111']
+    assert (mx2.reindex(others) == mom2.reindex(others)).all()
+    assert vm2.rank()['1111'] <= vm2.rank().drop('1111').min() or abs(vm2['1111']) < abs(vm2.drop('1111')).min()
+    ids = pd.Index(list(mom2.index))
+    assert len(ps.scores_on('win3+vmom', mkt2, sur_empty(), d, ids)) >= 1
+    assert '1111' not in ps.scores_on('win3+momx', mkt2, sur_empty(), d, ids).index
+
+
+def test_dy_and_ep_read_valuation_on_signal_day_with_lag_and_exclusions():
+    """價值訊號（Iteration 80）：dy 取訊號日的殖利率（> 30 不給值、0 照給），ep ＝ 1 ÷ 本益比（虧損沒有值）；d 沒列就沿用最近 5 個交易日；d 之後的不算；沒掛表回空。"""
+    mkt, _ = _market(n_days=120, start='2024-01-02')
+    d = pd.Timestamp('2024-05-13')
+    assert ps.signal_dy(mkt, d).empty and ps.signal_ep(mkt, d).empty
+    days = mkt.adj.index
+    i = days.get_loc(d)
+    cols = mkt.close.columns
+    dy = pd.DataFrame(np.nan, index=days, columns=cols)
+    pe = pd.DataFrame(np.nan, index=days, columns=cols)
+    dy.loc[d, '1111'], pe.loc[d, '1111'] = 4.5, 12.0
+    dy.loc[d, '2222'], pe.loc[d, '2222'] = 0.0, np.nan                         # 沒配息、虧損
+    dy.loc[d, '3333'], pe.loc[d, '3333'] = 76.0, 8.0                           # 一次性大額股利
+    dy.loc[days[i - 5], '4444'], pe.loc[days[i - 5], '4444'] = 3.0, 20.0       # 五天前的最後一筆：沿用
+    dy.loc[days[i - 6], '5555'], pe.loc[days[i - 6], '5555'] = 9.0, 5.0        # 六天前：太舊
+    dy.loc[days[i + 1], '5555'], pe.loc[days[i + 1], '5555'] = 9.0, 5.0        # d 之後：不算
+    mkt.val = {'dividend_yield': dy, 'pe': pe}
+    s_dy, s_ep = ps.signal_dy(mkt, d), ps.signal_ep(mkt, d)
+    assert s_dy['1111'] == 4.5 and s_dy['2222'] == 0.0 and s_dy['4444'] == 3.0
+    assert '3333' not in s_dy.index and '5555' not in s_dy.index
+    assert s_ep['1111'] == pytest.approx(1 / 12) and s_ep['3333'] == pytest.approx(1 / 8) and s_ep['4444'] == pytest.approx(1 / 20)
+    assert '2222' not in s_ep.index and '5555' not in s_ep.index
+    assert ps.needs_valuation('win3+mom+dy') and ps.needs_valuation('ep') and not ps.needs_valuation('win3+mom')
+    ids = pd.Index(['1111', '2222', '3333', '4444'])
+    assert set(ps.scores_on('dy', mkt, sur_empty(), d, ids).index) == {'1111', '2222', '4444'}
+
+
 def sur_empty():
     return pd.DataFrame(columns=['stock_id', 'revenue_month', 'yoy', 'surprise', 'sue', 'announce_date', 'announce_ts', 'announce_source'])
 

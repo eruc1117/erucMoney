@@ -434,3 +434,99 @@ def parse_tpex_institutional(payload: dict) -> list[dict]:
     else:
         raise ExchangeFormatError(f'櫃買三大法人表 {trade_date} 有 {len(fields)} 欄，不是 16 或 24：{fields}')
     return _check_identity(rows, f'TPEx insti {trade_date}')
+
+
+# ── 個股估值：本益比、殖利率、股價淨值比（兩市，Iteration 78）──────────────────
+
+TWSE_BWIBBU = 'https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d'
+TPEX_PE = 'https://www.tpex.org.tw/www/zh-tw/afterTrading/peQryDate'
+VALUATION_MIN_PB_SHARE = 0.5      # 股價淨值比為正的列少於這個比例就當欄位對錯了（正常日子 > 95%）
+
+
+def fetch_twse_valuation(d: date) -> dict:
+    return _get_json(TWSE_BWIBBU, {'date': d.strftime('%Y%m%d'), 'selectType': 'ALL', 'response': 'json'})
+
+
+def fetch_tpex_valuation(d: date) -> dict:
+    return _get_json(TPEX_PE, {'date': d.strftime('%Y/%m/%d'), 'response': 'json'})
+
+
+def _val_row(sid: str, trade_date: date, source: str, close, pe, dy, pb, dps, dy_year, fin_period) -> Optional[dict]:
+    pe, dy, pb = _num(pe), _num(dy), _num(pb)
+    if pe is None and dy is None and pb is None:
+        return None
+    return {'stock_id': sid, 'trade_date': trade_date, 'source': source, 'close_price': _num(close), 'pe': pe, 'dividend_yield': dy, 'pb': pb,
+            'dividend_per_share': _num(dps), 'dividend_year': _int(dy_year),
+            'fin_period': (str(fin_period).strip() or None) if fin_period is not None else None}
+
+
+def _check_valuation(rows: list[dict], where: str) -> list[dict]:
+    """沒有合計欄可驗；用「股價淨值比大多為正」當欄位對位的檢查（對錯欄會抓到殖利率或本益比的「-」／0）。"""
+    if not rows:
+        return rows
+    ok = sum(1 for r in rows if r['pb'] is not None and r['pb'] > 0)
+    if ok / len(rows) < VALUATION_MIN_PB_SHARE:
+        raise ExchangeFormatError(f'{where}：只有 {ok}/{len(rows)} 列股價淨值比為正，欄位對應可能變了（例：{rows[0]}）')
+    return rows
+
+
+def parse_twse_valuation(payload: dict) -> list[dict]:
+    """
+    afterTrading/BWIBBU_d（selectType=ALL）→ 個股列：收盤價、殖利率(%)、股利年度、本益比、股價淨值比、財報年/季。
+    本益比虧損或無資料印「-」→ None。欄位按名稱找；休市日 stat 不是 OK，回 []。
+    """
+    if not isinstance(payload, dict) or str(payload.get('stat', '')).lower() != 'ok':
+        return []
+    trade_date = _ymd(payload.get('date'))
+    fields = payload.get('fields') or []
+    if trade_date is None or not fields:
+        return []
+    ix = {k: _field_index(fields, *v) for k, v in {
+        'id': ('證券代號',), 'close': ('收盤價',), 'dy': ('殖利率(%)',), 'dy_year': ('股利年度',),
+        'pe': ('本益比',), 'pb': ('股價淨值比',), 'fin': ('財報年/季',),
+    }.items()}
+    missing = [k for k, v in ix.items() if v < 0 and k not in ('close', 'dy_year', 'fin')]
+    if missing:
+        raise ExchangeFormatError(f'BWIBBU_d 欄位找不到 {missing}：{fields}')
+    rows = []
+    for r in payload.get('data') or []:
+        sid = str(_cell(r, ix['id']) or '').strip()
+        if not sid:
+            continue
+        c = lambda k: _cell(r, ix[k])   # noqa: E731
+        row = _val_row(sid, trade_date, 'twse', c('close'), c('pe'), c('dy'), c('pb'), None, c('dy_year'), c('fin'))
+        if row:
+            rows.append(row)
+    return _check_valuation(rows, f'BWIBBU_d {trade_date}')
+
+
+def parse_tpex_valuation(payload: dict) -> list[dict]:
+    """
+    afterTrading/peQryDate → 個股列：本益比、每股股利、股利年度、殖利率(%)、股價淨值比（沒有收盤價與財報期）。
+    2018 與 2024 的欄位名相同，按名稱找；本益比 N/A → None。休市日 data 是空的，回 []。
+    """
+    if not isinstance(payload, dict):
+        return []
+    table = next((t for t in payload.get('tables') or [] if t.get('data')), None)
+    if table is None:
+        return []
+    trade_date = roc_date(table.get('date') or payload.get('date'))
+    fields = table.get('fields') or []
+    if trade_date is None:
+        return []
+    ix = {k: _field_index(fields, *v) for k, v in {
+        'id': ('股票代號', '代號'), 'pe': ('本益比',), 'dps': ('每股股利',), 'dy_year': ('股利年度',), 'dy': ('殖利率(%)',), 'pb': ('股價淨值比',),
+    }.items()}
+    missing = [k for k, v in ix.items() if v < 0 and k not in ('dps', 'dy_year')]
+    if missing:
+        raise ExchangeFormatError(f'櫃買 peQryDate 欄位找不到 {missing}：{fields}')
+    rows = []
+    for r in table['data']:
+        sid = str(_cell(r, ix['id']) or '').strip()
+        if not sid:
+            continue
+        c = lambda k: _cell(r, ix[k])   # noqa: E731
+        row = _val_row(sid, trade_date, 'tpex', None, c('pe'), c('dy'), c('pb'), c('dps'), c('dy_year'), None)
+        if row:
+            rows.append(row)
+    return _check_valuation(rows, f'TPEx peQryDate {trade_date}')

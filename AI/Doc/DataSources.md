@@ -56,6 +56,7 @@ CNBC／MarketWatch RSS（原文頁為樣板，內文抓不到）。
 | 個股每日行情 | `taiwan_stock_daily()` | `stock_daily_prices` |
 | 三大法人買賣超（26 檔追蹤股） | `taiwan_stock_institutional_investors()` | `stock_chip_analysis` |
 | 三大法人買賣超（**全市場**，Iteration 71） | 不走 FinMind：證交所 `fund/T86`（selectType=ALLBUT0999）＋櫃買 `insti/dailyTrade`（type=Daily、sect=EW），一天兩次呼叫；`Crawler/institutional_data.py` | `market_institutional_daily`（2018-01 起；單位股；外資含外資自營商；寫入前驗證合計 = 三法人相加） |
+| 個股估值：本益比、殖利率、股價淨值比（**全市場**，Iteration 78） | 不走 FinMind：證交所 `afterTrading/BWIBBU_d`（selectType=ALL）＋櫃買 `afterTrading/peQryDate`，一天兩次呼叫；`Crawler/valuation_data.py`；每日 18:37 排程 | `market_valuation_daily`（2018-01 起；上市殖利率與兩市本益比是點時（Iteration 80 `val-pit-check-80`）；**櫃買殖利率不是點時**（整年固定、年初就印當年才決議的股利）；本益比虧損印「-」／N/A → NULL；上市有收盤價與財報年/季、上櫃有每股股利） |
 | 個股基本資訊 | `taiwan_stock_info()` | `stock_info` |
 
 ### 欄位對照（taiwan_stock_daily → stock_daily_prices）

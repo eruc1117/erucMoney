@@ -597,6 +597,103 @@ def signal_tflow(mkt: Market, d: pd.Timestamp) -> pd.Series:
     return _flow(mkt, d, 'trust_net')
 
 
+# ── 第八批（Iteration 78）：波動處理的動能 ────────────────────────────────────
+
+MOMX_VOL_CUT = 0.9      # `momx`：同窗口波動在全市場最高十分位的股票不給值（文獻分組慣例，不調）
+
+
+def _mom_and_vol(mkt: Market, d: pd.Timestamp, long_days: int = 252, skip_days: int = 21):
+    """`mom` 同一個 12-1 窗口的累積異常報酬與每日異常報酬標準差（都要 ≥ 80% 交易日有值）；歷史不足回 (None, None)。"""
+    sl = _mom_window(mkt, d, long_days, skip_days)
+    if sl is None:
+        return None, None
+    seg = mkt.ar.iloc[sl]
+    need = int(len(seg) * 0.8)
+    m = seg.sum(min_count=need)
+    sd = seg.std().where(seg.count() >= need)
+    return m, sd
+
+
+def signal_vmom(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """
+    波動率調整動能（Huang, Pan & Wang 2026；Lin 等 2020；TEJ「波動率調整動能」）：`mom` ÷ 同窗口每日異常報酬標準差。
+    同樣的動能分數下波動低的排前面；台股文獻說極端強勢股波動大、之後失去動能，這個定義直接把它們往後排。
+    """
+    m, sd = _mom_and_vol(mkt, d)
+    if m is None:
+        return pd.Series(dtype=float)
+    return (m / sd.where(sd > 0)).dropna()
+
+
+def signal_momx(mkt: Market, d: pd.Timestamp, cut: float = MOMX_VOL_CUT) -> pd.Series:
+    """
+    去極端波動的動能（Lin, Xia, Yang & Yang 2020；Yang & Zhang 2019）：`mom`，但同窗口波動在全市場（有 mom 值的股票）最高 (1−cut) 分位的股票不給值。
+    分位在全市場算、不在候選池內算（訊號函式看不到池），所以池內被排除的比例不一定剛好 10%。
+    """
+    m, sd = _mom_and_vol(mkt, d)
+    if m is None:
+        return pd.Series(dtype=float)
+    both = m.notna() & sd.notna()
+    if both.sum() == 0:
+        return pd.Series(dtype=float)
+    thr = sd[both].quantile(cut)
+    return m[both & (sd <= thr)]
+
+
+# ── 第九批（Iteration 80）：價值——交易所估值表（Iteration 78 的 market_valuation_daily）──
+
+VAL_COLS = ('dividend_yield', 'pe')
+DY_MAX = 30.0           # 殖利率 > 30% 不給值：2018-01～2024-09 有 2,148 列、17 檔（0.08%），查過是一次性大額股利（例如 8913 每股 113.8 元對股價 15 元；Iteration 80 登記檔）
+VAL_MAX_LAG = 5         # 訊號日沒有估值列時，往前最多沿用 5 個交易日
+
+
+def needs_valuation(signal: str) -> bool:
+    return any(p in signal.split('+') for p in ('dy', 'ep'))
+
+
+def load_valuation(start: date, end: date, extra_days: int = 15) -> dict:
+    """market_valuation_daily → {'dividend_yield': 寬表, 'pe': 寬表}（index 交易日、columns 股票）。殖利率是交易所給的百分比值；本益比虧損為缺值。"""
+    since = start - timedelta(days=extra_days)
+    with get_conn() as conn:
+        df = pd.read_sql("SELECT stock_id, trade_date, dividend_yield, pe FROM market_valuation_daily WHERE trade_date BETWEEN %s AND %s",
+                         conn, params=(since, end))
+    df['trade_date'] = pd.to_datetime(df['trade_date'])
+    out = {}
+    for c in VAL_COLS:
+        out[c] = df.pivot(index='trade_date', columns='stock_id', values=c).sort_index().astype(float)
+    return out
+
+
+def _val_on(mkt: Market, d: pd.Timestamp, col: str, max_lag: int = VAL_MAX_LAG) -> pd.Series:
+    """訊號日 d 的估值：交易所當天收盤後公布、以當天收盤價算，訊號在 d 收盤、次日開盤成交。上市殖利率與兩市本益比點時；
+    櫃買殖利率整年固定、年初就含當年才決議的股利（Iteration 80 val-pit-check-80），`dy` 對上櫃股在公告前有前視。
+    d 沒有列就沿用最近 max_lag 個交易日內的最後一筆；沒掛估值表（mkt.val 為 None）回空。"""
+    val = getattr(mkt, 'val', None)
+    if not val or col not in val:
+        return pd.Series(dtype=float)
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right'))
+    if i == 0:
+        return pd.Series(dtype=float)
+    lo = pd.Timestamp(mkt.days[max(i - 1 - max_lag, 0)])
+    sub = val[col].loc[lo:d]
+    if sub.empty:
+        return pd.Series(dtype=float)
+    return sub.ffill().iloc[-1].dropna()
+
+
+def signal_dy(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """殖利率（交易所公布值 ÷ 收盤價；上市檔依最近公告股利、櫃買檔整年固定且年初含未公告的股利——Iteration 80 val-pit-check-80；Hsu 等 2015：台股 D/P 是好的價值代理）。> DY_MAX 視為一次性股利不給值；0 照給（排最後）。"""
+    s = _val_on(mkt, d, 'dividend_yield')
+    return s[s <= DY_MAX]
+
+
+def signal_ep(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """益本比 = 1 ÷ 本益比（交易所依最近四季每股盈餘；Hsu 等 2015：台股 E/P 比 B/M 好）。虧損的交易所不印本益比 → 沒有值、不進排名。"""
+    pe = _val_on(mkt, d, 'pe')
+    pe = pe[pe > 0]
+    return 1.0 / pe
+
+
 def market_state_up(mkt: Market, d: pd.Timestamp, lookback_days: int = 252) -> Optional[bool]:
     """
     市場狀態（Cooper, Gutierrez & Hameed 2004；Du, Huang & Liao 2009 對台股）：0050 過去 lookback_days 個交易日的報酬 ≥ 0 為 UP。
@@ -639,7 +736,8 @@ def needs_bench_history(signal: str) -> bool:
     return '~up3' in signal
 
 SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m', 'volchg', 'rev_accel', 'rev_streak',
-                  'resmom', 'rev_yoy3', 'momrev', 'cont', 'imom', 'mom127', 'ovn1m', 'illiq', 'indmom', 'relmom', 'seas', 'fflow', 'tflow')
+                  'resmom', 'rev_yoy3', 'momrev', 'cont', 'imom', 'mom127', 'ovn1m', 'illiq', 'indmom', 'relmom', 'seas', 'fflow', 'tflow',
+                  'vmom', 'momx', 'dy', 'ep')
 
 
 TSMC_WEIGHT_FALLBACK = 0.35       # 估不出來時的固定假設：全市場日線從 2018-01-02 起、迴歸要 200 列，所以 2018-10-26 前都用它（Iteration 67 實測）；之後一律用估計值
@@ -722,6 +820,14 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
         return signal_fflow(mkt, d)
     if signal == 'tflow':
         return signal_tflow(mkt, d)
+    if signal == 'vmom':
+        return signal_vmom(mkt, d)
+    if signal == 'momx':
+        return signal_momx(mkt, d)
+    if signal == 'dy':
+        return signal_dy(mkt, d)
+    if signal == 'ep':
+        return signal_ep(mkt, d)
     raise ValueError(f'未知訊號 {signal}')
 
 
