@@ -63,6 +63,15 @@ describe('FastAPI 在線', () => {
     expect(r.body.run.id).toBe(44)
     expect((await request(app).get('/portfolio/runs/abc').set(USER)).status).toBe(400)
   })
+  it('GET /portfolio/runs/:id/positions 轉送全部調倉持股；非整數 id → 400（Iteration 76）', async () => {
+    const r = await request(app).get('/portfolio/runs/44/positions').set(USER)
+    expect(r.status).toBe(200)
+    expect(fake.calls[0]).toMatchObject({ path: '/portfolio/runs/44/positions' })
+    expect(r.body.run_id).toBe(44)
+    expect(r.body.rebalances[0].positions.map(p => p.stock_id)).toEqual(['1111', '2330'])
+    expect((await request(app).get('/portfolio/runs/x/positions').set(USER)).status).toBe(400)
+    expect((await request(app).get('/portfolio/runs/0/positions').set(USER)).status).toBe(400)
+  })
 })
 
 describe('FastAPI 不在線', () => {

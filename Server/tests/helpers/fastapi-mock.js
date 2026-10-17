@@ -72,6 +72,9 @@ const DEFAULTS = {
     runs: [{ id: 1, experiment_n: 1, name: 'sue-dev-top20', segment: 'dev', tag: null, metrics: { ann_active: -0.0733 } },
            { id: 2, experiment_n: 2, name: 'win3+mom-t3-tsmcest-dev', segment: 'dev', tag: 'candidate', metrics: { ann_active: 0.0864 } }] } }),
   'GET /portfolio/runs/:id':  (req) => ({ status: 200, body: { run: { id: Number(req.params.id) }, series: [], positions: [], query: req.query } }),
+  'GET /portfolio/runs/:id/positions': (req) => ({ status: 200, body: { run_id: Number(req.params.id), experiment_n: 44, name: 'win3+mom-t3-tsmcest-dev+valid', n_rebalances: 1, n_stocks: 2,
+    rebalances: [{ rebalance_date: '2024-09-11', exec_date: '2024-09-12', positions: [{ stock_id: '1111', stock_name: '甲', rank: 1, signal_value: 0.9, target_weight: 0.5, filled: true }, { stock_id: '2330', stock_name: '台積電', rank: null, signal_value: null, target_weight: 0.5, filled: true }] }],
+    frequent: [{ stock_id: '2330', stock_name: '台積電', times: 1 }, { stock_id: '1111', stock_name: '甲', times: 1 }] } }),
 }
 
 async function startFakeFastAPI() {

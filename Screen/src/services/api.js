@@ -314,6 +314,7 @@ export const getNewsSignalGates = () => request('/news/signals/gates')
 export const getPortfolioCandidate = () => request('/portfolio/candidate')
 export const getPortfolioRuns = () => request('/portfolio/runs')
 export const getPortfolioRun = (id, step = 1) => request(`/portfolio/runs/${id}?step=${step}`)
+export const getPortfolioRunPositions = (id) => request(`/portfolio/runs/${id}/positions`)   // 每個訊號日買了什麼（Iteration 76）
 export const getPortfolioPaper = () => request('/portfolio/paper')
 // 正式策略（Iteration 64）
 export const getPortfolioOfficial = () => request('/portfolio/official')

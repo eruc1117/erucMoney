@@ -619,6 +619,16 @@ def get_portfolio_run(run_id: int, step: int = 1):
     return out
 
 
+@app.get("/portfolio/runs/{run_id}/positions")
+def get_portfolio_run_positions(run_id: int):
+    """單一 run 全部調倉的持股（Iteration 76）：每個訊號日買了哪些股票，給「贏過大盤」清單點開看。"""
+    import portfolio_api
+    out = portfolio_api.run_positions(run_id)
+    if out is None:
+        raise HTTPException(status_code=404, detail=f'run {run_id} 不存在')
+    return out
+
+
 # ── 美股（Iteration 32）──────────────────────────────────────────────────────
 @app.get("/us/overview")
 def get_us_overview(days: int = 60):

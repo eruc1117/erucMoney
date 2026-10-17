@@ -2,12 +2,14 @@
 // ───────────────────────────────────────────────────────────────────────────
 // 顯示實驗日誌裡「標記為候選」的設定：開發期、驗證期、全期間三列的指標對門檻，
 // 全期間的淨值曲線對 0050、逐年主動報酬、最後一次持股，以及全部實驗（N 只增不減）。
+// Iteration 76：最上面先列「贏過大盤」的每一次回測（年化主動 > 0），點一列展開每個訊號日買了哪些股票。
 //
 // 這一頁刻意把 DSR 放在和主動報酬一樣大的位置：44 次嘗試後挑最好的，
 // 月 Sharpe 0.16 這種程度純靠運氣也挑得到，所以「超越了」和「不是運氣」是兩件事。
 import { useEffect, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
 import NavRangeChart from '../components/NavRangeChart'
+import BeatMarketList, { beaters } from '../components/BeatMarketList'
 import { getPortfolioCandidate, getPortfolioRuns, getPortfolioPaper } from '../services/api'
 
 function num(v, d = 2) { return v === null || v === undefined || Number.isNaN(Number(v)) ? '–' : Number(v).toFixed(d) }
@@ -385,6 +387,14 @@ export default function PortfolioLab() {
   return (
     <>
       {tabBar}
+      <div className="card">
+        <div className="card-header">
+          <span className="card-title">贏過大盤的回測：點一列看買了哪些股票</span>
+          <span className="muted" style={{ fontSize: '.82rem' }}>實驗日誌 {log?.n_total ?? '–'} 次裡年化主動報酬 &gt; 0 的有 {beaters(log?.runs).length} 次（作廢的不列）· 依主動報酬排序</span>
+        </div>
+        {loading && <div className="card-body muted">載入中…</div>}
+        {!loading && <BeatMarketList runs={log?.runs} t={t} />}
+      </div>
       <div className="card">
         <div className="card-header">
           <span className="card-title">打敗大盤：目前候選對門檻</span>

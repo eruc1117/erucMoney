@@ -1,9 +1,11 @@
 # 交接筆記
 
-**更新：** 2026-10-16（Iteration 75）
+**更新：** 2026-10-17（Iteration 76）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
+Iteration 76（未提交）：使用者「打敗大盤：目前候選對門檻，有贏過大盤的，都列在頂端，點擊後再展開購買的股票細節」→ 月調倉頁最上面新卡「贏過大盤的回測」（年化主動 > 0 且非作廢、依主動報酬排序、標三項門檻過幾項、段別篩選），點一列展開那次回測每個訊號日的持股（新端點 `GET /portfolio/runs/{id}/positions`：全部調倉＋名稱＋最常買到）。純讀取、N 不動（96）。pytest 263、jest 191、vite／mfe build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**；meeting_front_end 三檔已同步（待 commit／push）。審查見「已完成」。
+（以下為 75）
 Iteration 75（已提交 c8492fb、已 push；meeting_front_end 三檔已同步、mfe-build-75 過，該 repo 已提交 dfb7b48 並 push；MoneyCrawlerApi 與 MoneyApi 已於 2026-10-16 重啟）：使用者「交易模擬 可以選測試的資料」→ 資料來源抽成物件（`synthetic_market.DbSource`／`SyntheticSource(seed)`），兩個模擬器多 `source`，API／Node 多 `source`／`seed`，前端「資料」下拉＋種子＋橘色警示；合成行情在後端記憶體現場產生、不讀不寫任何庫；預設仍真實行情。pytest 261、jest 190、vite build 過。**要重啟 MoneyCrawlerApi 與 MoneyApi**。審查見「已完成」。
 （以下為 74）
 Iteration 74（已提交）：使用者「找方案在交易模擬建立大量假資料進行測試」→「方案 A，測試資料不要汙染到真實股票資料」：合成行情（幾何隨機漫步）＋ `monkeypatch` 攔下 `market_days`／`load_prices`／`load_bench` 與 `get_conn`，8 年 × 61 檔上 5 種子 × 50 條隨機規則、5 種子 × 200 筆隨機指令的帳務不變量全過、不連任何資料庫；`test_trading_fuzz.py` 15 項、pytest 256、jest-unit 44；模擬器本體未動、N 不動、不用重啟。審查見「已完成」。
@@ -29,6 +31,7 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
+- （76）Crawler/portfolio_api.py（`run_positions`）、api.py（`/portfolio/runs/{id}/positions`）、tests/test_portfolio_positions.py（2 項）；Server/routes/portfolio.js、tests/helpers/fastapi-mock.js、tests/http/portfolio.test.js（+1）；Screen/src/components/BeatMarketList.jsx（新）、pages/PortfolioLab.jsx、services/api.js；meeting_front_end 同三檔；AI/experiments/iter76_evidence.py；AI/Doc/Iterations/Iteration-76.md、README
 - （75）Crawler/synthetic_market.py、tests/test_synthetic_market.py（5 項）；trading_sim.py／trading_strategy.py（`source` 參數）、api.py（`source`／`seed`、`_sim_source`）；Server/routes/sim.js（`sourceFields`）、tests/http/sim.test.js（+5）、tests/helpers/fastapi-mock.js；Screen/src/pages/TradingSim.jsx、components/RuleBuilder.jsx、components/SourceBanner.jsx（新）；AI/Doc/Iterations/Iteration-75.md、README
 - （74）Crawler/tests/helpers/fake_market.py（`make_market`、`patch`、`random_rules`、`random_instructions`、`check_invariants`）、tests/test_trading_fuzz.py（15 項，無 db marker）；AI/experiments/iter74_fuzz_stats.py → UnifiedModel/results/trading_fuzz_iter74.md；AI/Doc/Iterations/Iteration-74.md、README
 - （73）AI/experiments/iter73_hypothesis.md、iter73_grid.json、iter73_results.py、iter73_dev.log、iter73_valid.log；UnifiedModel/results/portfolio_iter73_insti.md；portfolio_runs #93～#96；Crawler/portfolio_signal.py（`needs_institutional`、`load_institutional`、`_flow`、`signal_fflow`、`signal_tflow`）、portfolio_backtest.py（`run` 掛 `mkt.insti`）、tests/test_portfolio.py（+1，34 項）、tests/test_scheduler.py（加 18:35 工作）；AI/Doc/Iterations/Iteration-73.md、Iteration-71.md（回補完成）、README、Papers.md（P18／P44、第五節第七代、第六節）；market_institutional_daily 3,321,740 列
@@ -58,6 +61,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
 
 ## 已完成
+- 贏過大盤清單（76）：pytest-76 263 過、jest-76 191 過（17 套）、vite-build-76 過、mfe-build-76 過（checks.json 2026-10-17）；positions-evidence-76 過（#44 68 次調倉／306 檔／177 KB／6.4 ms、清單 74 列）、mfe-eslint-76 過；evidence-reviewer-76 第一輪 32/1/9 FAIL → 修段別篩選描述、補 positions-evidence-76／mfe-eslint-76／portfoliolab-diff-76 後第二輪 19/0/1 PASS
 - 測試資料來源（75）：pytest-75 261 過、jest-75 190 過（17 套）、vite-build-75 過（checks.json 2026-10-16）；evidence-reviewer-75 一輪 40/0/3 PASS（三條 unresolved 主 session 補查表 96 列、git diff、計時 11.3 ms 後關閉）
 - 假資料測試（74）：pytest-74 256 過、jest-unit-74 44 過（checks.json 2026-10-16）；合成市場 61 檔 × 2,408 日、一字鎖 397 股票日；規則模擬 5 種子成交 19／34／382／176／367、每趟約 1 秒；指令模擬 5 種子成交 46／37／53／26／38、略過全是「現金不夠」「沒有持股可賣」、`trades + skipped == 200`；evidence-reviewer-74 兩輪 43/4/7 → 17/0/8 PASS（unresolved 是暫存區量測數字與過程敘述，已標待確認）
 - 審查（71／73）：strategy-critic-73 PASS（九條已處理）；evidence-reviewer-71 三輪 29/8/4 → 36/1/3 → 12/0/1 PASS；evidence-reviewer-73 三輪 34/2/6 → 60/5/6 → 25/0/1 PASS（checks.json 2026-10-16）
@@ -77,6 +81,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 回放結論（59）：照單全收 +346%（0050 +189%）；停損 15／25／35% 都輸；限價 ±2% 只差 0.5%／年
 
 ## 決策
+- 2026-10-17（76）：「贏過大盤」清單用年化主動 > 0 當門檻、作廢（tag = void）的不列（#67 舊保留期 +131% 是 0050 分割沒還原的假數字）；門檻另外標在每列，不把「贏過」寫成「可用」；持股端點回全部調倉（#44 177 KB），點開才抓、抓過就留著，不做分頁
 - 2026-10-16（75）：交易模擬的「測試資料」不灌任何庫，由後端 `SyntheticSource` 現場產生；每檔種子 = `seed:stock_id`、序列固定從 2010-01-01 起，為了同代號在不同期間／組合裡看到同一條線；`source`／`seed` 在 Node 有給才轉，預設一律真實行情；合成結果一定帶警示 caveat 與橘色橫幅
 - 2026-10-16（74）：交易模擬的大量測試資料走記憶體 monkeypatch，不灌測試庫——`market_days` 要每天 ≥ 500 列才算交易日，8 年要 108 萬列、22 秒（待確認，量測腳本在暫存區），且使用者要求不汙染真實股票資料；`patch` 同時把 `get_conn` 換成丟例外，漏接的資料庫存取當場失敗。方案 C（灌測試庫給儀表板手動操作）不做
 - 2026-10-16（73）：投信淨買超、外資淨買超單獨兩個家族關閉；`win3+mom+fflow` 候選不換、交使用者決定；三個「開發期贏、驗證期略輸」的方向（illiq、relmom、fflow）**不做事後組合**
@@ -111,12 +116,13 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 波動管理（P10／P12，引擎沒有現金腿）、動能季節性（P5，月份定義要讀全文）都還沒跑
 - live 列 #68 沒暖機、2018 年前 10 個月空手；大盤線只是參考，指標仍對 0050
 - `fake_market.patch` 只攔 `db.connection`、`portfolio_paper`、`trading_replay` 三處的 `get_conn`；日後有新模組在模組層 `from db.connection import get_conn` 且被模擬器用到，要加進清單（沒加的話 pytest 下會連到 `CRAWLER_TEST_DB` 測試庫、不是正式庫 `Stock`，但就不再是「不連庫」）
+- 贏過大盤清單沒做持股隨時間的變化圖、兩次回測持股交集比較、匯出
 - 合成資料的參數（波動、漂移、一字鎖機率）沒開放前端調；歷史回放分頁沒有合成版
 - 條件規則沒做 NOT／跨股票／成交量；公開模擬沒做匯入 CSV；凱基未接；第二本模擬帳戶沒做
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
-使用者重啟 **MoneyCrawlerApi 與 MoneyApi**（Iteration 75 的 `source`／`seed` 才會生效）與 MoneyScheduler（18:35 法人排程）；使用者決定候選：`win3+mom+fflow`（#94／#96）、`win3+relmom`（#90／#92）、`win3+mom+illiq`（#87／#88）三個都是開發期贏、驗證期略輸，候選仍 #44。
+使用者重啟 **MoneyCrawlerApi 與 MoneyApi**（Iteration 76 的 `/portfolio/runs/{id}/positions` 才會生效）、commit／push 兩個 repo；MoneyScheduler（18:35 法人排程）；使用者決定候選：`win3+mom+fflow`（#94／#96）、`win3+relmom`（#90／#92）、`win3+mom+illiq`（#87／#88）三個都是開發期贏、驗證期略輸，候選仍 #44。
 沒有指示就做第八代的資料前置（不算 N）：外資持股比率全市場表（證交所 MI_QFIIS 每日、櫃買同類表）——P18 的「持股水準」面向，與流量不同；或 P50 Hou 2007 產業領先股（要先定義領先股，門檻是參數，先登記再跑）。
 仍待：SUE 類訊號公告日過濾、`win3` 農曆年缺陷。
 

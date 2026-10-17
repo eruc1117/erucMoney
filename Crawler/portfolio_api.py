@@ -4,6 +4,7 @@
 只讀 portfolio_runs / portfolio_positions / portfolio_run_series；不跑回測。
 """
 
+from collections import Counter
 from typing import Optional
 
 from db.connection import get_conn
@@ -83,6 +84,34 @@ def get_run(run_id: int, step: int = 1) -> Optional[dict]:
     series = [{'d': str(d), 'nav': float(n), 'bench': float(b), 'idx': idx.get(d)} for i, (d, n, b) in enumerate(pts) if i % step == 0 or i == len(pts) - 1]
     return {'run': run, 'series': series, 'positions': positions, 'last_rebalance': str(last) if last else None,
             'thresholds': THRESHOLDS}
+
+
+def run_positions(run_id: int) -> Optional[dict]:
+    """單一 run 全部調倉的持股（Iteration 76）：「贏過大盤」清單點開看每個訊號日買了什麼。
+
+    按訊號日分組（舊到新）、組內照排名（台積電固定持、沒排名的在後）；名稱從候選池 market_universe 帶，
+    不在池內的留 None 但仍列出。frequent 是整段回測裡出現次數最多的股票，給使用者一眼看「這組參數老是買誰」。"""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT id, experiment_n, name FROM portfolio_runs WHERE id = %s", (run_id,))
+            row = cur.fetchone()
+            if not row:
+                return None
+            cur.execute("""SELECT p.rebalance_date, p.exec_date, p.stock_id, u.stock_name, p.rank, p.signal_value, p.target_weight, p.filled
+                           FROM portfolio_positions p LEFT JOIN market_universe u ON u.stock_id = p.stock_id
+                           WHERE p.run_id = %s ORDER BY p.rebalance_date, p.rank NULLS LAST, p.stock_id""", (run_id,))
+            rows = cur.fetchall()
+    groups, names = {}, {}
+    for rd, ed, sid, nm, rk, sv, w, f in rows:
+        g = groups.setdefault(str(rd), {'rebalance_date': str(rd), 'exec_date': str(ed) if ed else None, 'positions': []})
+        g['positions'].append({'stock_id': sid, 'stock_name': nm, 'rank': rk, 'signal_value': float(sv) if sv is not None else None,
+                               'target_weight': float(w), 'filled': f})
+        names[sid] = nm
+    rebalances = list(groups.values())
+    counts = Counter(p['stock_id'] for g in rebalances for p in g['positions'])
+    frequent = [{'stock_id': s, 'stock_name': names.get(s), 'times': c} for s, c in counts.most_common(15)]
+    return {'run_id': row[0], 'experiment_n': row[1], 'name': row[2], 'n_rebalances': len(rebalances), 'n_stocks': len(counts),
+            'rebalances': rebalances, 'frequent': frequent}
 
 
 def live_list() -> Optional[dict]:

@@ -7,6 +7,7 @@
  * POST /portfolio/official/update  admin：手動跑一次每日更新
  * GET /portfolio/runs           實驗日誌全部（每一次回測一列，N 只增不減）
  * GET /portfolio/runs/:id       單一 run：指標、參數、淨值曲線、最後持股
+ * GET /portfolio/runs/:id/positions  單一 run 全部調倉的持股（每個訊號日買了什麼，Iteration 76）
  */
 const { Router } = require('express')
 const { proxyToFastAPI } = require('../lib/proxy')
@@ -36,6 +37,12 @@ router.get('/runs/:id', (req, res) => {
   const step = Number(req.query.step)
   const qs = Number.isInteger(step) && step > 0 ? `?step=${step}` : ''
   proxyToFastAPI({ port: 8000, path: `/portfolio/runs/${id}${qs}`, res, onError: () => CRAWLER_DOWN(res) })
+})
+
+router.get('/runs/:id/positions', (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ detail: 'id 格式錯誤' })
+  proxyToFastAPI({ port: 8000, path: `/portfolio/runs/${id}/positions`, res, onError: () => CRAWLER_DOWN(res) })
 })
 
 module.exports = router
