@@ -53,6 +53,10 @@ CREATE INDEX IF NOT EXISTS idx_stock_info_industry_type
   ON stock_info (industry_type);
 ```
 
+> **追蹤股清單（Iteration 83）：** `is_tracking = TRUE` 的列就是清單——原 `AI/UserDoc/Target.md` 的 20 家＋2330／2327／2883＋0050／0052／0056，2026-10-18 加 0050 成分股另外 42 家成 68 檔（`AI/Doc/Iterations/Iteration-83.md`）。
+> 加新追蹤股的步驟：`backfill_prices.py --stocks … --chips --holding` → `sync_stock_info.py`（列進 `stock_info`，預設追蹤）→ `backfill_dividend.py --stocks …` → `rebuild_adj_close.py --stocks …` → `news_alias.seed()`；
+> 之後每天 18:43 `tracked_sync.py` 從全市場表補 FinMind 漏掉的列。FinMind 對轉過市場的股票會回舊市場別（7769、6446），市場別以 `market_universe` 為準。
+
 > **产业類型資料來源：** FinMind SDK `fetch_stock_info()` 回傳的 `industry_type` 欄位，
 > 與台灣證交所分類一致（如：半導體業、金融業、電子零組件業等）。
 

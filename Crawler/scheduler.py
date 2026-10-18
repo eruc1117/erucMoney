@@ -80,29 +80,19 @@ def _tracked_stock_ids() -> list[str]:
 
 
 def _refresh_adj_close(ids: list[str]) -> None:
-    """更新公司行動（除權息／減資）後重建 adj_close。
+    """股價更新之後重建 adj_close。
 
     為何要綁在股價更新之後跑：寫入行情的路徑（本 job 與 backfill_prices）
     都只寫 close_price，**adj_close 一律留 NULL**。而 Iteration 18 起
     「算報酬一律用 adj_close」，所以少了這一步，每天新增的那一列對所有
     報酬計算等於不存在——而且症狀是「今天還沒資料」，不像壞掉，沒人會查。
 
-    事件抓取失敗不阻擋重建：用過期事件表重建，只有跨越今天這條邊界的報酬會錯；
-    完全不重建則是最新一天整個沒有值，後者嚴重得多。
+    Iteration 83 起這裡不再打 FinMind 抓除權息／減資：事件表由 job_market_daily（18:30）用交易所檔維護全市場，
+    而 FinMind 的「權」（股票股利）列 reference_price = before_price（2890 2026-10-07：FinMind 45.40／45.40、交易所檔 45.40／44.97），
+    用它蓋掉交易所列會讓 adj_close 漏掉股票股利；也省下每檔 2 次、68 檔 136 次呼叫。
+    今天才除權息的那檔，18:43 的 job_tracked_sync 會再對近兩週有事件的追蹤股重建一次。
     """
-    import backfill_dividend
     import rebuild_adj_close
-
-    # 180 天窗口：全歷史事件早已在事件表裡，每日只需補上新宣告的那幾筆。
-    start = date.today() - timedelta(days=180)
-    for name, fn in (
-        ("除權息", lambda: backfill_dividend.fetch_dividends(ids, start)[0]),
-        ("減資",   lambda: rebuild_adj_close.fetch_reductions(ids, start)),
-    ):
-        try:
-            logger.info("[排程/adj] %s事件更新 %d 筆", name, fn())
-        except Exception as e:
-            logger.warning("[排程/adj] %s事件更新失敗，沿用既有事件表：%s", name, e)
 
     updated = rebuild_adj_close.rebuild(ids)
 
@@ -128,7 +118,8 @@ def job_stock():
     """每日 18:00：FinMind 抓近 7 天行情 + 籌碼 + 外資持股（涵蓋假日補班），
     upsert 冪等寫入，再更新公司行動並重建 adj_close。
 
-    外資持股（Iteration 35）每檔多一次呼叫：26 檔 × 3 = 78 次。
+    外資持股（Iteration 35）每檔多一次呼叫：26 檔 × 3 = 78 次；Iteration 83 追蹤股擴到 68 檔後一天 204 次（公司行動改由交易所檔維護，不再打 FinMind），
+    匿名額度撐不住的日子由 18:43 的 job_tracked_sync 從全市場交易所表補齊（已寫的列不覆蓋）。
     持股失敗不擋行情與籌碼——它只供「法人持股」頁顯示，不進任何模型。"""
     from scrapers.finmind_scraper import FinMindScraper
     from db.repository import upsert_daily_prices, upsert_chip_analysis, upsert_foreign_holding
@@ -229,6 +220,17 @@ def job_holding_daily():
         logger.info("[排程/holding] %s 休市，略過", today)
         return
     logger.info("[排程/holding] %s：上市 %d、上櫃 %d 列，非股票池略過 %d", today, r["twse"], r["tpex"], r["dropped"])
+
+
+def job_tracked_sync():
+    """每日 18:43（三張全市場表都更新之後）：追蹤股三張表缺的列從全市場交易所表補進去（tracked_sync.py，Iteration 83）。
+    追蹤股 26 → 68 檔後 job_stock 一天要打 FinMind 204 次，匿名額度不保證；FinMind 漏掉的日子由這裡補、已寫的列不覆蓋，
+    近兩週有公司行動的追蹤股也重建 adj_close（18:00 重建時 18:30 才進表的事件補上）。"""
+    import tracked_sync
+
+    r = tracked_sync.fill_from_market()
+    logger.info("[排程/tracked] 補行情 %d 列（%d 檔）、籌碼 %d、外資持股 %d，重建 adj_close %d 列",
+                r["prices"], len(r["stock_ids"]), r["chips"], r["holding"], r["rebuilt"])
 
 
 def job_portfolio_paper():
@@ -676,6 +678,13 @@ def start():
         id="job_holding_daily", name="全市場外資持股與發行股數（交易所檔）",
         max_instances=1, misfire_grace_time=3600,
     )
+    # 追蹤股補齊（Iteration 83）：三張全市場表之後，FinMind 沒抓到的列從交易所表補
+    scheduler.add_job(
+        job_tracked_sync,
+        trigger=CronTrigger(hour=18, minute=43, timezone="Asia/Taipei"),
+        id="job_tracked_sync", name="追蹤股三張表從全市場表補齊",
+        max_instances=1, misfire_grace_time=3600,
+    )
 
     # 正式策略（Iteration 64）：紙上交易之後重算 live 淨值
     scheduler.add_job(
@@ -767,7 +776,7 @@ def start():
     )
 
     logger.info("排程器啟動：股價每日 %02d:%02d ／ 新聞每小時 :%02d ／ 投票每日 %02d:%02d"
-                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 三大法人 18:35 ／ 估值 18:37 ／ 融資融券 18:39 ／ 紙上交易 18:40 ／ 外資持股 18:41 ／ 正式策略 18:50 ／ 外生資料 06:10 與 19:10"
+                " ／ 新鮮度每日 17:30 ／ 全市場日線 18:30 ／ 三大法人 18:35 ／ 估值 18:37 ／ 融資融券 18:39 ／ 紙上交易 18:40 ／ 外資持股 18:41 ／ 追蹤股補齊 18:43 ／ 正式策略 18:50 ／ 外生資料 06:10 與 19:10"
                 " ／ 台股跳空預測 06:20 ／ 美股跳空預測 20:00 ／ 新聞訊號 20:10 ／ 模型評估每日 21:00"
                 " ／ 每週日 08:00 全模型預測（Ctrl+C 停止）",
                 stock_cron["hour"], stock_cron["minute"],

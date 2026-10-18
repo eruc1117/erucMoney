@@ -246,16 +246,17 @@ def parse_twse_capital_reduction(payload: dict) -> list[dict]:
     i_before = _field_index(fields, '停止買賣前收盤價格')
     i_ref = _field_index(fields, '恢復買賣參考價')
     i_reason = _field_index(fields, '減資原因')
-    out = []
+    out = {}
     for r in payload.get('data') or []:
         ex = roc_date(_cell(r, i_date))
         sid = str(_cell(r, i_id) or '').strip()
         before, ref = _num(_cell(r, i_before)), _num(_cell(r, i_ref))
         if not ex or not sid or not before or not ref or before <= 0 or ref <= 0:
             continue
-        out.append({'stock_id': sid, 'ex_date': ex, 'before_price': before, 'reference_price': ref,
-                    'reason': str(_cell(r, i_reason) or '').strip()[:80]})
-    return out
+        # 2014～2016 的年檔同一檔同一天印兩列（2408 2014-09-09、2438 2014-11-21，內容一樣）；主鍵是 (股票, 日)，留最後一列
+        out[(sid, ex)] = {'stock_id': sid, 'ex_date': ex, 'before_price': before, 'reference_price': ref,
+                          'reason': str(_cell(r, i_reason) or '').strip()[:80]}
+    return list(out.values())
 
 
 # ── 抓取 ──────────────────────────────────────────────────────────────────────

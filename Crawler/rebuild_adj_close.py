@@ -91,7 +91,9 @@ def fetch_reductions(ids: list, start: date, retry_wait: int = 300) -> int:
 def load_events(stock_ids: list) -> dict:
     """
     彙整每檔的公司行動 {stock_id: [(ex_date, factor), ...]}。
-    factor 只在 (0, 5) 的合理範圍內採用，避免資料異常造成價格失真。
+    factor 只在合理範圍內採用，避免資料異常造成價格失真：除權息 (0.2, 5)；
+    減資 (0.2, 20)——彌補虧損的減資常砍九成（2408 2014-09-09 停止買賣前 8.10、恢復買賣參考價 80.93，證交所 TWTAUU 與 FinMind 都是這個數），
+    factor 9.99 是真的，Iteration 83 之前用 5 當上限會把它略過，2014-09 以前的 adj_close 就少了十倍。
     """
     sql_div = """
         SELECT stock_id, ex_date, before_price, reference_price
@@ -106,13 +108,13 @@ def load_events(stock_ids: list) -> dict:
     events, skipped = {}, 0
     with get_conn() as conn:
         with conn.cursor() as cur:
-            for sql, kind in ((sql_div, '除權息'), (sql_red, '減資')):
+            for sql, kind, hi in ((sql_div, '除權息', 5.0), (sql_red, '減資', 20.0)):
                 cur.execute(sql)
                 for sid, ex_date, before, ref in cur.fetchall():
                     if sid not in stock_ids:
                         continue
                     factor = float(ref) / float(before)
-                    if not (0.2 < factor < 5.0):
+                    if not (0.2 < factor < hi):
                         skipped += 1
                         logger.warning('略過異常 factor：%s %s %s→%s（%.3f）',
                                        sid, ex_date, before, ref, factor)

@@ -13,7 +13,7 @@
 | 經濟日報證券／產業 | 2 | TW | 中 | RSS | 抓原文頁 |
 | 自由財經 | 2 | TW | 中 | RSS | 抓原文頁 |
 | BBC Business／BBC World | 1 | GLOBAL | 英 | RSS | 抓原文頁（不套財金關鍵字過濾） |
-| Yahoo 個股 | 3 | TW | 中 | RSS `tw.stock.yahoo.com/rss?s=CODE.TW`（26 檔追蹤股） | 抓原文頁 |
+| Yahoo 個股 | 3 | TW | 中 | RSS `tw.stock.yahoo.com/rss?s=CODE.TW`（追蹤股；Iteration 83 起 68 檔） | 抓原文頁 |
 
 歷史回填（`Crawler/backfill_news.py`，鉅亨網分類 API 支援 `startAt / endAt / page`，2023-09 起可用）：
 
@@ -54,12 +54,13 @@ CNBC／MarketWatch RSS（原文頁為樣板，內文抓不到）。
 | 資料集 | FinMind 方法 | 對應 DB 表 |
 |--------|-------------|-----------|
 | 個股每日行情 | `taiwan_stock_daily()` | `stock_daily_prices` |
-| 三大法人買賣超（26 檔追蹤股） | `taiwan_stock_institutional_investors()` | `stock_chip_analysis` |
+| 三大法人買賣超（追蹤股） | `taiwan_stock_institutional_investors()` | `stock_chip_analysis` |
 | 三大法人買賣超（**全市場**，Iteration 71） | 不走 FinMind：證交所 `fund/T86`（selectType=ALLBUT0999）＋櫃買 `insti/dailyTrade`（type=Daily、sect=EW），一天兩次呼叫；`Crawler/institutional_data.py` | `market_institutional_daily`（2018-01 起；單位股；外資含外資自營商；寫入前驗證合計 = 三法人相加） |
 | 個股估值：本益比、殖利率、股價淨值比（**全市場**，Iteration 78） | 不走 FinMind：證交所 `afterTrading/BWIBBU_d`（selectType=ALL）＋櫃買 `afterTrading/peQryDate`，一天兩次呼叫；`Crawler/valuation_data.py`；每日 18:37 排程 | `market_valuation_daily`（2018-01 起；上市殖利率與兩市本益比是點時（Iteration 80 `val-pit-check-80`）；**櫃買殖利率不是點時**（整年固定、年初就印當年才決議的股利）；本益比虧損印「-」／N/A → NULL；上市有收盤價與財報年/季、上櫃有每股股利） |
 | 融資融券與借券賣出（**全市場**，Iteration 81） | 不走 FinMind：證交所 `marginTrading/MI_MARGN`（融資融券彙總，張）＋`marginTrading/TWT93U`（信用額度總量管制餘額表：融券＋借券賣出，股）；櫃買 `margin/balance`（張）＋`margin/sbl`（股），一天四次呼叫；`Crawler/margin_data.py`；每日 18:39 排程 | `market_margin_daily`（2018-01 起；一律存股；兩表共有的融券餘額逐列對位檢查；沒有信用交易資格的股票不在表裡；借券表沒列的借券欄 NULL） |
 | 外資持股與發行股數（**全市場**，Iteration 81） | 不走 FinMind：證交所 `fund/MI_QFIIS`（外資及陸資投資持股統計）＋櫃買 `insti/qfii`（持股比例排行表），一天兩次呼叫；`Crawler/holding_data.py`；每日 18:41 排程 | `market_foreign_holding_daily`（2018-01 起；發行股數、外資持有股數、持股比率（自己算）；發行股數可算週轉率與市值） |
-| 個股基本資訊 | `taiwan_stock_info()` | `stock_info` |
+| 個股基本資訊 | `taiwan_stock_info()` | `stock_info`（`is_tracking` 就是追蹤股清單：原 `AI/UserDoc/Target.md` 的 20 家＋2330／2327／2883＋三檔 ETF；Iteration 83 加 0050 成分股 42 家成 68 檔；FinMind 對轉市場的股票會回舊市場別，以 `market_universe` 為準） |
+| 追蹤股三張表補齊（Iteration 83） | 不走 FinMind：`Crawler/tracked_sync.py` 每日 18:43 把 `stock_daily_prices`／`stock_chip_analysis`／`stock_foreign_holding` 缺的列從 `market_daily_prices`／`market_institutional_daily`／`market_foreign_holding_daily` 補進去（已寫的列不覆蓋、補到行情的股票重建 adj_close） | 同左三張追蹤股表（兩個來源逐列對照見 Iteration 83：收盤、法人、持股全同；上櫃成交量交易所檔不含零股與盤後） |
 
 ### 欄位對照（taiwan_stock_daily → stock_daily_prices）
 

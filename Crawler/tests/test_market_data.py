@@ -101,6 +101,14 @@ def test_parse_capital_reduction():
     assert rows[0]['reference_price'] > rows[0]['before_price']      # 減資：參考價高於前收（方向與除息相反）
 
 
+def test_parse_capital_reduction_dedupes_repeated_rows():
+    """2014～2016 年檔同一檔同一天印兩列（2408 2014-09-09），主鍵是 (股票, 日)，兩列一起 upsert 會被 PostgreSQL 擋下。"""
+    payload = _fx('twse_twtauu.json')
+    payload['data'] = payload['data'][:1] + payload['data'][:1]
+    rows = ex.parse_twse_capital_reduction(payload)
+    assert len(rows) == 1 and rows[0]['stock_id'] == '3432'
+
+
 # ── 股票池收錄規則 ────────────────────────────────────────────────────────────
 INFO = [
     {'industry_category': '半導體業', 'stock_id': '2330', 'stock_name': '台積電', 'type': 'twse', 'date': '1994-09-05'},

@@ -78,6 +78,20 @@ def test_rebuild_adj_close_back_adjusts_before_events(clean_db):
     assert dict((d, float(a)) for d, a in db.query("SELECT trade_date, adj_close FROM stock_daily_prices WHERE stock_id='2409'")) == rows
 
 
+@pytest.mark.db
+def test_rebuild_adj_close_accepts_ninety_percent_capital_reduction(clean_db):
+    """彌補虧損減資九成（2408 2014-09-09：8.10 → 80.93，factor 9.99）是真的事件，Iteration 83 起減資的上限放到 20；除權息仍是 5。"""
+    import rebuild_adj_close
+    db = clean_db
+    db.seed_stock('2408')
+    db.seed_prices('2408', [date(2014, 9, 5), date(2014, 9, 9)], close=8.10, step=0)
+    db.execute("INSERT INTO stock_capital_reduction (stock_id, ex_date, before_price, reference_price, reason) VALUES ('2408','2014-09-09',8.10,80.93,'彌補虧損')")
+    db.execute("INSERT INTO stock_dividend_result (stock_id, ex_date, before_price, reference_price, dividend, dividend_type) VALUES ('2408','2014-09-09',8.10,80.93,0,'息')")
+    assert rebuild_adj_close.rebuild(['2408']) == 2
+    rows = dict((d, float(a)) for d, a in db.query("SELECT trade_date, adj_close FROM stock_daily_prices WHERE stock_id='2408' ORDER BY 1"))
+    assert rows[date(2014, 9, 5)] == round(8.10 * 80.93 / 8.10, 4) and rows[date(2014, 9, 9)] == 8.10   # 只有減資那筆生效，同 factor 的除權息列被略過
+
+
 def test_sync_stock_info_upsert_and_orphans(clean_db):
     import sync_stock_info
     db = clean_db

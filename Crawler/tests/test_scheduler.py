@@ -36,7 +36,7 @@ def test_start_registers_every_job_with_expected_times(monkeypatch):
     assert set(by) == {'job_stock', 'job_news', 'job_vote', 'job_freshness', 'job_exogenous_6', 'job_exogenous_19',
                        'job_gap_predict', 'job_us_predict', 'job_news_models', 'job_weekly_forecast', 'job_model_review',
                        'job_market_daily', 'job_portfolio_paper', 'job_portfolio_official', 'job_institutional_daily', 'job_valuation_daily',
-                       'job_margin_daily', 'job_holding_daily'}
+                       'job_margin_daily', 'job_holding_daily', 'job_tracked_sync'}
     f = lambda k: _fields(by[k]['trigger'])
     sc, vc, nc = SCHEDULE['stock_cron'], SCHEDULE['vote_cron'], SCHEDULE['news_cron']
     assert (f('job_stock')['hour'], f('job_stock')['minute']) == (str(sc['hour']), str(sc['minute']))
@@ -56,6 +56,7 @@ def test_start_registers_every_job_with_expected_times(monkeypatch):
     assert (f('job_institutional_daily')['hour'], f('job_institutional_daily')['minute']) == ('18', '35')  # 三大法人在日線之後、紙上交易之前（Iteration 71）
     assert (f('job_valuation_daily')['hour'], f('job_valuation_daily')['minute']) == ('18', '37')  # 估值在法人之後（Iteration 78）
     assert (f('job_margin_daily')['hour'], f('job_margin_daily')['minute']) == ('18', '39') and (f('job_holding_daily')['hour'], f('job_holding_daily')['minute']) == ('18', '41')  # Iteration 81
+    assert (f('job_tracked_sync')['hour'], f('job_tracked_sync')['minute']) == ('18', '43')  # 追蹤股補齊在三張全市場表之後（Iteration 83）
     assert (f('job_portfolio_paper')['hour'], f('job_portfolio_paper')['minute']) == ('18', '40')  # 紙上交易在日線之後
     assert (f('job_portfolio_official')['hour'], f('job_portfolio_official')['minute']) == ('18', '50')  # 正式策略淨值在紙上交易之後
     assert (18, 30) > (sc['hour'], sc['minute'])
