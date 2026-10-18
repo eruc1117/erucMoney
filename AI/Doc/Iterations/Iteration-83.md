@@ -39,7 +39,7 @@
    一次性跑 `--since 2018-01-01`（`tracked-sync-fill-83`）：行情 +1,838 列（只有 2327 國巨：補列前 `stock_daily_prices` 的 2327 從 2025-08-08 起（主 session 補列前的查詢，沒另存），
    補完 2018-01-02 起 2,120 列（`iter83-evidence`））、
    籌碼 +17,938 列、外資持股 +9 列。
-6. **MOPS 重大訊息**：`backfill_mops.py --stocks …` 42 檔、2023-09～2026-10，每次請求 3～6 秒，**回補進行中**（08:16 啟動、第一筆完成 08:19:02（`logs/backfill_mops_progress.json`），`logs/backfill_mops_iter83.log`，可續跑）。
+6. **MOPS 重大訊息**：`backfill_mops.py --stocks …` 42 檔、2023-09～2026-10，每次請求 3～6 秒，08:16 啟動（第一筆完成 08:19:02，`logs/backfill_mops_progress.json`）、142.2 分跑完（`mops-backfill-83`）：16,138 則、`news_crawl_raw` +16,138、`user_news` +15,681（去重後）、失敗 0（`logs/backfill_mops_iter83.log`）。
    月營收（`stock_revenue_announce`）本來就是全市場表，42 檔都已有 5,875 列（`iter83-evidence`）。新聞別名 41 筆也在 `iter83-evidence`（42 檔裡沒進別名表的是 2603：「長榮」在 `news_alias._GENERIC` 清單裡，太泛不當別名）。
 
 ## 二、結果（`tracked-sync-compare-83`，`AI/experiments/iter83_compare.py`；2018-01-02 起兩表共有的股票日）
@@ -64,6 +64,7 @@
 | `tracked-sync-fill-83` | 行情 +1,838、籌碼 +17,938、外資持股 +9 |
 | `tracked-sync-compare-83` | 上表 |
 | `freshness-83` | 明確傳入 68 檔，落後 0 |
+| `mops-backfill-83` | 42 檔 16,138 則、user_news +15,681、142.2 分、失敗 0 |
 | `iter83-evidence` | 審查補證據：FinMind 對交易所除權息列、2018 以前事件筆數、2014～2016 減資 79 筆、adj NULL 198／198、2327、6446 3.00%、全市場 factor ≥ 5 三筆、月營收 5,875、別名 41、7769／6446 市場別 |
 | `events-restore-83` | 2018 起除權息 13,469、減資 217、1,929 檔；2000～2017 除權息 13,376、減資 100＋79、1,679 檔 |
 | `pytest-tracked-sync-83` | 23 passed（`test_tracked_sync` 1、`test_scheduler` 13、`test_upsert` 9，含減資九成那項） |
@@ -92,4 +93,4 @@
 新增：`Crawler/tracked_sync.py`、`Crawler/tests/test_tracked_sync.py`、`AI/experiments/iter83_compare.py`、`AI/experiments/iter83_freshness.py`、`AI/experiments/iter83_restore_events.py`、`AI/experiments/iter83_evidence.py`、
 `Crawler/logs/backfill_prices_iter83.log`、`backfill_dividend_iter83.log`、`rebuild_adj_iter83.log`、`restore_events_iter83.log`、`backfill_mops_iter83.log`（`*.log` 不進 git）。
 資料：`stock_info` +42 列（68 檔追蹤）、`stock_daily_prices` +234,945 列、`stock_chip_analysis` +160,623 列、`stock_foreign_holding` +208,962 列、`instrument_alias` +41、`stock_info` 7769／6446 的 `market_type` 由 FinMind 的 emerging／tpex 改成 twse（UPDATE 兩列，`iter83-evidence` 只驗現值）、
-`stock_dividend_result`／`stock_capital_reduction` 2000 起改為交易所檔的值、`user_news`／`news_crawl_raw` MOPS 列回補中。
+`stock_dividend_result`／`stock_capital_reduction` 2000 起改為交易所檔的值、`news_crawl_raw` +16,138、`user_news` +15,681（MOPS）。
