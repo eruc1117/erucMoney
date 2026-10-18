@@ -65,6 +65,13 @@ def test_promote_once_and_update_in_place(clean_db, monkeypatch):
     assert 'skipped' in po.update_daily(today=date(2026, 10, 11))      # 同一天再跑：略過
     s = po.status()
     assert s['promoted'] and set(s['segments']) >= {'full', 'holdout', 'live'} and s['segments']['holdout']['metrics']['ann_active'] == 0.03
+    # 段別與標記的中文由 API 給（Iteration 86：頁面不寫死）：full 是候選全期間列、live 叫「實單」、tag 也帶中文
+    import portfolio_api
+    assert s['segments']['full']['segment_label'] == portfolio_api.SEGMENT_LABEL_FULL and s['segments']['full']['segment'] == 'dev'
+    assert s['segments']['live']['segment_label'] == portfolio_api.SEGMENT_LABEL['live'] == '實單'
+    assert s['segments']['live']['tag'] == 'official-live' and s['segments']['live']['tag_label'] == portfolio_api.TAG_LABEL['official-live']
+    assert s['segments']['holdout']['tag_label'] == portfolio_api.TAG_LABEL['official']
+    assert portfolio_api.tag_label(None) is None and portfolio_api.tag_label('x') == 'x'
     assert s['official']['live_run_id'] == st['live_run_id']
 
 

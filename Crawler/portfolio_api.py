@@ -11,13 +11,21 @@ from db.connection import get_conn
 
 THRESHOLDS = {'ann_active': 0.03, 'info_ratio': 0.5, 'dsr': 0.95, 'turnover_min': 3.0, 'turnover_max': 6.0}
 SEGMENT_LABEL = {'dev': '開發期', 'valid': '驗證期', 'holdout': '保留期', 'paper': '紙上交易', 'live': '實單'}
+# 正式策略頁的「開發＋驗證」是候選的全期間列（segment 存 dev、期間 2018-01～2024-09），不是資料表裡的段別，所以另給一個鍵
+SEGMENT_LABEL_FULL = '開發＋驗證（全期間）'
+# portfolio_runs.tag 的中文：前端兩頁（月調倉的贏過大盤清單、正式策略）都從 API 拿，不各自寫死（Iteration 86）
+TAG_LABEL = {'candidate': '候選 ★', 'official': '正式策略・保留期', 'official-live': '正式策略・實單', 'void': '作廢'}
+
+
+def tag_label(tag):
+    return TAG_LABEL.get(tag, tag) if tag else None
 
 
 def _run_row(r) -> dict:
     (rid, run_at, n, name, signal, segment, ps, pe, params, metrics, n_reb, notes, tag) = r
     return {'id': rid, 'run_at': run_at.isoformat() if run_at else None, 'experiment_n': n, 'name': name, 'signal': signal,
             'segment': segment, 'segment_label': SEGMENT_LABEL.get(segment, segment), 'period_start': str(ps), 'period_end': str(pe),
-            'params': params or {}, 'metrics': metrics or {}, 'n_rebalances': n_reb, 'notes': notes, 'tag': tag}
+            'params': params or {}, 'metrics': metrics or {}, 'n_rebalances': n_reb, 'notes': notes, 'tag': tag, 'tag_label': tag_label(tag)}
 
 
 _COLS = "id, run_at, experiment_n, name, signal, segment, period_start, period_end, params, metrics, n_rebalances, notes, tag"

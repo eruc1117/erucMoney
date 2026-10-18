@@ -185,11 +185,14 @@ def status() -> dict:
     runs = {}
     with get_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, segment, metrics, period_start, period_end, name, experiment_n FROM portfolio_runs WHERE tag = 'candidate' OR id IN (%s, %s)",
+            cur.execute("SELECT id, segment, metrics, period_start, period_end, name, experiment_n, tag FROM portfolio_runs WHERE tag = 'candidate' OR id IN (%s, %s)",
                         (st['holdout_run_id'] or -1, st['live_run_id'] or -1))
-            for rid, seg, met, ps, pe, name, n in cur.fetchall():
+            for rid, seg, met, ps, pe, name, n, tag in cur.fetchall():
                 key = 'live' if rid == st['live_run_id'] else 'holdout' if rid == st['holdout_run_id'] else ('full' if str(ps) == '2018-01-01' and str(pe) == '2024-09-30' else seg)
-                runs[key] = {'id': rid, 'experiment_n': n, 'name': name, 'period_start': str(ps), 'period_end': str(pe), 'metrics': met or {}}
+                # 段別與標記的中文由 portfolio_api 統一給（Iteration 86：頁面不再自己寫死）；full 是候選的全期間列、資料表裡段別是 dev
+                label = portfolio_api.SEGMENT_LABEL_FULL if key == 'full' else portfolio_api.SEGMENT_LABEL.get(key, key)
+                runs[key] = {'id': rid, 'experiment_n': n, 'name': name, 'period_start': str(ps), 'period_end': str(pe), 'metrics': met or {},
+                             'segment': seg, 'segment_label': label, 'tag': tag, 'tag_label': portfolio_api.tag_label(tag)}
     paper = portfolio_api.paper()
     return {'promoted': True, 'official': st, 'segments': runs, 'params': (cand or {}).get('run', {}).get('params'),
             'live_series': (live or {}).get('series', []), 'holdout_series': (hold or {}).get('series', []),

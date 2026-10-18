@@ -18,7 +18,7 @@ function pct(v, d = 2) {
 function Sub({ children }) { return <div className="muted" style={{ fontSize: '0.72rem' }}>{children}</div> }
 
 const SEG_ORDER = ['dev', 'valid', 'holdout', 'paper', 'live']
-const TAG_LABEL = { candidate: '候選 ★', official: '正式', 'official-live': '正式 live', void: '作廢' }
+// 標記（candidate／official／official-live／void）的中文由 API 的 tag_label 給（Crawler/portfolio_api.TAG_LABEL），這裡不再寫死
 
 /** 贏過大盤的列：年化主動報酬 > 0、不是作廢；主動報酬高的在前。 */
 export function beaters(runs) {
@@ -153,7 +153,7 @@ export default function BeatMarketList({ runs, t }) {
                   <tr onClick={() => toggle(r)} aria-expanded={isOpen}
                     style={{ cursor: 'pointer', background: r.tag === 'candidate' ? 'rgba(47,128,237,0.08)' : isOpen ? 'rgba(128,128,128,0.06)' : undefined }}>
                     <td className="muted">{isOpen ? '▾' : '▸'}</td>
-                    <td>{r.experiment_n}{r.tag ? <Sub>{TAG_LABEL[r.tag] || r.tag}</Sub> : null}</td>
+                    <td>{r.experiment_n}{r.tag ? <Sub>{r.tag_label || r.tag}</Sub> : null}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.name}</td>
                     <td>{r.segment_label}</td>
                     <td style={{ whiteSpace: 'nowrap' }}><Sub>{r.period_start} ~ {r.period_end}</Sub></td>

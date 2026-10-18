@@ -70,7 +70,7 @@ const DEFAULTS = {
   'POST /trading/engine/config':  (req) => ({ status: 200, body: { enabled: req.body?.enabled ?? null, mode: req.body?.mode ?? 'paper' } }),
   'POST /trading/engine/run':     () => ({ status: 200, body: { sent: [], marked: 0, stop_loss: [], orders: [] } }),
   'GET /portfolio/official':  ()    => ({ status: 200, body: { promoted: true, official: { candidate_run_id: 44, holdout_run_id: 67, live_run_id: 68, promoted_on: '2026-10-11' },
-    segments: { full: { metrics: { ann_active: 0.0705 } }, holdout: { metrics: { ann_active: 1.3178 } }, live: { metrics: { ann_active: 0.2312 } } }, live_series: [], current_list: null } }),
+    segments: { full: { segment: 'dev', segment_label: '開發＋驗證（全期間）', tag: 'candidate', tag_label: '候選 ★', metrics: { ann_active: 0.0705 } }, holdout: { segment: 'holdout', segment_label: '保留期', tag: 'official', tag_label: '正式策略・保留期', metrics: { ann_active: 1.3178 } }, live: { segment: 'live', segment_label: '實單', tag: 'official-live', tag_label: '正式策略・實單', metrics: { ann_active: 0.2312 } } }, live_series: [], current_list: null } }),
   'POST /portfolio/official/update': () => ({ status: 200, body: { run_id: 68, points: 2100, end: '2026-10-08', ann_active: 0.2312 } }),
   'GET /portfolio/runs':      ()    => ({ status: 200, body: { n_total: 2, thresholds: { dsr: 0.95 },
     runs: [{ id: 1, experiment_n: 1, name: 'sue-dev-top20', segment: 'dev', tag: null, metrics: { ann_active: -0.0733 } },

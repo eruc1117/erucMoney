@@ -1,7 +1,7 @@
 // 正式策略（Iteration 64）
 // ───────────────────────────────────────────────────────────────────────────
-// 候選 #44 升格後的頁面：三段指標（開發期、驗證期、保留期——保留期只開一次、凍結）、全期間至今的淨值曲線
-// （live 列，每天 18:50 用同參數重算到最新行情）、逐年主動報酬、本月清單、紙上帳戶摘要。
+// 候選 #44 升格後的頁面：三段指標（開發期、驗證期、保留期——保留期只開一次、凍結）、實單的淨值曲線
+// （live 列 #68：同參數每天 18:50 重算到最新行情、紙上交易照它下單；月調倉頁的實驗日誌把這一段叫「實單」，這裡用同一個名字）、逐年主動報酬、本月清單、紙上帳戶摘要。
 // 資料來自 GET /portfolio/official（匿名可讀）；admin 可按「立刻更新」跑一次每日更新。
 import { useCallback, useEffect, useState } from 'react'
 import { getPortfolioOfficial, updatePortfolioOfficial } from '../services/api'
@@ -13,8 +13,10 @@ const num = (v, d = 2) => (v == null ? '–' : Number(v).toFixed(d))
 const tone = v => (v == null ? 'muted' : Number(v) > 0 ? 'up' : Number(v) < 0 ? 'down' : 'muted')
 function Sub({ children }) { return <div className="muted" style={{ fontSize: '0.74rem' }}>{children}</div> }
 function Empty({ children }) { return <div className="muted" style={{ padding: '1rem 1.25rem', fontSize: '.88rem' }}>{children}</div> }
-const SEG_LABEL = { dev: '開發期', valid: '驗證期', full: '開發＋驗證', holdout: '保留期（只開一次）', live: '全期間至今（每日更新）' }
+// 段別的中文由 API 給（segments[k].segment_label，來源 Crawler/portfolio_api.SEGMENT_LABEL），這裡只定順序與補充說明
 const SEG_ORDER = ['dev', 'valid', 'full', 'holdout', 'live']
+const SEG_NOTE = { holdout: '只開一次', live: '全期間至今，每日更新' }
+const segName = (k, s) => (s?.segment_label || k) + (SEG_NOTE[k] ? `（${SEG_NOTE[k]}）` : '')
 
 function SegmentTable({ segments, thresholds }) {
   const keys = SEG_ORDER.filter(k => segments[k])
@@ -25,7 +27,7 @@ function SegmentTable({ segments, thresholds }) {
         <thead><tr><th>期間</th><th className="num">年化主動<Sub>門檻 ≥ {pct(thresholds?.ann_active, 0)}</Sub></th><th className="num">資訊比率<Sub>≥ {thresholds?.info_ratio}</Sub></th><th className="num">組合年化</th><th className="num">0050 年化</th><th className="num">追蹤誤差</th><th className="num">相對最大落後</th><th className="num">月勝率</th><th className="num">年換手</th><th className="num">實驗 #</th></tr></thead>
         <tbody>{keys.map(k => { const s = segments[k]; const m = s.metrics || {}; return (
           <tr key={k} style={{ background: k === 'live' ? 'var(--blue-soft)' : undefined }}>
-            <td style={{ whiteSpace: 'nowrap' }}><strong>{SEG_LABEL[k]}</strong><Sub>{s.period_start} ～ {s.period_end}{m.months ? ` · ${m.months} 個月` : ''}</Sub></td>
+            <td style={{ whiteSpace: 'nowrap' }}><strong>{segName(k, s)}</strong><Sub>#{s.experiment_n}{s.tag_label ? ` · ${s.tag_label}` : ''} · {s.period_start} ～ {s.period_end}{m.months ? ` · ${m.months} 個月` : ''}</Sub></td>
             <td className="num"><strong className={tone(m.ann_active)}>{pct(m.ann_active)}</strong></td>
             <td className="num">{num(m.info_ratio)}</td>
             <td className="num">{pct(m.cagr_port, 1)}</td><td className="num">{pct(m.cagr_bench, 1)}</td>
@@ -105,24 +107,24 @@ export default function OfficialStrategy() {
         </div>
         <div className="stat-grid">
           {['full', 'holdout', 'live'].filter(k => seg[k]).map(k => { const m = seg[k].metrics || {}; return (
-            <div className="stat-tile" key={k}><div className="k">{SEG_LABEL[k]}</div><div className="v"><span className={tone(m.ann_active)}>{pct(m.ann_active)}</span></div><div className="s">年化主動 · IR {num(m.info_ratio)} · {seg[k].period_start} ～ {seg[k].period_end}</div></div>) })}
+            <div className="stat-tile" key={k}><div className="k">{segName(k, seg[k])}</div><div className="v"><span className={tone(m.ann_active)}>{pct(m.ann_active)}</span></div><div className="s">年化主動 · IR {num(m.info_ratio)} · {seg[k].period_start} ～ {seg[k].period_end}</div></div>) })}
           <div className="stat-tile"><div className="k">紙上帳戶（實際執行）</div><div className="v">{paper?.days ? <span className={tone(paper.active_return)}>{pct(paper.active_return)}</span> : '–'}</div><div className="s">{paper?.days ? `對 0050，${paper.days} 個交易日` : data.paper?.opened ? '已開戶，等第一份清單成交' : '未開戶'}</div></div>
         </div>
-        <div className="note-box">保留期（2024-10 起）只開這一次，數字凍結、不再重跑；「全期間至今」是同一組參數每天收盤後重算到最新行情，會隨新資料變。紙上帳戶是引擎真的照清單執行的結果，和回測曲線不是同一條線。</div>
+        <div className="note-box">保留期（2024-10 起）只開這一次，數字凍結、不再重跑；「{live?.segment_label || '實單'}」是同一組參數每天收盤後重算到最新行情的那一列（run #{live?.id ?? o.live_run_id}，月調倉頁實驗日誌裡的段別同名），會隨新資料變、不算新實驗。紙上帳戶是引擎真的照它的清單執行的結果，和這條回測曲線不是同一條線。</div>
       </div>
 
       <div className="card" style={{ marginBottom: '1.1rem' }}>
-        <div className="card-header"><span className="card-title">淨值曲線：組合 vs 0050 vs 大盤（{live?.period_start} ~ {live?.period_end}，每日更新）</span>{live?.metrics ? <span className="muted" style={{ fontSize: '.82rem' }}>年化 {pct(live.metrics.cagr_port, 1)} 對 {pct(live.metrics.cagr_bench, 1)} · 最大回撤 {pct(live.metrics.mdd_port, 1)} 對 {pct(live.metrics.mdd_bench, 1)}</span> : null}</div>
+        <div className="card-header"><span className="card-title">{live?.segment_label || '實單'}淨值曲線：組合 vs 0050 vs 大盤（{live?.period_start} ~ {live?.period_end}，每日更新）</span>{live?.metrics ? <span className="muted" style={{ fontSize: '.82rem' }}>年化 {pct(live.metrics.cagr_port, 1)} 對 {pct(live.metrics.cagr_bench, 1)} · 最大回撤 {pct(live.metrics.mdd_port, 1)} 對 {pct(live.metrics.mdd_bench, 1)}</span> : null}</div>
         <NavRangeChart series={data.live_series} periodStart={live?.period_start} periodEnd={live?.period_end} extraPresets={[['保留期', '2024-10-01', live?.period_end]]} />
       </div>
 
       <div className="card" style={{ marginBottom: '1.1rem' }}>
-        <div className="card-header"><span className="card-title">三段指標</span><Sub>開發期與驗證期是候選階段的紀錄；保留期是升格時開的那一次；全期間至今每日重算</Sub></div>
+        <div className="card-header"><span className="card-title">各段指標</span><Sub>開發期與驗證期是候選階段的紀錄；保留期是升格時開的那一次；{live?.segment_label || '實單'}（run #{live?.id ?? '–'}）每日重算</Sub></div>
         <SegmentTable segments={seg} thresholds={data.thresholds} />
       </div>
 
       <div className="two-col" style={{ marginBottom: '1.1rem' }}>
-        <div className="card"><div className="card-header"><span className="card-title">逐年主動報酬（全期間至今）</span></div><div style={{ padding: '.5rem 1.25rem 1rem' }}><YearlyTable yearly={live?.metrics?.yearly_active} /></div></div>
+        <div className="card"><div className="card-header"><span className="card-title">逐年主動報酬（{live?.segment_label || '實單'}，全期間至今）</span></div><div style={{ padding: '.5rem 1.25rem 1rem' }}><YearlyTable yearly={live?.metrics?.yearly_active} /></div></div>
         <div className="card"><div className="card-header"><span className="card-title">本月清單</span><Sub>引擎照這份下單</Sub></div><CurrentList list={data.current_list} /></div>
       </div>
     </>
