@@ -1,10 +1,10 @@
 # 交接筆記
 
-**更新：** 2026-10-18（Iteration 85 第十一代跑完、未提交：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
+**更新：** 2026-10-18（Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 85（未提交）：使用者「継續找不同種的月調倉方案」→ 文獻第五批 4 篇（Papers.md 第十一節 P77～P80）＋第十一代四條（`AI/experiments/iter85_hypothesis.md` 15:11 登記、15:12 起跑；跑前只看列 `iter85-rows`）：`nsblf` 單獨 #109 −2.10%（關閉）、`win3+mom+nsblf` #110 **+11.57%／0.906** → valid #113 **+15.24%／1.048**（候選 #38 +15.71%／1.085，低 0.47 pp、歷來最接近）、`indlead` 單獨 #111 −1.36%（關閉）、`win3+mom+indlead` #112 **+10.27%／0.834** → valid #114 +14.78%／1.05（低 0.93 pp、與候選重疊最低：持股交集 9／20）。N 108 → 114；候選不換；保留期未開。結果檔 `UnifiedModel/results/portfolio_iter85_shortflow_indlead.md`、紀錄 `AI/Doc/Iterations/Iteration-85.md`。審查見「已完成」。
+Iteration 85（已提交 5f9f4ad）：使用者「継續找不同種的月調倉方案」→ 文獻第五批 4 篇（Papers.md 第十一節 P77～P80）＋第十一代四條（`AI/experiments/iter85_hypothesis.md` 15:11 登記、15:12 起跑；跑前只看列 `iter85-rows`）：`nsblf` 單獨 #109 −2.10%（關閉）、`win3+mom+nsblf` #110 **+11.57%／0.906** → valid #113 **+15.24%／1.048**（候選 #38 +15.71%／1.085，低 0.47 pp、歷來最接近）、`indlead` 單獨 #111 −1.36%（關閉）、`win3+mom+indlead` #112 **+10.27%／0.834** → valid #114 +14.78%／1.05（低 0.93 pp、與候選重疊最低：持股交集 9／20）。N 108 → 114；候選不換；保留期未開。結果檔 `UnifiedModel/results/portfolio_iter85_shortflow_indlead.md`、紀錄 `AI/Doc/Iterations/Iteration-85.md`。審查見「已完成」。
 （以下為 84）
 Iteration 84（已提交 6d3b8e3）：使用者「以目前新的股票資料，重新分析月調倉」→ 先分清 83 的資料變動哪些進月調倉（追蹤股 68 檔**不進**，股票池與訊號只讀全市場表；進的只有全市場 adj_close 三檔 2,331 列與 0050 基準，0050 對 #44 存的 1,635 點最大差 0.0005%），再把 14 列已登記 run（候選 #30／#38／#44、跨段候補 #87／#88、#90／#92、#94／#96、#106／#108、持有過 1529／2364 的 #54／#58／#62）用日誌參數原樣重算、不寫 `portfolio_runs`（同 `--attach-series` 慣例）：八項指標 112 格 111 格相同（#38 rel_mdd 0.01 pp 捨入，`iter84-mdd38`）、持股名單 9,639 筆全同；只驗這 14 列。結論：資料更新對月調倉沒有影響，候選不換、N 108、保留期未開。事前登記 `AI/experiments/iter84_hypothesis.md`、結果檔 `UnifiedModel/results/portfolio_iter84_data_refresh.md`、紀錄 `AI/Doc/Iterations/Iteration-84.md`。審查見「已完成」。
 （以下為 83）
@@ -190,7 +190,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 
 ## 下一步
 使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）六個跨段候補（新：#110／#113 驗證期差 −0.47 pp、#112／#114 差 −0.93 pp 但含池差；舊：#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選；（c）8913 除權息下限要不要放寬。沒有決定前，下一代候選：現金腿（P10／P12／P43，要先改引擎能持現金）、當沖比率表（P80，先建表不算 N）。
-使用者要做的：三個常駐工作已於 2026-10-18 14:19 全部重啟（MoneyCrawlerApi、MoneyApi 曾於 12:44 被關掉 95 分鐘；MoneyScheduler 19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa（收尾 70e98c4）；未 push。
+使用者要做的：MoneyCalendarApi（行事曆 API :5000）已於 2026-10-18 15:34 重啟（2026-10-15 03:32 起被關掉、calendar-api 502）；三個常駐工作已於 2026-10-18 14:19 全部重啟（MoneyCrawlerApi、MoneyApi 曾於 12:44 被關掉 95 分鐘；MoneyScheduler 19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa（收尾 70e98c4）；未 push。
 仍待：SUE 類訊號公告日過濾、`win3` 農曆年缺陷。
 
 ## 階段
