@@ -603,6 +603,44 @@ def test_margin_and_holding_signals_sir_dmargin_fhold_turnover_and_filters():
     assert ps.needs_holding('win3+mom+nsir') and ps.needs_holding('momlt') and not ps.needs_holding('win3+mom')
 
 
+def test_sblf_nsblf_flow_over_turnover_and_indlead_leaders_return_to_followers():
+    """第十一批（Iteration 85）：sblf ＝ 21 日 Σ(借券賣出 × 收盤) ÷ Σ 成交金額 %，nsblf 取負、沒掛表回空、缺太多天不給值；
+    indlead ＝ 產業內 60 日成交金額最大 3 檔的 21 日報酬平均給其他成員、領先股自己沒值、< 5 檔的產業沒值、沒產業欄位回空。"""
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    assert ps.signal_sblf(mkt, d).empty and ps.signal_nsblf(mkt, d).empty
+    days = mkt.adj.index
+    i = days.get_loc(d)
+    cols = mkt.close.columns
+    sold = pd.DataFrame(0.0, index=days, columns=cols)
+    sold.loc[:, '1111'] = 1000.0                                           # 每天 1,000 股
+    sold.loc[days[i + 1], '1111'] = 9e9                                    # d 之後不算
+    sold.loc[days[i - 20]:d, '3333'] = np.nan                              # 窗口內全缺 → 不給值
+    sold.loc[days[i - 20]:days[i - 15], '2222'] = np.nan                  # 缺 6 天（有值 15 < 16 ＝ int(21 × 0.8)）→ 不給值
+    mkt.margin = {'margin_balance': sold * 0, 'sbl_balance': sold * 0, 'sbl_sell': sold}
+    f = ps.signal_sblf(mkt, d)
+    win = slice(i - 20, i + 1)
+    expect = (1000.0 * mkt.close.iloc[win]['1111']).sum() / mkt.turnover.iloc[win]['1111'].sum() * 100
+    assert f['1111'] == pytest.approx(expect) and f['4444'] == 0.0
+    assert '2222' not in f.index and '3333' not in f.index
+    assert ps.signal_nsblf(mkt, d)['1111'] == pytest.approx(-expect)
+    assert ps.needs_margin('win3+mom+nsblf') and not ps.needs_holding('nsblf')
+    # indlead：8 檔同產業（成交金額依 _market 的 k 遞減：1000 最大）、2 檔另一產業、1 檔沒產業
+    stocks = tuple(f'{1000 + k}' for k in range(11))
+    meta = pd.DataFrame({'stock_id': list(stocks), 'listing_date': pd.NaT, 'delisted_date': pd.NaT,
+                         'industry_type': ['半導體業'] * 8 + ['航運業'] * 2 + [None]}).set_index('stock_id')
+    m2, _ = _market(n_days=300, start='2023-06-01', stocks=stocks, meta=meta)
+    il = ps.signal_indlead(m2, d)
+    j = m2.adj.index.get_loc(d)
+    lead = ['1000', '1001', '1002']
+    r = m2.adj.iloc[j][lead] / m2.adj.iloc[j - 21][lead] - 1
+    assert set(il.index) == set(stocks[3:8])                               # 領先股與航運、沒產業的都沒值
+    assert il['1005'] == pytest.approx(r.mean())
+    assert ps.signal_indlead(mkt, d).empty                                 # meta 沒有 industry_type
+    ids = pd.Index(stocks)
+    assert set(ps.scores_on('win3+mom+indlead', m2, sur_empty(), d, ids).index) == set(stocks[3:8])
+
+
 def sur_empty():
     return pd.DataFrame(columns=['stock_id', 'revenue_month', 'yoy', 'surprise', 'sue', 'announce_date', 'announce_ts', 'announce_source'])
 

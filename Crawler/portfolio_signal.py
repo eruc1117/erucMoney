@@ -696,9 +696,9 @@ def signal_ep(mkt: Market, d: pd.Timestamp) -> pd.Series:
 
 # ── 第十批（Iteration 82）：籌碼結構面——融資融券／借券（market_margin_daily）與外資持股／發行股數（market_foreign_holding_daily，Iteration 81）──
 
-MARGIN_COLS = ('margin_balance', 'sbl_balance')
+MARGIN_COLS = ('margin_balance', 'sbl_balance', 'sbl_sell')
 HOLDING_COLS = ('shares_issued', 'foreign_ratio')
-MARGIN_SIGNALS = ('nsir', 'momsx', 'ndmargin')
+MARGIN_SIGNALS = ('nsir', 'momsx', 'ndmargin', 'sblf', 'nsblf')
 MOMSX_SIR_CUT = 0.75     # momsx 排除 SIR 在全市場（有 mom 又有 sir 的股票）這個分位以上的；登記時原本是「排除 SIR > 0」，但候選池內 SIR = 0 只有 1%（sir-rows-82），跑之前改的
 HOLDING_SIGNALS = ('nsir', 'momsx', 'ndmargin', 'fhold', 'momlt')
 
@@ -721,7 +721,7 @@ def _load_wide(table: str, cols: tuple, start: date, end: date, extra_days: int)
 
 
 def load_margin(start: date, end: date, extra_days: int = 60) -> dict:
-    """market_margin_daily → {'margin_balance': 寬表, 'sbl_balance': 寬表}（股）。沒有信用交易資格的股票不在表裡 → 缺值。"""
+    """market_margin_daily → {'margin_balance': 寬表, 'sbl_balance': 寬表, 'sbl_sell': 寬表}（股）。沒有信用交易資格的股票不在表裡 → 缺值。"""
     return _load_wide('market_margin_daily', MARGIN_COLS, start, end, extra_days)
 
 
@@ -821,6 +821,62 @@ def signal_momlt(mkt: Market, d: pd.Timestamp) -> pd.Series:
     if both.sum() == 0:
         return pd.Series(dtype=float)
     return m[both & (tor <= tor[both].median())]
+
+
+# ── 第十一批（Iteration 85）：放空流量與產業領先股 ────────────────────────────
+
+INDLEAD_TOP = 3        # 每個產業的領先股數（60 日平均成交金額最大的幾檔）；登記時定、不調
+INDLEAD_DAYS = 21      # 領先股的報酬窗口（含訊號日），比照 fflow 的 21 日
+
+
+def signal_sblf(mkt: Market, d: pd.Timestamp, n: int = 21) -> pd.Series:
+    """借券賣出流量（P65 Lin, Ho & Ko 2023；P77 Wang, Yan & Zheng 2020：放空量 ÷ 成交量）：最近 n 日 Σ(借券賣出股數 × 收盤) ÷ Σ 成交金額（%）。
+    Market 沒有成交股數，和 `_flow` 一樣用金額近似；分子分母都要 ≥ 80% 的交易日有值；沒掛信用表回空。只用借券（法人為主，P67），融券不算。"""
+    margin = getattr(mkt, 'margin', None)
+    if not margin or 'sbl_sell' not in margin:
+        return pd.Series(dtype=float)
+    sl, _ = _window(mkt, d, n)
+    if sl is None:
+        return pd.Series(dtype=float)
+    days = mkt.adj.index[sl]
+    sold = margin['sbl_sell'].reindex(index=days, columns=mkt.close.columns)
+    px = mkt.close.loc[days]
+    tv = mkt.turnover.loc[days].where(lambda x: x > 0)
+    amt = sold * px
+    ok = (amt.count() >= int(n * 0.8)) & (tv.count() >= int(n * 0.8))
+    return (amt.sum() / tv.sum().replace(0, np.nan) * 100).where(ok).dropna()
+
+
+def signal_nsblf(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """負的借券賣出流量：被放空得少的排前面（P65／P77：放空流量高 → 之後報酬低）。"""
+    return -signal_sblf(mkt, d)
+
+
+def signal_indlead(mkt: Market, d: pd.Timestamp, top: int = INDLEAD_TOP, n: int = INDLEAD_DAYS) -> pd.Series:
+    """產業領先股的近月報酬給同產業的其他股票（P50 Hou 2007：同產業大公司領先小公司；P78 台股 1986～2006 週資料也成立）。
+    領先股 ＝ 產業內 60 日平均成交金額最大的 top 檔；值 ＝ 領先股最近 n 日（含 d）報酬的等權平均；領先股自己不給值；
+    產業要 ≥ INDUSTRY_MIN_MEMBERS 檔在市且 top 檔領先股都有報酬。分組與 `indmom` 同（`_industry_of`）。"""
+    ind = _industry_of(mkt, d)
+    if ind.empty:
+        return pd.Series(dtype=float)
+    sl, i = _window(mkt, d, n + 1)
+    if sl is None:
+        return pd.Series(dtype=float)
+    seg = mkt.adj.iloc[sl]
+    ret = seg.iloc[-1] / seg.iloc[0].where(seg.iloc[0] > 0) - 1
+    liq = mkt.liq.iloc[i - 1]
+    df = pd.DataFrame({'ind': ind, 'liq': liq.reindex(ind.index), 'ret': ret.reindex(ind.index)})
+    out = {}
+    for _, g in df.groupby('ind'):
+        if len(g) < INDUSTRY_MIN_MEMBERS:
+            continue
+        lead = g.dropna(subset=['liq', 'ret']).nlargest(top, 'liq')
+        if len(lead) < top:
+            continue
+        v = float(lead['ret'].mean())
+        for sid in g.index.difference(lead.index):
+            out[sid] = v
+    return pd.Series(out, dtype=float)
 
 
 def market_state_up(mkt: Market, d: pd.Timestamp, lookback_days: int = 252) -> Optional[bool]:
@@ -967,6 +1023,12 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
         return signal_fhold(mkt, d)
     if signal == 'momlt':
         return signal_momlt(mkt, d)
+    if signal == 'sblf':
+        return signal_sblf(mkt, d)
+    if signal == 'nsblf':
+        return signal_nsblf(mkt, d)
+    if signal == 'indlead':
+        return signal_indlead(mkt, d)
     raise ValueError(f'未知訊號 {signal}')
 
 

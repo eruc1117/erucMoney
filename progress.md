@@ -1,9 +1,11 @@
 # 交接筆記
 
-**更新：** 2026-10-18（Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
+**更新：** 2026-10-18（Iteration 85 第十一代跑完、未提交：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
+Iteration 85（未提交）：使用者「継續找不同種的月調倉方案」→ 文獻第五批 4 篇（Papers.md 第十一節 P77～P80）＋第十一代四條（`AI/experiments/iter85_hypothesis.md` 15:11 登記、15:12 起跑；跑前只看列 `iter85-rows`）：`nsblf` 單獨 #109 −2.10%（關閉）、`win3+mom+nsblf` #110 **+11.57%／0.906** → valid #113 **+15.24%／1.048**（候選 #38 +15.71%／1.085，低 0.47 pp、歷來最接近）、`indlead` 單獨 #111 −1.36%（關閉）、`win3+mom+indlead` #112 **+10.27%／0.834** → valid #114 +14.78%／1.05（低 0.93 pp、與候選重疊最低：持股交集 9／20）。N 108 → 114；候選不換；保留期未開。結果檔 `UnifiedModel/results/portfolio_iter85_shortflow_indlead.md`、紀錄 `AI/Doc/Iterations/Iteration-85.md`。審查見「已完成」。
+（以下為 84）
 Iteration 84（已提交 6d3b8e3）：使用者「以目前新的股票資料，重新分析月調倉」→ 先分清 83 的資料變動哪些進月調倉（追蹤股 68 檔**不進**，股票池與訊號只讀全市場表；進的只有全市場 adj_close 三檔 2,331 列與 0050 基準，0050 對 #44 存的 1,635 點最大差 0.0005%），再把 14 列已登記 run（候選 #30／#38／#44、跨段候補 #87／#88、#90／#92、#94／#96、#106／#108、持有過 1529／2364 的 #54／#58／#62）用日誌參數原樣重算、不寫 `portfolio_runs`（同 `--attach-series` 慣例）：八項指標 112 格 111 格相同（#38 rel_mdd 0.01 pp 捨入，`iter84-mdd38`）、持股名單 9,639 筆全同；只驗這 14 列。結論：資料更新對月調倉沒有影響，候選不換、N 108、保留期未開。事前登記 `AI/experiments/iter84_hypothesis.md`、結果檔 `UnifiedModel/results/portfolio_iter84_data_refresh.md`、紀錄 `AI/Doc/Iterations/Iteration-84.md`。審查見「已完成」。
 （以下為 83）
 Iteration 83（已提交 d1835fa）：使用者「候選不換，都先列出。然後先補更多家的股票資料」→ 追蹤股清單 `stock_info.is_tracking` 26 → 68 檔（0050 成分股 50 檔裡新增 42 家，MoneyDJ 持股 2026-09-30、代碼對 `market_universe` 逐檔查）：FinMind 回補行情 233,107／籌碼 142,685／外資持股 208,953 列（126 次呼叫、失敗 0、未觸額度）；對照全市場表發現 FinMind 的「權」列參考價＝前收（2890 2026-10-07 45.40／45.40，交易所 45.40／44.97）→ 事件表改用交易所檔重寫（2018 起 13,469＋217 筆；2000～2017 13,376＋179 筆）、`_refresh_adj_close` 不再打 FinMind；新檔 `tracked_sync.py` 每日 18:43 從三張全市場表補 FinMind 漏掉的列（兩來源 2018 起逐列對照：收盤、法人、持股 100% 相同、adj_close 100%）。不碰回測：N 108、候選不換、保留期未開。紀錄 `AI/Doc/Iterations/Iteration-83.md`。MOPS 重大訊息 42 檔 2023-09 起回補完成（08:16～10:39，16,138 則、user_news +15,681、失敗 0）。減資 factor 上限 5 → 20（2408 2014-09 減資九成是真的事件）。
@@ -47,6 +49,7 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
+- （85）AI/experiments/iter85_hypothesis.md、iter85_rows.py、iter85_run.py、iter85_results.py、iter85_nosearch.py、iter85_dev.log、iter85_valid.log；UnifiedModel/results/portfolio_iter85_shortflow_indlead.md、portfolio_109～114_*.md；portfolio_runs #109～#114；Crawler/portfolio_signal.py（`signal_sblf`／`nsblf`／`indlead`、`MARGIN_COLS`）、tests/test_portfolio.py（+1）；AI/Doc/Papers.md（第五節第十一代、第六節、第十一節 P77～P80）、Iterations/Iteration-85.md、README
 - （84）AI/experiments/iter84_hypothesis.md（登記 14:38＋附錄）、iter84_inputs.py、iter84_recompute.py、iter84_mdd38.py、iter84_calendar.py；UnifiedModel/results/portfolio_iter84_data_refresh.md；Crawler/logs/iter84_recompute.log（不進 git）；AI/Doc/Iterations/Iteration-84.md、README
 - （83）AI/experiments/iter83_rebuild_adj.py、iter83_rebuild_adj_evidence.py（adj_close 重建）；Crawler/tracked_sync.py、tests/test_tracked_sync.py（1 項，db）、scheduler.py（`job_tracked_sync` 18:43、`_refresh_adj_close` 只重建）、scrapers/exchange_daily.py（減資檔去重）、rebuild_adj_close.py（減資上限 20）、tests/test_scheduler.py、test_market_data.py（+1）、test_upsert.py（+1）、tests/helpers/db_setup.py；AI/experiments/iter83_compare.py、iter83_freshness.py、iter83_restore_events.py、iter83_evidence.py；Crawler/logs/backfill_prices_iter83.log、backfill_dividend_iter83.log、rebuild_adj_iter83.log、restore_events_iter83.log、backfill_mops_iter83.log；AI/Doc/DataSources.md、DB.md（§2.1）、README.md；AI/Doc/Iterations/Iteration-83.md
 - （82）AI/experiments/iter82_hypothesis.md（登記 03:27＋附錄 05:18）、iter82_grid.json、iter82_results.py、iter82_sir_rows.py、iter82_signal_hunks.txt、iter82_dev.log、iter82_valid.log；UnifiedModel/results/portfolio_iter82_chips.md；portfolio_runs #103～#108；Crawler/portfolio_signal.py（`MOMSX_SIR_CUT`、`signal_momsx`）、tests/test_portfolio.py；AI/Doc/Iterations/Iteration-82.md、README、Papers.md（第五節第十代、第六節、P62／P65～P68／P70～P72）
@@ -85,6 +88,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
 
 ## 已完成
+- 第十一代（85）：iter85-prereg-sha256／mtime（15:11:54，跑前）；iter85-rows 過（池內借券賣出流量 ＝0 只 0.3～2.4%、產業 ≥ 5 檔涵蓋 80～87%）；pytest-portfolio-85 38 過；iter85-dev 過（#109～#112）；iter85-valid-nsblf（#113）、iter85-valid-indlead（#114）過；iter85-nosearch 過（#109 之前無 sblf／indlead 列）；iter85-results 過（ρ(nsblf, nsir) 0.36、ρ(nsblf, mom) 0.38、ρ(indlead, mom) −0.01；前 20 重疊 14／20 與 9／20）。pytest-85 283 過。沒跑：jest、vite build（Node 與前端沒改）。
+- 審查（85）：strategy-critic-85 PASS（無前視、valid 各一次且規則事前、N 記對、同結構同成本；必改兩條：45 次試驗、indlead 池縮小的混淆，已改）；evidence-reviewer-85 三輪 57/1/5 → 25/1/2 → 7/0/0 PASS（留兩條 unresolved：第一次 pytest 輸出、WebSearch 摘要未另存）。
 - 資料更新重算（84）：iter84-prereg-sha256／mtime（14:38:09，重算前）；iter84-inputs 過（0050 淨值 1,635 點最大相對差 0.0005%、全市場 2018 起 adj NULL 0／≤0 0、N 108）；iter84-recompute-smoke 過（#38 0.2 分）；iter84-recompute 過（14 列 3.0 分：指標 111／112 格相同、持股名單 9,639 筆全同、N 108 → 108）；iter84-mdd38 過（#38 rel_mdd 未捨入 −0.166451 對 −0.166448）。沒跑：pytest、jest、vite build（沒改程式）。
 - 審查（84）：strategy-critic-84 PASS（無前視、成交時點同、驗證期未挑、save=False 沒寫表、不計 N 同意；兩條措辭已改）；evidence-reviewer-84 三輪 25/6/2 FAIL → 16/2/1 FAIL → 8/0/0 PASS（9,261→9,639、Iteration 71→48、「本來就不存在」改寫、rel_mdd 歸因 iter84-mdd38、12-31 查詢 iter84-calendar）。
 - adj_close 重建（83，2026-10-18 14:23）：adj-rebuild-dry-83 過（只讀試算：全市場 2,621 檔、有事件 2,144 檔，會變動的只有 1529 217 列、2364 908 列、3043 1,206 列）；adj-rebuild-83 過（`market_data.rebuild_adj()` 更新 2,331 列；1529 2018-12-12 adj 1.3518 → 12.2864、2364 2021-09-29 1.2635 → 9.9790）；adj-rebuild-evidence-83 過（三檔只在 #54／#58／#62 持股過、都在除權日之後；8913 2018-06-04 208 → 18.11 被下限略過；N 108）
@@ -123,6 +128,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 回放結論（59）：照單全收 +346%（0050 +189%）；停損 15／25／35% 都輸；限價 ±2% 只差 0.5%／年
 
 ## 決策
+- 2026-10-18（85）：第十一代只用借券賣出（法人）當放空流量、融券不加（P67，看列時定）；領先股 ＝ 產業內 60 日成交金額前 3 檔、窗口 21 日（登記時定，不試 1／5 檔與 63 日）；兩條相加開發期都超過 #30 → 各跑一次 valid；單獨兩條反向 → 家族關閉；候選不換，#110／#113 與 #112／#114 列為第五、六個跨段候補
 - 2026-10-18（84）：「重新分析」做成**原樣重算已登記的 run、不計 N**（同 `attach_series` 慣例：同一組參數沒有新的選擇自由度），不跑新訊號、不開保留期；若審查者認為該計 N，改記為新列、結論不變。追蹤股擴大不進月調倉，要讓新資料進研究得走全市場表路線（71／78／81 那樣）
 - 2026-10-18（使用者）：**全市場表 adj_close 重建**——減資 factor 上限放寬後 1529、2364、3043 三筆減資 factor ≥ 5 的 `market_daily_prices.adj_close` 依現行事件表重算（先只讀試算確認只動這三檔 2,331 列，再跑 `market_data.rebuild_adj()` 全市場）
 - 2026-10-18（使用者）：**候選不換、都先列出**——`fhold` 不另登記新假設、四個跨段候補（#106／#108、#94／#96、#90／#92、#87／#88）都不升格，留在「未解」；接著「先補更多家的股票資料」→ Iteration 83：追蹤股從 26 檔擴到 0050 成分股全部（新增 42 家）
@@ -156,6 +162,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - **8913 全銓租賃 2018-06-04 除權息 208 → 18.11 被 `load_events` 略過（83）**：factor 0.087 低於除權息下限 0.2，但市場收盤 208 → 19.90 是真的斷層，它 2018-06-04 以前的 `market_daily_prices.adj_close` 高十倍（該股 `market_type` NULL、2020-01-20 下市，池內大概碰不到）；要不要把除權息下限放寬或改用交易所參考價判定由使用者決定
 - 回測 #54、#58、#62（rev_accel／rev1m 家族 valid）持股過 1529 或 2364：adj_close 重建後若重跑，2364 的動能回看跨過 2021-10-08、排名可能略變；候選與 live 清單不受影響
 - 追蹤股 68 檔後第一個週日（2026-10-25）`job_weekly_forecast` 的執行時間要看；`job_news` 每小時 Yahoo RSS 68 條
+- **跨段候補第五、六個（85）**：`win3+mom+nsblf` #110 dev +11.57%／0.906、#113 valid +15.24%／1.048（候選 +15.71%／1.085，低 0.47 pp、IR 低 0.037；2024 贏 4.6 pp、2023 輸 5.0 pp；ρ(nsblf, mom) 0.38、持股交集 15／20，大半與候選選到同樣的股票）；`win3+mom+indlead` #112 +10.27%／0.834、#114 +14.78%／1.05（低 0.93 pp；ρ ≈ 0、交集 9／20、兩段追蹤誤差與落後都比候選小；**混有池差**：領先股自己與小產業成員永遠選不到，可選池約 197／270，要分離得另跑同池的 `win3+mom`）——換不換由使用者決定
 - **跨段候補第四個（82）**：`win3+mom+nsir` #106 dev +9.77%／0.852（候選 +8.64%／0.67）、#108 valid +13.97%／1.062（候選 +15.71%／1.085），兩段追蹤誤差與相對落後都比候選小；和 #94／#96、#90／#92、#87／#88 同型。候選不換（使用者 2026-10-17），列著。
 - **`fhold` #103 的共同窗口**：2018-11-12 起 +10.86%／1.550／TE 7.0%、2019 起 +8.95%／1.278，都高於候選；登記指標（全開發期含候選未進場的 2018-03～10）+6.01%／0.644 未超過，依規則沒跑 valid。要不要登記「`fhold` 對齊候選起點」或「`win3+mom+fhold`」為新假設（會跑 valid、N +1～2），由使用者決定。
 - 策略範本沒做：參數開放前端調（會變成調參）、多檔組合、比較表存檔；真實行情比較只有四檔一個期間，不能拿來選策略
@@ -182,7 +189,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
-使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）四個跨段候補（#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選——Iteration 84 重算後數字都沒變；（c）8913 除權息下限要不要放寬。沒有決定前，下一代從 Papers.md 第六節挑：放空流量（P65，`sbl_sell` 21 日累計，先只看列）。
+使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）六個跨段候補（新：#110／#113 驗證期差 −0.47 pp、#112／#114 差 −0.93 pp 但含池差；舊：#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選；（c）8913 除權息下限要不要放寬。沒有決定前，下一代候選：現金腿（P10／P12／P43，要先改引擎能持現金）、當沖比率表（P80，先建表不算 N）。
 使用者要做的：三個常駐工作已於 2026-10-18 14:19 全部重啟（MoneyCrawlerApi、MoneyApi 曾於 12:44 被關掉 95 分鐘；MoneyScheduler 19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa（收尾 70e98c4）；未 push。
 仍待：SUE 類訊號公告日過濾、`win3` 農曆年缺陷。
 
@@ -194,4 +201,4 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - [~] 階段 5 程式交易：引擎已啟動（紙上，停損 0、限價 ±2%）；凱基未接
 - [~] 階段 8 追蹤股擴大（83）：0050 成分股 68 檔追蹤，三張表從全市場表每日補齊、公司行動 2003 起用交易所檔；MOPS 42 檔回補完
 - [x] 階段 6 保留期：2026-10-11 開（#67 作廢、#69 重跑）：年化主動 −6.1%，**沒過門檻**
-- [~] 階段 7 文獻驅動研究：（84）資料更新後 14 列原樣重算持股名單全同、指標一格 0.01 pp 捨入、N 不動；第一代（Iteration 66，N 70～80）三條假設都沒超過候選；第二代（67，#81）三年期閘門不觸發；第三代（68，#82）營收條件動能沒過門檻；第四代（69，#83～85）資訊連續性、日內動能、中期動能都低於候選；第五代（70，#86～88）隔夜持續沒過門檻、**Amihud 非流動性開發期超過候選、驗證期過門檻但低於候選**；第六代（72）扣產業的個股動能、第七代（73）外資淨買超相加都是開發期超過候選、驗證期略輸；27 次試驗，有效實作 3 次開發期超過候選（#87、#90、#94）、乾淨的驗證期確認 0 次超過候選（#92 −0.5 pp、#96 −1.4 pp、#88 −1.6 pp）；第八代（78，#97～#98）波動處理的動能（除以波動、去極端波動）都低於候選、家族關閉；第九代（80，#99～#102）價值：殖利率單獨過門檻但低於候選、益本比反向、相加都拉低；第十代（82，#103～#108）籌碼結構面：放空反向相加 #106 開發期超過候選、驗證期 #108 過門檻低 1.7 pp（第四個），外資持股水準 #103 共同窗口超過候選、登記指標未過，其餘三條關閉；39 次試驗（N 70～108），有效實作 4 次開發期超過候選、乾淨驗證期 0 次；論文 76 篇；法人買賣超全市場表（71）、估值表（78）回補完成，融資融券／借券與外資持股／發行股數表（81）回補完成（2026-10-18 03:24／05:16）
+- [~] 階段 7 文獻驅動研究：（85）第十一代放空流量與產業領先股：相加兩條開發期超過候選、驗證期低 0.5／0.9 pp（第五、六個候補），單獨兩條反向關閉，45 次試驗（N 70～114）、相加開發期超過候選 6 次、乾淨驗證期 0 次、論文 80 篇；（84）資料更新後 14 列原樣重算持股名單全同、指標一格 0.01 pp 捨入、N 不動；第一代（Iteration 66，N 70～80）三條假設都沒超過候選；第二代（67，#81）三年期閘門不觸發；第三代（68，#82）營收條件動能沒過門檻；第四代（69，#83～85）資訊連續性、日內動能、中期動能都低於候選；第五代（70，#86～88）隔夜持續沒過門檻、**Amihud 非流動性開發期超過候選、驗證期過門檻但低於候選**；第六代（72）扣產業的個股動能、第七代（73）外資淨買超相加都是開發期超過候選、驗證期略輸；27 次試驗，有效實作 3 次開發期超過候選（#87、#90、#94）、乾淨的驗證期確認 0 次超過候選（#92 −0.5 pp、#96 −1.4 pp、#88 −1.6 pp）；第八代（78，#97～#98）波動處理的動能（除以波動、去極端波動）都低於候選、家族關閉；第九代（80，#99～#102）價值：殖利率單獨過門檻但低於候選、益本比反向、相加都拉低；第十代（82，#103～#108）籌碼結構面：放空反向相加 #106 開發期超過候選、驗證期 #108 過門檻低 1.7 pp（第四個），外資持股水準 #103 共同窗口超過候選、登記指標未過，其餘三條關閉；39 次試驗（N 70～108），有效實作 4 次開發期超過候選、乾淨驗證期 0 次；論文 76 篇；法人買賣超全市場表（71）、估值表（78）回補完成，融資融券／借券與外資持股／發行股數表（81）回補完成（2026-10-18 03:24／05:16）

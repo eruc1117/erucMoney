@@ -145,6 +145,17 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 | H24 動能 × 放空反向相加 | P67、P68、P66 | `win3+mom+nsir-t3-tsmcest`（排名平均） | #30 | #106 dev **+9.77%／0.852**／TE 11.5%／落後 −11.5%，兩項高於 #30 → valid 一次 #108 **+13.97%／1.062**／13.2%／−13.0%（#38 +15.71%／1.085／14.5%／−16.7%）：過門檻、低 1.7 pp；第四個「開發期超過、驗證期略低」的相加家族，列候補 |
 | H25 散戶融資反向 | P62 | `ndmargin-t3-tsmcest`（−融資餘額 21 日變動 ÷ 發行股數） | #30、#70 | #107 dev −1.85%／−0.151／落後 −21.5%：反向；關閉 |
 
+### 第十一代（Iteration 85，2026-10-18；放空流量與產業領先股）
+
+事前登記 `AI/experiments/iter85_hypothesis.md`（`checks.json` `iter85-prereg-mtime`、`iter85-prereg-sha256`），跑之前只看列（`iter85-rows`：池內借券賣出 21 日 ÷ 成交量 ＝0 的只 0.3～2.4%、有產業且成員 ≥ 5 的佔 80～87%）。
+
+| 假設 | 來源 | 設定 | 對照 | 結果 |
+|---|---|---|---|---|
+| H26 放空流量反向單獨 | P65、P77、P67 | `nsblf-t3-tsmcest`（−21 日借券賣出金額 ÷ 成交金額） | #70、#30 | #109 dev −2.10%／−0.188：反向；關閉 |
+| H27 放空流量反向相加 | 同上 | `win3+mom+nsblf-t3-tsmcest` | #30、#106 | #110 dev **+11.57%／0.906**（高於 #30 與 #106）→ valid #113 **+15.24%／1.048**（#38 +15.71%／1.085）：低 0.5 pp，第五個跨段候補、歷來最接近；ρ(nsblf, nsir) 0.36、ρ(nsblf, mom) 0.38 |
+| H28 產業領先股單獨 | P50、P78 | `indlead-t3-tsmcest`（產業前 3 大 21 日報酬給其他成員） | #70、#30 | #111 dev −1.36%／−0.14：反向；關閉 |
+| H29 產業領先股相加 | 同上 | `win3+mom+indlead-t3-tsmcest` | #30 | #112 dev **+10.27%／0.834** → valid #114 +14.78%／1.05：低 0.9 pp，第六個跨段候補、與候選最不像（ρ(indlead, mom) ≈ 0、持股交集 9／20） |
+
 ## 六、下一輪可登記的假設（還沒跑，不算 N）
 
 | 候選假設 | 來源 | 要先做的事 |
@@ -152,10 +163,10 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 | 動能 × 流動性 × 波動的交互（非線性） | P17 | 先做簡單的二維分組，不做 ML；`illiq`（#87）已經是一維的流動性傾斜 |
 | 動能季節性（年報截止後的月份） | P5 | 先讀全文確定月份定義 |
 | 波動管理／時間序列動能的現金腿 | P10、P12、P42、P43 | 引擎要先能持現金；尺度常數只在開發期定一次 |
-| 放空流量（借券當日賣出 21 日累計 ÷ 成交量） | P65 | `market_margin_daily` 有 `sbl_sell`；先看 21 日累計在候選池內的分佈（只看列）再登記 |
+| ~~放空流量~~ | P65 | 已登記 H26／H27（Iteration 85） |
 | 外資持股水準對齊候選起點（`fhold` 單獨從 2018-11 起、或 `win3+mom+fhold`） | P70 | #103 登記指標未過、共同窗口超過候選（Iteration 82）；是否登記新假設由使用者決定 |
 
-已關閉的家族（不再登記）：籌碼結構面的低週轉率動能（P72，`momlt` #104）、排除被放空股的動能（P68，`momsx` #105）、散戶融資反向（P62，`ndmargin` #107）、價值（交易所估值：殖利率 `dy` #99／#101、益本比 `ep` #100／#102；B/M 依 P59／P64 不試）、波動處理的動能（P51～P53、P56、P57：`vmom` #97、`momx` #98 都低於候選；`lowvol` 相加 #51／#60 亦然）、動能缺口閘門（P54；台灣證據為負 P55）、投信淨買超（P18，#95）、外資淨買超單獨（#93）、產業動能相加（P47，#89）、同月季節性（P31／P49，#91；1～3 個 lag 下沒有增量，等資料累積到 ≥ 5 年再看）、市場狀態閘門（P6／P7／P33）、以營收為條件的動能（P11）、隔夜／日內拆解（P26～P29；`imom` #84 與 `ovn1m` #86 都低於 `mom`，`omom` 反向訊號**未測、依判斷關閉**）、中期動能 12-7（P30；6-2 未跑）、資訊連續性相加（P25）。
+已關閉的家族（不再登記）：放空流量單獨（P65／P77，`nsblf` #109）、產業領先股單獨（P50／P78，`indlead` #111）、籌碼結構面的低週轉率動能（P72，`momlt` #104）、排除被放空股的動能（P68，`momsx` #105）、散戶融資反向（P62，`ndmargin` #107）、價值（交易所估值：殖利率 `dy` #99／#101、益本比 `ep` #100／#102；B/M 依 P59／P64 不試）、波動處理的動能（P51～P53、P56、P57：`vmom` #97、`momx` #98 都低於候選；`lowvol` 相加 #51／#60 亦然）、動能缺口閘門（P54；台灣證據為負 P55）、投信淨買超（P18，#95）、外資淨買超單獨（#93）、產業動能相加（P47，#89）、同月季節性（P31／P49，#91；1～3 個 lag 下沒有增量，等資料累積到 ≥ 5 年再看）、市場狀態閘門（P6／P7／P33）、以營收為條件的動能（P11）、隔夜／日內拆解（P26～P29；`imom` #84 與 `ovn1m` #86 都低於 `mom`，`omom` 反向訊號**未測、依判斷關閉**）、中期動能 12-7（P30；6-2 未跑）、資訊連續性相加（P25）。
 
 ## 七、預測模型（LSTM、跳空、波動率、新聞）的文獻
 
@@ -212,7 +223,7 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 | P47 | Moskowitz, T. J., & Grinblatt, M. (1999). Do Industries Explain Momentum? *Journal of Finance*, 54(4), 1249–1290. DOI 10.1111/0022-1082.00146。[IDEAS](https://ideas.repec.org/a/bla/jfinan/v54y1999i4p1249-1290.html)（摘要）；台灣二手：淡江 2011 碩論（1997–2010，三種動能都有顯著產業效果）、中央 2008 碩論（1992–2007，產業動能短中長期都顯著）[NCU](https://ir.lib.ncu.edu.tw/handle/987654321/12029) | 動能有很大一部分是產業層級的；產業動能單獨可獲利，控制產業後個股動能弱很多；一個月期最強、可持續一年 | 新成分 `indmom`（同產業 `mom` 等權平均，≥ 5 檔），`win3+mom+indmom`；`market_universe.industry_type` 上市 39 類、上櫃 32 類（**2026 年快照、沒有歷史版本**，回推 2018 是分類上的前視） | 已測 #89（dev +7.89%／0.624，低於候選）：產業動能當加分項沒有增量；產業那一塊在這個框架下是該扣的（見 P48） |
 | P48 | Grundy, B. D., & Martin, J. S. (2001). Understanding the Nature of the Risks and the Source of the Rewards to Momentum Investing. *Review of Financial Studies*, 14(1), 29–78. DOI 10.1093/rfs/14.1.29。[IDEAS](https://ideas.repec.org/a/oup/rfinst/v14y2001i1p29-78.html)（摘要） | 用「個股特有」報酬成分排名比用總報酬排名更賺；產業效果與橫斷面期望報酬差異不是動能的主因（與 P47 對立） | 新成分 `relmom` ＝ `mom` − `indmom`（用產業平均當個股特有成分的代理），`win3+relmom` | 已測 #90（dev +10.12%／0.785，兩項超過候選）、#92（valid +15.19%／1.07，與候選 #38 持平、落後較小）；與 `mom` ρ 0.95（構造使然）、持股交集 18／20，#92 是候選家族的第二次抽樣；產業分類是 2026 快照（見 P47）；目前最接近候選的一組，換不換由使用者決定 |
 | P49 | Keloharju, M., Linnainmaa, J. T., & Nyberg, P. (2016). Return Seasonalities. *Journal of Finance*, 71(4), 1557–1590. DOI 10.1111/jofi.12398。[NBER w20815](https://www.nber.org/papers/w20815.pdf)（摘要）；後續 Keloharju 等 (2021) *JFE*：季節性來自錯價、有反向的「其他月份」效果 | 用歷史同月報酬選股年化約 13%；異象組合、商品、國際指數、日頻都有 | 與 P31 同一假設；新成分 `seas`（前 1～3 年同調倉月累積異常報酬平均），`win3+mom+seas`。2018 起的資料只有 1～3 個 lag | 已測 #91（dev +0.37%／0.03，沒過門檻）：1～3 個 lag 下沒有增量，`seas` 與 `mom` ρ 0.16；等資料累積再說 |
-| P50 | Hou, K. (2007). Industry Information Diffusion and the Lead-Lag Effect in Stock Returns. *Review of Financial Studies*, 20(4), 1113–1138. DOI 10.1093/revfin/hhm003。[IDEAS](https://ideas.repec.org/a/oup/rfinst/v20y2007i4p1113-1138.html)（摘要） | 大公司領先小公司主要發生在同產業內；壞消息反應慢的那一邊更明顯；小、冷門產業更強 | 訊號 ＝ 同產業流動性最大幾檔上個月的報酬，給其他成員；要先定義「領先股」（前 3 檔？）才能登記，門檻是參數 | 待測（下一代；先把 P47／P48 跑完） |
+| P50 | Hou, K. (2007). Industry Information Diffusion and the Lead-Lag Effect in Stock Returns. *Review of Financial Studies*, 20(4), 1113–1138. DOI 10.1093/revfin/hhm003。[IDEAS](https://ideas.repec.org/a/oup/rfinst/v20y2007i4p1113-1138.html)（摘要） | 大公司領先小公司主要發生在同產業內；壞消息反應慢的那一邊更明顯；小、冷門產業更強 | 訊號 ＝ 同產業流動性最大幾檔上個月的報酬，給其他成員；要先定義「領先股」（前 3 檔？）才能登記，門檻是參數 | 已測 #111（單獨反向）、#112／#114（相加：開發期超過候選、驗證期低 0.9 pp）（Iteration 85） |
 | P46 | Chang, C.-Y. (2011). The relationship between the 52-week high of an individual stock and stock market index level: Evidence from Taiwan. *Journal of International Financial Markets, Institutions and Money*, 21(1), 14–27. [IDEAS](https://ideas.repec.org/a/eee/intfin/v21y2011i1p14-27.html)（只有書目，摘要沒讀到）；另有 *IJBESAR* 16(1) 2023「52 週高的移動對台股動能利潤的影響」[PDF](https://ijbesar.ihu.gr/docs/volume16_issue1/16_01_07.pdf) | 台股 52 週高效應與大盤水位有關（2023 那篇：調整 52 週高的更新方式可提高動能利潤，限於效率較低的市場） | P45 的台灣證據；`hi52` 已測且弱 | 不測（背景） |
 
 ## 九、文獻第三批（Iteration 78，2026-10-17 WebSearch；全部只讀到摘要與二手整理，標「摘要」）
@@ -258,7 +269,7 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 
 | # | 論文 | 說的事 | 對專案的意思 | 狀態 |
 |---|---|---|---|---|
-| P65 | Lin, C., Ho, H.-W., & Ko, K.-C. (2023). Shorting flows and return predictability in Taiwan. *Pacific-Basin Finance Journal*, 77, 101816. DOI 10.1016/j.pacfin.2022.101816。[IDEAS](https://ideas.repec.org/a/eee/pacfin/v77y2023ics0927538x22001111.html)（摘要） | 延伸 Wang 等 (2020)：短期與長期放空流量在台股都強力預測未來報酬，即使有平盤下不得放空與漲跌幅限制；放空者帶長期資訊 | 放空流量＝借券賣出（法人）與融券（散戶）的「流量」，和餘額水準不同；本輪先建餘額與每日賣出的表，流量窗口（21 日）比照 `fflow` | 待資料補齊（`market_margin_daily` 有 `sbl_sell`，Iteration 82 未登記，第六節） |
+| P65 | Lin, C., Ho, H.-W., & Ko, K.-C. (2023). Shorting flows and return predictability in Taiwan. *Pacific-Basin Finance Journal*, 77, 101816. DOI 10.1016/j.pacfin.2022.101816。[IDEAS](https://ideas.repec.org/a/eee/pacfin/v77y2023ics0927538x22001111.html)（摘要） | 延伸 Wang 等 (2020)：短期與長期放空流量在台股都強力預測未來報酬，即使有平盤下不得放空與漲跌幅限制；放空者帶長期資訊 | 放空流量＝借券賣出（法人）與融券（散戶）的「流量」，和餘額水準不同；本輪先建餘額與每日賣出的表，流量窗口（21 日）比照 `fflow` | 已測 #109（單獨反向）、#110／#113（相加：開發期超過候選、驗證期低 0.5 pp）（Iteration 85） |
 | P66 | Hu, O., Huang, Z., & Liao, B.-S. (2009). Short sale and stock returns: Evidence from the Taiwan Stock Exchange. *Quarterly Review of Economics and Finance*, 49(3), 1146–1158。[IDEAS](https://ideas.repec.org/a/eee/quaeco/v49y2009i3p1146-1158.html)（摘要） | 證交所 1991-01～2004-09：被放空最重的股票有顯著負的風險調整報酬，持有期從一個月拉到一年後縮小、不顯著；以週轉率代理意見分歧時高估持續；高相對放空＋融資時可持續一年 | 「相對放空餘額」（融券餘額 ÷ 發行股數）是負向訊號；一個月持有期剛好是月調倉 | 已測 #106（`nsir` 相加） |
 | P67 | TEJ 因子研究：放空情緒因子 SIR（Part 1，網路文章，2025）。[LINE Today 轉載](https://today.line.me/tw/v3/article/nXPL0pD) | SIR ＝ 借券賣出餘額市值 ÷ 總市值；引李志宏等 (2017)、丁碧慧等 (2018)：散戶融券像噪音交易者、法人借券才預示負報酬；2013-01～2025-07 上市櫃：SIR＝0 的一組（約 25% 股票）1～21 日報酬高於最高組（價差 −3.2～−4.0 bp／日）；全市場 IC 只有 21 日顯著（−0.0068）；**中大型股 SIR 高→報酬低，小型股相反**（軋空） | 用借券不用融券當主訊號；候選池是流動性前 300（中大型），方向對；「SIR＝0 當過濾」比排序更有用（同 P56 的過濾思路） | 已測 #106／#108（`win3+mom+nsir` dev +9.77%／valid +13.97%，候補） |
 | P68 | TEJ 因子研究：SIR × 52 週高點動能（Part 2，網路文章，2025）。[LINE Today 轉載](https://today.line.me/tw/v3/article/NvVY151) | 2013-01～2025-07、上市櫃普通股、月初再平衡、等權 50 檔、含手續費稅與 1 檔滑價：純 52 週高動能年化 12.70%／Sharpe 1.011；動能 × SIR 反向排名合成 16.41%／1.646；**排除 SIR > 0 再取動能前 50：21.69%／1.832**（大盤含息 13.61%／0.869） | 直接可比的設計：月調倉、等權、含成本；它的「排除被放空股」是一條新假設（過濾），和我們的 `win3+mom` 可以相加也可以過濾；數字是廠商回測、未經同儕審查 | 已測 #105（`momsx`，排除改分位）、#106（相加） |
@@ -282,3 +293,14 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 | P76 | 台大碩士論文（2016，2004～2013）：股價低於面額（10 元）之後三年、低於淨值之後兩年有超額報酬。[NTU](https://tdr.lib.ntu.edu.tw/handle/123456789/19416) | 「破淨」是價值家族的 B/M 端，P59／P64 說台灣 B/M 不是好代理 | 估值表有淨值比；價值家族已關閉，不重開 | 不登記 |
 
 本批 12 篇（P65～P76）。狀態「待資料」7 列（P65～P68 放空、P70～P72 持股水準與週轉率），對應下一代要登記的四條假設（放空一條 P67／P68、散戶融資一條 P62、外資持股水準一條 P70、低週轉率動能一條 P72）；本輪建的表：`market_margin_daily`（融資／融券／借券賣出，兩市）、`market_foreign_holding_daily`（發行股數、外資持股，兩市）。
+
+## 十一、文獻第五批（Iteration 85，2026-10-18 WebSearch；全部只讀到摘要與二手整理，標「摘要」）
+
+| # | 論文 | 說的事 | 對專案的意思 | 狀態 |
+|---|---|---|---|---|
+| P77 | Wang, X., Yan, X. (S.), & Zheng, L. (2020). Shorting flows, public disclosure, and market efficiency. *Journal of Financial Economics*, 135(1), 191–212. DOI 10.1016/j.jfineco.2019.05.018。[IDEAS](https://ideas.repec.org/a/eee/jfinec/v135y2020i1p191-212.html)、[Lehigh PDF](https://www.lehigh.edu/~xuy219/research/Short_Final_Version.pdf)（摘要） | 美股 2010～2015 FINRA 每日放空量公開後，放空流量（放空量 ÷ 成交量）仍預測之後約一年的低報酬；長窗口流量比短窗口有資訊、短窗口的異常流量不預測 | P65 的台股版延伸自它；我們的 `sblf` 用 21 日借券賣出金額 ÷ 成交金額（長窗口版 63 日沒登記、不試） | 已測 #109～#113（Iteration 85） |
+| P78 | 台大碩士論文：Hou (2007) 方法在台灣——1986～2006 證交所週報酬，同產業內大公司報酬顯著領先小公司，產業內的領先落後顯著強於跨產業。[NTU](https://tdr.lib.ntu.edu.tw/jspui/handle/123456789/37601)（摘要）；另一篇台灣研究：控制規模後高成交量組合領先低成交量組合，非同步交易不是主因（[IDEAS](https://ideas.repec.org/a/eee/empfin/v11y2004i5p709-731.html)） | P50 在台股成立的直接證據，但樣本到 2006 年、未出版 | 領先股用「成交金額最大」而不是市值（第二篇說成交量才是領先的那一邊；我們也沒有市值表進 Market） | 已測 #111～#114（Iteration 85） |
+| P79 | Bui, D. G., Kong, D.-R., Lin, C.-Y., & Lin, T.-C. (2023). Momentum in machine learning: Evidence from the Taiwan stock market. *Pacific-Basin Finance Journal*, 82, 102178。[NYCU](https://scholar.nycu.edu.tw/en/publications/momentum-in-machine-learning-evidence-from-the-taiwan-stock-marke/)（摘要） | 86 個異象變數進 ML 多空組合，台股月報酬 1.2～1.5%；動能類變數排在最重要的預測因子裡——即使台灣常被說成「動能失效」的市場 | 支持候選以動能為主幹；ML 選股是 P17 的方向，要 CPCV（P16），這輪不做 | 不測（背景） |
+| P80 | Cheng 等 (2023). 台灣放寬當沖後的當沖影響與獲利性。*Heliyon*。[PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC10102421/)（摘要）；Yang 等 (2020) 當沖對市場品質：價差變寬、波動升、深度增。*JDQS*。[Emerald](https://emerald.com/insight/content/doi/10.1108/JDQS-06-2020-0015/full/html) | 高市場成交量帶動高當沖量、反向不成立；當沖是噪音交易的一種 | 「當沖比率」是散戶注意力的代理、可能是反向訊號，但要交易所逐股當沖統計表（TWSE／TPEX 每日有），庫裡沒建；先不登記 | 待資料（逐股當沖統計表未建） |
+
+本批 4 篇（P77～P80）。登記假設四條（H26～H29，Iteration 85）、待資料一項（P80 當沖表）、背景一篇（P79）。
