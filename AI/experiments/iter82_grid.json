@@ -1,0 +1,7 @@
+[
+  {"signal": "fhold", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "momlt", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "momsx", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "win3+mom+nsir", "tranches": 3, "tsmc_weight": "est"},
+  {"signal": "ndmargin", "tranches": 3, "tsmc_weight": "est"}
+]

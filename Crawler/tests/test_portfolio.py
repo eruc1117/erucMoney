@@ -563,6 +563,46 @@ def test_dy_and_ep_read_valuation_on_signal_day_with_lag_and_exclusions():
     assert set(ps.scores_on('dy', mkt, sur_empty(), d, ids).index) == {'1111', '2222', '4444'}
 
 
+def test_margin_and_holding_signals_sir_dmargin_fhold_turnover_and_filters():
+    """籌碼結構面訊號（Iteration 82）：sir ＝ 借券餘額 ÷ 發行股數 %，nsir 取負；momsx 排除 SIR 在全市場前四分之一（這裡只有 1111 > 0，門檻是 0）；ndmargin ＝ −(融資餘額 21 日變動 ÷ 發行股數)；fhold 水準；tor ＝ 21 日均成交金額 ÷ 市值；momlt 排除週轉率中位數以上；沒掛表回空。"""
+    mkt, _ = _market(n_days=300, start='2023-06-01')
+    d = pd.Timestamp('2024-07-11')
+    for fn in (ps.signal_nsir, ps.signal_momsx, ps.signal_ndmargin, ps.signal_fhold, ps.signal_momlt, ps.signal_tor):
+        assert fn(mkt, d).empty
+    days = mkt.adj.index
+    i = days.get_loc(d)
+    cols = mkt.close.columns
+    issued = pd.DataFrame(1_000_000.0, index=days, columns=cols)
+    fr = pd.DataFrame(10.0, index=days, columns=cols)
+    fr.loc[d, '1111'] = 55.5
+    sbl = pd.DataFrame(0.0, index=days, columns=cols)
+    sbl.loc[d, '1111'] = 20_000.0                                           # 2%
+    sbl.loc[:, '3333'] = np.nan                                             # 沒有信用交易資格
+    mb = pd.DataFrame(50_000.0, index=days, columns=cols)
+    mb.loc[days[i - 20]:, '2222'] = 60_000.0                                # 21 日前是 50,000、之後 60,000：增加 10,000 股 = 1%
+    mb.loc[days[i + 1], '2222'] = 999_999.0                                 # d 之後不算
+    mkt.margin = {'margin_balance': mb, 'sbl_balance': sbl}
+    mkt.holding = {'shares_issued': issued, 'foreign_ratio': fr}
+    sir = ps.signal_sir(mkt, d)
+    assert sir['1111'] == pytest.approx(2.0) and sir['2222'] == 0.0 and '3333' not in sir.index
+    assert ps.signal_nsir(mkt, d)['1111'] == pytest.approx(-2.0)
+    mom = ps.signal_mom(mkt, d)
+    mx = ps.signal_momsx(mkt, d)
+    assert '1111' not in mx.index and '3333' not in mx.index and '2222' in mx.index and mx['2222'] == mom['2222']
+    dm = ps.signal_ndmargin(mkt, d)
+    assert dm['2222'] == pytest.approx(-1.0) and dm['1111'] == 0.0
+    assert ps.signal_fhold(mkt, d)['1111'] == 55.5
+    tor = ps.signal_tor(mkt, d)
+    expect = mkt.turnover.iloc[i - 20:i + 1]['1111'].mean() / (mkt.close.iloc[i]['1111'] * 1_000_000.0) * 100
+    assert tor['1111'] == pytest.approx(expect)
+    issued.loc[:, '4444'] = 1e12                                            # 市值極大 → 週轉率極低 → momlt 留下
+    issued.loc[:, '1111'] = 1.0                                             # 週轉率極高 → momlt 排除
+    lt = ps.signal_momlt(mkt, d)
+    assert '4444' in lt.index and '1111' not in lt.index and lt['4444'] == mom['4444']
+    assert ps.needs_margin('win3+mom+nsir') and not ps.needs_margin('win3+mom+fhold')
+    assert ps.needs_holding('win3+mom+nsir') and ps.needs_holding('momlt') and not ps.needs_holding('win3+mom')
+
+
 def sur_empty():
     return pd.DataFrame(columns=['stock_id', 'revenue_month', 'yoy', 'surprise', 'sue', 'announce_date', 'announce_ts', 'announce_source'])
 

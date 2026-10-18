@@ -133,17 +133,29 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 | H20 益本比（單獨） | P59 | `ep-t3-tsmcest`（1 ÷ 本益比，虧損股沒有值） | #30、#70 | #100 dev −3.33%／−0.401：反向，相對最大落後 −21.8% |
 | H20 益本比（相加） | P58 | `win3+mom+ep-t3-tsmcest` | #30 | #102 dev +0.29%／0.027：沒過門檻 |
 
+### 第十代（Iteration 82，2026-10-18；籌碼結構面，Iteration 81 的兩張表）
+
+事前登記 `AI/experiments/iter82_hypothesis.md` 存檔於 2026-10-18 03:27:30（`checks.json` `iter82-prereg-mtime`、`iter82-prereg-sha256`），第一批 03:27:31 起跑；第二批跑之前只看列（`sir-rows-82`：候選池內借券餘額 = 0 的股票日只有 1.0%）把 `momsx` 從「排除 SIR > 0」改成「排除全市場前四分之一」（附錄，`iter82-prereg-sha256-amended` 05:18:52），第二批 05:18:53 起跑、沒看過報酬。
+
+| 假設 | 來源 | 設定 | 對照 | 結果 |
+|---|---|---|---|---|
+| H21 外資持股水準 | P70、P71 | `fhold-t3-tsmcest`（交易所外資持股比率） | #30、#70 | #103 dev +6.01%／0.644／TE 9.3%：過兩項門檻、兩項低於 #30 → 依規則不跑 valid；但 2018-03 就進場，共同窗口 2018-11-12 起 +10.86%／1.550／TE 7.0%、2019 起 +8.95%／1.278 都高於 #30（診斷，不是 valid 條件）；要不要登記新假設由使用者決定 |
+| H22 低週轉率動能 | P72 | `momlt-t3-tsmcest`（`mom` 排除週轉率全市場中位數以上） | #70、#30 | #104 dev +1.86%／0.196：池內只剩 24～57 檔大型股；關閉 |
+| H23 排除被放空股的動能 | P68 | `momsx-t3-tsmcest`（`mom` 排除 SIR 全市場前四分之一，跑前改） | #70、#30 | #105 dev +6.42%／0.544：高於 #70、低於 #30；關閉 |
+| H24 動能 × 放空反向相加 | P67、P68、P66 | `win3+mom+nsir-t3-tsmcest`（排名平均） | #30 | #106 dev **+9.77%／0.852**／TE 11.5%／落後 −11.5%，兩項高於 #30 → valid 一次 #108 **+13.97%／1.062**／13.2%／−13.0%（#38 +15.71%／1.085／14.5%／−16.7%）：過門檻、低 1.7 pp；第四個「開發期超過、驗證期略低」的相加家族，列候補 |
+| H25 散戶融資反向 | P62 | `ndmargin-t3-tsmcest`（−融資餘額 21 日變動 ÷ 發行股數） | #30、#70 | #107 dev −1.85%／−0.151／落後 −21.5%：反向；關閉 |
+
 ## 六、下一輪可登記的假設（還沒跑，不算 N）
 
 | 候選假設 | 來源 | 要先做的事 |
 |---|---|---|
-| 動能 × 週轉率（低週轉率的贏家） | P32 | 要流通股數（FinMind `TaiwanStockShareholding` 或月報）才算得出週轉率 |
 | 動能 × 流動性 × 波動的交互（非線性） | P17 | 先做簡單的二維分組，不做 ML；`illiq`（#87）已經是一維的流動性傾斜 |
 | 動能季節性（年報截止後的月份） | P5 | 先讀全文確定月份定義 |
 | 波動管理／時間序列動能的現金腿 | P10、P12、P42、P43 | 引擎要先能持現金；尺度常數只在開發期定一次 |
-| 散戶融資餘額變動（反向） | P62 | 要先補全市場融資融券餘額表（證交所 MI_MARGN、櫃買融資融券餘額），同交易所檔路線 |
+| 放空流量（借券當日賣出 21 日累計 ÷ 成交量） | P65 | `market_margin_daily` 有 `sbl_sell`；先看 21 日累計在候選池內的分佈（只看列）再登記 |
+| 外資持股水準對齊候選起點（`fhold` 單獨從 2018-11 起、或 `win3+mom+fhold`） | P70 | #103 登記指標未過、共同窗口超過候選（Iteration 82）；是否登記新假設由使用者決定 |
 
-已關閉的家族（不再登記）：價值（交易所估值：殖利率 `dy` #99／#101、益本比 `ep` #100／#102；B/M 依 P59／P64 不試）、波動處理的動能（P51～P53、P56、P57：`vmom` #97、`momx` #98 都低於候選；`lowvol` 相加 #51／#60 亦然）、動能缺口閘門（P54；台灣證據為負 P55）、投信淨買超（P18，#95）、外資淨買超單獨（#93）、產業動能相加（P47，#89）、同月季節性（P31／P49，#91；1～3 個 lag 下沒有增量，等資料累積到 ≥ 5 年再看）、市場狀態閘門（P6／P7／P33）、以營收為條件的動能（P11）、隔夜／日內拆解（P26～P29；`imom` #84 與 `ovn1m` #86 都低於 `mom`，`omom` 反向訊號**未測、依判斷關閉**）、中期動能 12-7（P30；6-2 未跑）、資訊連續性相加（P25）。
+已關閉的家族（不再登記）：籌碼結構面的低週轉率動能（P72，`momlt` #104）、排除被放空股的動能（P68，`momsx` #105）、散戶融資反向（P62，`ndmargin` #107）、價值（交易所估值：殖利率 `dy` #99／#101、益本比 `ep` #100／#102；B/M 依 P59／P64 不試）、波動處理的動能（P51～P53、P56、P57：`vmom` #97、`momx` #98 都低於候選；`lowvol` 相加 #51／#60 亦然）、動能缺口閘門（P54；台灣證據為負 P55）、投信淨買超（P18，#95）、外資淨買超單獨（#93）、產業動能相加（P47，#89）、同月季節性（P31／P49，#91；1～3 個 lag 下沒有增量，等資料累積到 ≥ 5 年再看）、市場狀態閘門（P6／P7／P33）、以營收為條件的動能（P11）、隔夜／日內拆解（P26～P29；`imom` #84 與 `ovn1m` #86 都低於 `mom`，`omom` 反向訊號**未測、依判斷關閉**）、中期動能 12-7（P30；6-2 未跑）、資訊連續性相加（P25）。
 
 ## 七、預測模型（LSTM、跳空、波動率、新聞）的文獻
 
@@ -232,8 +244,41 @@ valid 規則統一為「過門檻且年化主動與 IR **兩項都**超過 #30�
 
 | # | 論文 | 說的事 | 對專案的意思 | 狀態 |
 |---|---|---|---|---|
-| P62 | Ting, P.-H., Lu, C.-Y., & Chou, P.-H. (2018). Margin trading, differences of opinion, and stock returns. *Academia Economic Papers*, 46(3), 323–366。[CGU](https://pure.lib.cgu.edu.tw/en/publications/margin-trading-differences-of-opinion-and-stock-returns/)（摘要） | 把 Miller (1977) 意見分歧擴到融資融券：散戶融資買進對應正的錯價、之後報酬低；融券賣出相反；台股全部上市股 2006～2015 月頻率，證據強 | 「融資餘額增加」是反向訊號——和外資流量（P18）不同種的籌碼面；資料在證交所 MI_MARGN、櫃買融資融券餘額表，每日全市場，同一條交易所檔路線 | 要先補融資表（下一個資料工作） |
+| P62 | Ting, P.-H., Lu, C.-Y., & Chou, P.-H. (2018). Margin trading, differences of opinion, and stock returns. *Academia Economic Papers*, 46(3), 323–366。[CGU](https://pure.lib.cgu.edu.tw/en/publications/margin-trading-differences-of-opinion-and-stock-returns/)（摘要） | 把 Miller (1977) 意見分歧擴到融資融券：散戶融資買進對應正的錯價、之後報酬低；融券賣出相反；台股全部上市股 2006～2015 月頻率，證據強 | 「融資餘額增加」是反向訊號——和外資流量（P18）不同種的籌碼面；資料在證交所 MI_MARGN、櫃買融資融券餘額表，每日全市場，同一條交易所檔路線 | 已測 #107（`ndmargin` dev −1.85%，關閉） |
 | P63 | Gorman, L. R., Akhtar, F., Durand, R. B., & Gould, J. (2022). It could be overreaction, not lottery-seeking, that is behind Bali, Cakici and Whitelaw's MAX effect. *Critical Finance Review*。[PDF](https://cfr.ivo-welch.info/published/papers/gorman2021could.pdf)；台灣：政大碩士論文（2024，上市櫃 2007～2022）[NCCU](https://nccur.lib.nccu.edu.tw/handle/140.119/151541) | MAX 效應（P38）是事件後的過度反應、不限於事前像樂透的股票；台灣的碩士論文說 MAX 效應顯著但**主要在小型股** | 候選池是流動性前 300，不是小型股；且 P4 的台灣版（漲停頻率）已在第一批記過；高 MAX 股在 H17 的波動排除裡大多會被拿掉 | 不登記 |
 | P64 | Chen, A.-S., & Tu, E. H.（2002）。The determinants for stock returns in emerging markets: the case of Taiwan. *Studies in Economics and Finance*。[Emerald](https://emerald.com/insight/content/doi/10.1108/eb028765/full/html)（摘要） | 台股規模或 B/M 單獨都不解釋報酬，兩者合併才顯著 | 再一個「B/M 在台灣不是好代理」的證據，和 P59 一起決定不用 B/M | 不登記 |
 
 本批 14 篇（P51～P64）。已登記假設兩條（H16、H17）、資料前置一項（H18 估值表）、下一個資料工作一項（P62 融資表）、不登記五篇（P54、P55、P61 待財報、P63、P64）。
+
+## 十、文獻第四批（Iteration 81，2026-10-17 WebSearch；全部只讀到摘要與二手整理，標「摘要」）
+
+使用者：「繼續上網找論文或是任何資料，實作交易策略或是月調倉方案，找更多種方案」。找的是**籌碼與結構面**（動能、價值兩個家族都已關閉）：散戶融資／融券、法人借券放空、外資持股水準、週轉率、市值、除權息、董監持股、庫藏股、低價股。交易所每日全市場檔能給的：融資融券（證交所 MI_MARGN、櫃買 margin/balance）、借券賣出餘額（證交所 TWT93U、櫃買 margin/sbl）、外資持股與**發行股數**（證交所 MI_QFIIS、櫃買 insti/qfii）——發行股數讓週轉率與市值也算得出來。
+
+### 十之一、放空與融資（籌碼的另一面）
+
+| # | 論文 | 說的事 | 對專案的意思 | 狀態 |
+|---|---|---|---|---|
+| P65 | Lin, C., Ho, H.-W., & Ko, K.-C. (2023). Shorting flows and return predictability in Taiwan. *Pacific-Basin Finance Journal*, 77, 101816. DOI 10.1016/j.pacfin.2022.101816。[IDEAS](https://ideas.repec.org/a/eee/pacfin/v77y2023ics0927538x22001111.html)（摘要） | 延伸 Wang 等 (2020)：短期與長期放空流量在台股都強力預測未來報酬，即使有平盤下不得放空與漲跌幅限制；放空者帶長期資訊 | 放空流量＝借券賣出（法人）與融券（散戶）的「流量」，和餘額水準不同；本輪先建餘額與每日賣出的表，流量窗口（21 日）比照 `fflow` | 待資料補齊（`market_margin_daily` 有 `sbl_sell`，Iteration 82 未登記，第六節） |
+| P66 | Hu, O., Huang, Z., & Liao, B.-S. (2009). Short sale and stock returns: Evidence from the Taiwan Stock Exchange. *Quarterly Review of Economics and Finance*, 49(3), 1146–1158。[IDEAS](https://ideas.repec.org/a/eee/quaeco/v49y2009i3p1146-1158.html)（摘要） | 證交所 1991-01～2004-09：被放空最重的股票有顯著負的風險調整報酬，持有期從一個月拉到一年後縮小、不顯著；以週轉率代理意見分歧時高估持續；高相對放空＋融資時可持續一年 | 「相對放空餘額」（融券餘額 ÷ 發行股數）是負向訊號；一個月持有期剛好是月調倉 | 已測 #106（`nsir` 相加） |
+| P67 | TEJ 因子研究：放空情緒因子 SIR（Part 1，網路文章，2025）。[LINE Today 轉載](https://today.line.me/tw/v3/article/nXPL0pD) | SIR ＝ 借券賣出餘額市值 ÷ 總市值；引李志宏等 (2017)、丁碧慧等 (2018)：散戶融券像噪音交易者、法人借券才預示負報酬；2013-01～2025-07 上市櫃：SIR＝0 的一組（約 25% 股票）1～21 日報酬高於最高組（價差 −3.2～−4.0 bp／日）；全市場 IC 只有 21 日顯著（−0.0068）；**中大型股 SIR 高→報酬低，小型股相反**（軋空） | 用借券不用融券當主訊號；候選池是流動性前 300（中大型），方向對；「SIR＝0 當過濾」比排序更有用（同 P56 的過濾思路） | 已測 #106／#108（`win3+mom+nsir` dev +9.77%／valid +13.97%，候補） |
+| P68 | TEJ 因子研究：SIR × 52 週高點動能（Part 2，網路文章，2025）。[LINE Today 轉載](https://today.line.me/tw/v3/article/NvVY151) | 2013-01～2025-07、上市櫃普通股、月初再平衡、等權 50 檔、含手續費稅與 1 檔滑價：純 52 週高動能年化 12.70%／Sharpe 1.011；動能 × SIR 反向排名合成 16.41%／1.646；**排除 SIR > 0 再取動能前 50：21.69%／1.832**（大盤含息 13.61%／0.869） | 直接可比的設計：月調倉、等權、含成本；它的「排除被放空股」是一條新假設（過濾），和我們的 `win3+mom` 可以相加也可以過濾；數字是廠商回測、未經同儕審查 | 已測 #105（`momsx`，排除改分位）、#106（相加） |
+| P69 | 丁碧慧、呂振揚、周宵凰 (2018)——即 P62（Ting, Lu & Chou，*Academia Economic Papers* 46(3)）；台灣碩士論文：券資比（2020，淡江）。[Airiti](https://www.airitilibrary.com/Article/Detail/U0002-2806202013545200) | 券資比低的股票風險調整後報酬較高、多頭市場不顯著 | 券資比（融券餘額 ÷ 融資餘額）是另一個比例；P66／P67 的方向一致，本輪只登記一個放空指標避免重搜 | 不另登記 |
+
+### 十之二、外資持股水準、週轉率、市值（發行股數表）
+
+| # | 論文 | 說的事 | 對專案的意思 | 狀態 |
+|---|---|---|---|---|
+| P70 | Huang, R. D., & Shiu, C.-Y. (2009). Local Effects of Foreign Ownership in an Emerging Financial Market: Evidence from Qualified Foreign Institutional Investors in Taiwan. *Financial Management*, 38(3), 567–602. DOI 10.1111/j.1755-053X.2009.01048.x。[NCCU](https://nccur.lib.nccu.edu.tw/handle/140.119/153836)（摘要） | 外資持股比率高的股票報酬高於低的，控制出口、規模、透明度後仍成立；外資持股與 R&D、當期與後續績效正相關——外資有長期資訊優勢 | 「持股水準」和 P18／`fflow` 的「流量」不同：`fhold`（外資持股比率）與其一個月變動 `dfhold` | 已測 #103（`fhold` dev +6.01%；共同窗口超過候選，待使用者決定） |
+| P71 | Turnover Premium, Foreign Institutional Ownership, and Time-Varying Risk Premium in Taiwan Equity Markets (2015). *Journal of Reviews on Global Economics*（作者未查到）。[摘要](https://www.pms.lifescienceglobal.com/index.php/jrge/article/view/2772) | 外資持股比率與週轉率溢酬反向（過度自信解釋） | 週轉率要發行股數；和 P70 一起從同一張表算 | 已測 #103（持股水準）、#104（週轉率） |
+| P72 | 林彧生 (2022)。交易量與價格動能策略（政大碩士論文）。[NCCU](https://thesis.lib.nccu.edu.tw/detail/68e7c725711d610067dba6e519d38183/)；另一篇政大論文（1981～2021）：台股動能只在低週轉率股票顯著、高週轉率不顯著（與美國相反）。[NCCU](https://thesis.lib.nccu.edu.tw/detail/57102db1a375b7c4b7f2bd8d1dca5f25/) | Lee & Swaminathan 2000（P32）的台灣版：中期持有低週轉率的贏家報酬較高；多低量贏家空高量輸家月超額 1.27～1.33% | `mom` 限制在低週轉率（候選池內週轉率中位數以下）或 `mom` 與低週轉率排名平均——P32 原本因沒有發行股數而擱置，MI_QFIIS 解決 | 已測 #104（`momlt` 沒過門檻，關閉） |
+| P73 | 台股規模效應：Nottingham 碩士論文（1989～2008）說沒有規模效應、大型股勝；1971～1993 最小五分位有顯著超額報酬（*Applied Economics Letters* 1997）。[eprints](https://eprints.nottingham.ac.uk/22871/)、[IDEAS](https://ideas.repec.org/a/taf/apeclt/v4y1997i1p7-12.html) | 台灣規模溢酬證據前後不一；2018 以後沒有期刊證據 | 市值 ＝ 發行股數 × 收盤；候選池已是流動性前 300，`illiq`（#87）已經是一種小型傾斜；不另登記純規模 | 不登記 |
+
+### 十之三、事件與公司行為（要 MOPS，暫不建）
+
+| # | 論文 | 說的事 | 對專案的意思 | 狀態 |
+|---|---|---|---|---|
+| P74 | 劉永欽、陳香如、何杰霖（研討會）：2012～2022 上市櫃除權息前動能較強的股票首次填息較久、回升後持有期報酬較高；台大碩士論文（2018）認購權證除權息前後價格行為。[NTU](https://tdr.lib.ntu.edu.tw/jspui/handle/123456789/69575) | 除權息前後有可預測的價格行為，但和動能、隱含波動、流動性有關，不是殖利率高低 | 要除息日（stock_dividend_result 只有 26 檔；交易所 TWT49U 除權息預告表全市場有，`market_data` 已抓作還原價）——「除息前 N 日買、填息後賣」是事件型，不是月調倉排名 | 未登記（事件型） |
+| P75 | 庫藏股買回宣告：台灣多篇碩士論文（中央、淡江、交大）宣告後正異常報酬、BHAR 長期顯著、買回比例越高越顯著。[NYCU](https://ir.lib.nycu.edu.tw/handle/11536/140822) | 公司行為事件 | 要 MOPS 重大訊息；未建 | 未登記 |
+| P76 | 台大碩士論文（2016，2004～2013）：股價低於面額（10 元）之後三年、低於淨值之後兩年有超額報酬。[NTU](https://tdr.lib.ntu.edu.tw/handle/123456789/19416) | 「破淨」是價值家族的 B/M 端，P59／P64 說台灣 B/M 不是好代理 | 估值表有淨值比；價值家族已關閉，不重開 | 不登記 |
+
+本批 12 篇（P65～P76）。狀態「待資料」7 列（P65～P68 放空、P70～P72 持股水準與週轉率），對應下一代要登記的四條假設（放空一條 P67／P68、散戶融資一條 P62、外資持股水準一條 P70、低週轉率動能一條 P72）；本輪建的表：`market_margin_daily`（融資／融券／借券賣出，兩市）、`market_foreign_holding_daily`（發行股數、外資持股，兩市）。

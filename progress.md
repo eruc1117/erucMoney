@@ -1,9 +1,13 @@
 # 交接筆記
 
-**更新：** 2026-10-17（Iteration 80；79 是另一個 session、已提交 49be73b；78、80 未提交）
+**更新：** 2026-10-18（Iteration 81、82 未提交；78、80 已提交 0ff11b4）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
+Iteration 82（未提交）：第十代籌碼結構面五條（`AI/experiments/iter82_hypothesis.md` 03:27 登記；`momsx` 跑前依列改分位，附錄 05:18）：`fhold` #103 dev +6.01%／0.644（登記指標低於候選、共同窗口 2018-11-12 起 +10.86%／1.550 高於候選）、`momlt` #104 +1.86%／0.196、`momsx` #105 +6.42%／0.544、`win3+mom+nsir` #106 **+9.77%／0.852** → valid #108 **+13.97%／1.062**（候選 #38 +15.71%／1.085）、`ndmargin` #107 −1.85%。N 102 → 108；候選不換；保留期未開。結果檔 `UnifiedModel/results/portfolio_iter82_chips.md`、紀錄 `AI/Doc/Iterations/Iteration-82.md`。審查見「已完成」。
+（以下為 81）
+Iteration 81（未提交）：使用者「繼續上網找論文或是任何資料，實作交易策略或是月調倉方案，找更多種方案」→ 文獻第四批 12 篇（Papers.md 第十節 P65～P76：放空流量／借券 SIR、散戶融資反向、外資持股水準、低週轉率動能）＋兩張籌碼結構面全市場表（不算 N）：`market_margin_daily`（證交所 MI_MARGN＋TWT93U、櫃買 margin/balance＋margin/sbl：融資融券＋借券賣出，統一存股、融券餘額兩表對位檢查）、`market_foreign_holding_daily`（證交所 MI_QFIIS、櫃買 insti/qfii：發行股數、外資持股、比率）；migration 030／031 已用 `lib/migrate.js` 套用、`margin_data.py`／`holding_data.py`、18:39／18:41 排程、tests +4、真實檔煙霧五天過。**回補進行中**（2026-10-18 01:13 兩條同時起跑；融資融券約 6.5 秒／日、外資持股約 3.7 秒／日，2,141 天）。N 102、候選不換。審查見「已完成」。
+（以下為 80）
 Iteration 80（未提交）：使用者「做」→ 第九代價值（估值表）：`dy` 單獨 #99 dev +4.12%／0.542（共同窗口 2018-11-12 起 +3.63%／0.622、2019 起 +2.34% 未過門檻；上櫃持股 2.8／20 含殖利率前視）、落後 −7.2% 開發期最小、追蹤誤差 7.6%、持股與候選交集中位數 0／20、ρ(mom, dy) −0.37，但年化主動只有候選一半；`win3+mom+dy` #101 +4.86%／0.431（風險降、報酬少 3.8 pp）；`ep` 單獨 #100 −3.33%／−0.401 反向、相加 #102 +0.29%。四條都沒兩項超過 #30，valid 不跑、價值家族關閉。點時性檢查（`val-pit-check-80`）：櫃買檔殖利率年初就印當年春天才決議的股利——`dy` 對上櫃股在 1～3 月為主、部分到 5 月有前視，#99／#101 是上界、關閉的結論不變；本益比兩市都點時。N 102、候選不換、保留期未開。審查見「已完成」。
 （以下為前一個）
 Iteration 79（已提交 49be73b、已 push；meeting_front_end 已提交 5065478、已 push；MoneyCrawlerApi 與 MoneyApi 已於 2026-10-17 重啟，端點實測 200；progress.md／README 本身因混有 78 的內容待 78 一起提交）：使用者「建立不同交易策略並進行測試」→ 十種交易策略範本搬到後端 `trading_presets.py` 成單一來源（六個舊模板＋買進持有／定期定額／季線趨勢／動能突破，金額是資金比例），`GET /trading/sim/presets`、`POST /trading/sim/presets/compare`、Node `/sim/presets`／`/sim/compare`，前端範本改從後端抓＋「比較全部策略」表；tests 5 項用 V 形合成行情驗每種照定義動作；真實行情四檔 2018-01～2024-09 的比較表在 `UnifiedModel/results/trading_presets_iter79.md`（一直在場的三種在三檔贏 0050、純擇時的五種四檔全輸、季線趨勢與定投在均線下只在 2603 贏）。交易模擬那條線、不寫 portfolio_runs、N 不動。**另一個 session 預告的估值訊號那輪請用 Iteration 80。**
@@ -39,6 +43,8 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
+- （82）AI/experiments/iter82_hypothesis.md（登記 03:27＋附錄 05:18）、iter82_grid.json、iter82_results.py、iter82_sir_rows.py、iter82_signal_hunks.txt、iter82_dev.log、iter82_valid.log；UnifiedModel/results/portfolio_iter82_chips.md；portfolio_runs #103～#108；Crawler/portfolio_signal.py（`MOMSX_SIR_CUT`、`signal_momsx`）、tests/test_portfolio.py；AI/Doc/Iterations/Iteration-82.md、README、Papers.md（第五節第十代、第六節、P62／P65～P68／P70～P72）
+- （81）Crawler/scrapers/exchange_daily.py（融資融券／借券／外資持股 fetch／parse、`merge_margin_sbl`、`drop_transfer_duplicates`）、margin_data.py（新）、holding_data.py（新）、scheduler.py（18:39、18:41）、tests/test_margin_holding.py（新，4 項）、tests/test_scheduler.py；Server/migrations/030_market_margin.sql、031_market_foreign_holding.sql、tests/db/migrations.test.js（31）；AI/Doc/Papers.md（第十節 P65～P76）、DataSources.md（兩列）、Iterations/Iteration-81.md、README；回補日誌 AI/experiments/iter81_margin_backfill.log、iter81_holding_backfill.log
 - （80）AI/experiments/iter80_hypothesis.md、iter80_grid.json、iter80_results.py、iter80_dev.log、iter80_signal_hunks.txt、iter80_data_queries.py、iter80_pit_check.py；AI/Doc/DataSources.md（估值列）、Server/migrations/029_market_valuation.sql（檔頭註解）、Crawler/valuation_data.py（docstring）；UnifiedModel/results/portfolio_iter80_value.md；portfolio_runs #99～#102；Crawler/portfolio_signal.py（`needs_valuation`、`load_valuation`、`_val_on`、`signal_dy`、`signal_ep`、`DY_MAX`、`VAL_MAX_LAG`）、portfolio_backtest.py（`run` 掛 `mkt.val`）、tests/test_portfolio.py（+1，36 項）；AI/Doc/Papers.md（第五節第九代、第六節、P58～P60）、Iterations/Iteration-80.md、README
 - （79）Crawler/trading_presets.py、tests/test_trading_presets.py（5 項）、api.py（兩個端點）；Server/routes/sim.js、tests/helpers/fastapi-mock.js、tests/http/sim.test.js（+2）；Screen/src/components/RuleBuilder.jsx、pages/TradingSim.jsx、services/api.js；meeting_front_end 同三檔；AI/experiments/iter79_presets.py → UnifiedModel/results/trading_presets_iter79.md；AI/Doc/Iterations/Iteration-79.md、README
 - （78）AI/experiments/iter78_hypothesis.md、iter78_grid.json、iter78_results.py、iter78_dev.log、iter78_signal_hunks.txt、iter78_valuation_backfill.log；UnifiedModel/results/portfolio_iter78_volmom.md；portfolio_runs #97～#98；Crawler/portfolio_signal.py（`MOMX_VOL_CUT`、`_mom_and_vol`、`signal_vmom`、`signal_momx`）、scrapers/exchange_daily.py（估值 fetch／parse／`_check_valuation`）、valuation_data.py（新）、scheduler.py（`job_valuation_daily` 18:37）、tests/test_portfolio.py（+1，35 項）、tests/test_valuation.py（新，3 項）、tests/test_scheduler.py；Server/migrations/029_market_valuation.sql、tests/db/migrations.test.js（29）；AI/Doc/Papers.md（第九節 P51～P64、第五節第八代、第六節）、DataSources.md、Iterations/Iteration-78.md、README
@@ -73,6 +79,12 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
 
 ## 已完成
+- 審查（82）：strategy-critic-82 PASS（方法乾淨；七條措辭——momlt「大型股」無數字、相加對排除基底不同、fhold 後續假設標事後、ndmargin 補共同窗口、sir 中位 265、試驗次數 39、補 backtest.py hunk——都已改）；evidence-reviewer-82 第一輪 49/5/1 FAIL（秒數、節數、中位、次數、單檔名）→ 第二輪 64/2/1 FAIL（progress.md 八節、階段 7 回補中已過期）→ 第三輪 13/0/0 PASS（checks.json 同名覆蓋，記最終結果）。
+- 第十代第二批與驗證期（82）：margin-check-81（1,959 檔、3,505,421 列、2,138 日、借券欄 100%、缺股票日 7.87%）；sir-rows-82（池內 SIR＝0 只 1.0%）→ `momsx` 跑前改分位（iter82-prereg-mtime-amended 05:18:52、-sha256-amended）；iter82-dev-margin：#105 `momsx` +6.42%／0.544、#106 `win3+mom+nsir` +9.77%／0.852／TE 11.5%／落後 −11.5%、#107 `ndmargin` −1.85%／−0.151；iter82-valid：#108 +13.97%／1.062／TE 13.2%／落後 −13.0%／月勝率 62%（#38 +15.71%／1.085／14.5%／−16.7%）；iter82-results（七節，含共同窗口：#103 2018-11-12 起 +10.86%／1.550、#106 +10.66%／1.333、#30 +9.27%／0.926）；iter82-git-hunks（三個 hunk 都在 697 行後）；runs-count-82（108／108）；pytest-portfolio-82b 37 過、pytest-82b 279 過。
+- 第十代第一批（82）：#103 `fhold` dev +6.01%／0.644／TE 9.3%／落後 −15.1%／換手 1.6／46 次調倉（2018-03-12 起）；#104 `momlt` +1.86%／0.196／TE 9.4%／落後 −11.5%（候選 #30 +8.64%／0.67／12.9%；`mom` #70 +5.96%／0.44／13.6%）。#103 過兩項門檻但年化主動與 IR 都低於 #30（兩項都略高於 #70），依登記規則不跑 valid；#104 兩項都低於 #70。登記 `iter82-prereg-mtime`（03:27:30）／`iter82-prereg-sha256` 記在 `iter82-dev-holding`（03:27:31 起）之前；N 102 → 104（`iter82_dev.log`）。
+- 外資持股回補完（81）：03:21 跑完 2,136 天 ＋ 2 天失敗（轉上市日 1795／8908 兩市重複列）→ 加 `drop_transfer_duplicates` 後 03:24 補回；holding-check-81：2,090 檔、3,816,161 列、2,138 個交易日、缺交易日 0、缺股票日 0.20%、比率異常 0；holding-pit-81：發行股數 9,147 次切換散在 2,024 個交易日、最多一天 49 檔、5 月最多，長榮 2022-09-20 減資當天切換——點時；pytest-margin-holding-81b 18 過。
+- 審查（81）：evidence-reviewer-81 三輪 37/4/6 → 11/2/0 → 5/2/0 FAIL——第一輪四條字句（低價股理由、「待資料」列數、列數範圍、略過列數）、第二輪「四條假設」與三處一致、第三輪移動目標數字與 P62 狀態欄，都在輪後改掉；補記 sched-proc-81、runs-count-81（checks.json 2026-10-18）
+- 籌碼結構面資料路線（81）：pytest-margin-holding-81 24 過、pytest-81 277 過、jest-migrations-81 4 過（31 個 migration）、migrate-030-031（`Applied: 030`、`031`）、margin-holding-smoke-81 五個日期（2018-01-03、2019-07-01、2021-06-01、2024-01-02、2026-10-16）融資融券上市 1,001～1,301／上櫃 635～918 列、借券欄 100%、外資持股上市 1,033～1,364／上櫃 746～894 列、休市回 0（checks.json 2026-10-18）；回補進行中；N 仍 102
 - 審查（80）：strategy-critic-80 三輪 FAIL → FAIL → FAIL（第一輪措辭與「TE 歷來最小」、第二輪要上櫃本益比全市場檢查／上櫃曝險／共同窗口、第三輪「2018-01-02 零檔」是空清單——都在輪後補了 val-pit-check-80b／80c 與結果檔第七八節）；evidence-reviewer-80 三輪 37/2/6 → 25/5/7 → 19/7/2 FAIL（第三輪：共同窗口 2018-11-12 起仍過門檻、只有 2019 起未過，標題與各處已改）；兩者的決定（價值家族關閉、候選不換）不受影響（checks.json 2026-10-17）
 - 第九代（80）：#99 `dy` +4.12%／0.542／TE 7.6%／落後 −7.2%／換手 2.63；#100 `ep` −3.33%／−0.401／−21.8%；#101 `win3+mom+dy` +4.86%／0.431／11.3%；#102 `win3+mom+ep` +0.29%／0.027（候選 #30 +8.64%／0.67、`mom` #70 +5.96%／0.44）；逐年 #99 2018（3 月起）+12.4%、2019 +5.1%、2020 +2.3%、2021 +0.6%；ρ(mom, dy) −0.37、ρ(mom, ep) −0.18；池內有 ep 的 252／270；前 20 重疊 7／8、持股交集單獨 0／20、相加 8／20；#99 持股名次中位數 191；估值表對前 300 缺列 0.03%、沒本益比 8.5%；valid 不跑；pytest-portfolio-80 39（test_portfolio 36 ＋ test_valuation 3）、pytest-80 273、iter80-dev、iter80-results、iter80-git-hunks 過（checks.json 2026-10-17）；N = 102
 - 策略範本（79）：pytest-79 272 過、jest-79 193 過（17 套）、presets-run-79 過、vite-build-79、mfe-build-79、mfe-eslint-79 過（checks.json 2026-10-17）；真實行情 40 格裡 11 格贏過 0050（+182.7%），均線進出／雙重確認／動能突破／RSI 反轉／停損停利四檔都沒贏；evidence-reviewer-79 第一輪 46/2/4 FAIL → 修六處（測試加 RSI 第 3 天／pnl<0／穿線日 RSI 41.7 斷言、腳本印合成 0050、措辭）後第二輪 55/0/1 PASS
@@ -100,6 +112,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 回放結論（59）：照單全收 +346%（0050 +189%）；停損 15／25／35% 都輸；限價 ±2% 只差 0.5%／年
 
 ## 決策
+- 2026-10-18（82）：`momsx` 在第二批跑之前依列（`sir-rows-82`）改成排除 SIR 全市場前四分之一（原登記「排除 SIR > 0」在池內只剩約 3 檔）；原 sha256 保留、附錄重記，沒看過第二批報酬。`fhold` #103 共同窗口超過候選但登記指標未過：不跑 valid、不改規則，列給使用者決定是否登記新假設。#106 兩項超過 #30 → 依登記跑一次 valid（#108）。
+- 2026-10-18（81）：籌碼結構面兩張表走交易所檔（同 71／78 路線）；融資融券統一存股、借券表沒列的股票借券欄 NULL 不補 0；外資持股比率存自己算的值並與交易所印的對位；migration 030／031 用 `lib/migrate.js` 套用不等 MoneyApi 重啟（同 78 的理由：讓回補今晚就跑）；下一代（82）從放空（借券 SIR）、散戶融資、持股水準／週轉率三組各登記一條、各一跑，登記前先查點時性（發行股數切換日分布）
 - 2026-10-17（使用者）：**候選不換**——`win3+mom+fflow`（#94／#96）、`win3+relmom`（#90／#92）、`win3+mom+illiq`（#87／#88）與 `dy` 單獨（#99）都不升格，**先全部列出**在「未解」當跨段候補；MoneyScheduler 已重啟（23:45，18:37 估值排程掛上）；Iteration 78、80 已提交
 - 2026-10-17（80）：價值（交易所估值）家族關閉——`dy` 單獨過門檻但不會成為候選（規則是兩項都超過 #30），不試殖利率區間、B/M、`dy+ep` 合併；殖利率 > 30% 當一次性股利不給值（看列定的，不看報酬）；虧損股在 `ep` 裡沒有值就不進排名（定義的一部分）；估值表留著，之後若用「殖利率當過濾」要另登記
 - 2026-10-17（79）：策略範本放後端當單一來源（前端六個寫死模板拿掉），金額寫成資金比例；範本只是常見做法的定義、不調參、不挑最好的；比較表是事後結果，放交易模擬頁，不進 portfolio_runs、不登記 Papers.md；與 Iteration 78 並行時只在 progress.md／README **加**自己的段落
@@ -125,6 +139,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 2026-10-09：引擎啟動（紙上）、停損 0、限價 ±2%；回放不寫 portfolio_runs；預測用候選回測推常態區間（caveat DSR）
 
 ## 未解
+- **跨段候補第四個（82）**：`win3+mom+nsir` #106 dev +9.77%／0.852（候選 +8.64%／0.67）、#108 valid +13.97%／1.062（候選 +15.71%／1.085），兩段追蹤誤差與相對落後都比候選小；和 #94／#96、#90／#92、#87／#88 同型。候選不換（使用者 2026-10-17），列著。
+- **`fhold` #103 的共同窗口**：2018-11-12 起 +10.86%／1.550／TE 7.0%、2019 起 +8.95%／1.278，都高於候選；登記指標（全開發期含候選未進場的 2018-03～10）+6.01%／0.644 未超過，依規則沒跑 valid。要不要登記「`fhold` 對齊候選起點」或「`win3+mom+fhold`」為新假設（會跑 valid、N +1～2），由使用者決定。
 - 策略範本沒做：參數開放前端調（會變成調參）、多檔組合、比較表存檔；真實行情比較只有四檔一個期間，不能拿來選策略
 - **SUE 類訊號的點時缺口**（Iteration 68 量到）：`signal_sue` 不檢查公告日，2024-04 起有精確公告日的月份有 10.4% 股票月反應日晚於訊號日（最高 2026-03 26.6%）；含營收成分的實驗都受影響（結果檔 portfolio_iter68_momrev.md 第五節印出 23 列）；不影響候選。修 `signal_sue` 要重跑 #53 系列算 N，由使用者決定
 - **`win3` 的農曆年缺陷**：三個「1～11 日」窗口各要 ≥ 3 個交易日，農曆年落在 2 月 1～10 日時（2019 年）2、3、4 月三個訊號日全空、候選不調倉抱舊持股；查過 2018-01～2024-09 只有 2019 年發生（2024 年 2 月窗口 3 天剛好夠；結果檔 portfolio_iter68_momrev.md 第三節）。改 `win3`（例如 min_count 降到 1 或窗口順延）等於改候選，由使用者決定
@@ -150,8 +166,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
-使用者：重啟 MoneyScheduler（18:37 估值排程）；commit Iteration 78、80（與另一個 session 的 79 分開）；決定候選與 #99 是否另外追蹤。
-沒有指示就做下一個資料前置（不算 N）：融資融券餘額全市場表（P62 Ting, Lu & Chou 2018：散戶融資買進→之後報酬低；證交所 MI_MARGN、櫃買融資融券餘額，同交易所檔路線，先登記定義再回補），回補完再登記第十代。
+使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）四個跨段候補（#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選。沒有決定前，下一代從 Papers.md 第六節挑：放空流量（P65，`sbl_sell` 21 日累計，先只看列）。
+使用者：重啟 MoneyScheduler（18:39／18:41）；commit Iteration 81。
 仍待：SUE 類訊號公告日過濾、`win3` 農曆年缺陷。
 
 ## 階段
@@ -161,4 +177,4 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - [~] 階段 4 紙上交易：模擬帳戶已開（2026-10-09），每日 18:40 結算，等每月清單累積
 - [~] 階段 5 程式交易：引擎已啟動（紙上，停損 0、限價 ±2%）；凱基未接
 - [x] 階段 6 保留期：2026-10-11 開（#67 作廢、#69 重跑）：年化主動 −6.1%，**沒過門檻**
-- [~] 階段 7 文獻驅動研究：第一代（Iteration 66，N 70～80）三條假設都沒超過候選；第二代（67，#81）三年期閘門不觸發；第三代（68，#82）營收條件動能沒過門檻；第四代（69，#83～85）資訊連續性、日內動能、中期動能都低於候選；第五代（70，#86～88）隔夜持續沒過門檻、**Amihud 非流動性開發期超過候選、驗證期過門檻但低於候選**；第六代（72）扣產業的個股動能、第七代（73）外資淨買超相加都是開發期超過候選、驗證期略輸；27 次試驗，有效實作 3 次開發期超過候選（#87、#90、#94）、乾淨的驗證期確認 0 次超過候選（#92 −0.5 pp、#96 −1.4 pp、#88 −1.6 pp）；第八代（78，#97～#98）波動處理的動能（除以波動、去極端波動）都低於候選、家族關閉；第九代（80，#99～#102）價值：殖利率單獨過門檻但低於候選、益本比反向、相加都拉低；33 次試驗，有效實作 3 次開發期超過候選、乾淨驗證期 0 次；論文 64 篇；法人買賣超全市場表（71）回補完成、估值表（78）回補完成
+- [~] 階段 7 文獻驅動研究：第一代（Iteration 66，N 70～80）三條假設都沒超過候選；第二代（67，#81）三年期閘門不觸發；第三代（68，#82）營收條件動能沒過門檻；第四代（69，#83～85）資訊連續性、日內動能、中期動能都低於候選；第五代（70，#86～88）隔夜持續沒過門檻、**Amihud 非流動性開發期超過候選、驗證期過門檻但低於候選**；第六代（72）扣產業的個股動能、第七代（73）外資淨買超相加都是開發期超過候選、驗證期略輸；27 次試驗，有效實作 3 次開發期超過候選（#87、#90、#94）、乾淨的驗證期確認 0 次超過候選（#92 −0.5 pp、#96 −1.4 pp、#88 −1.6 pp）；第八代（78，#97～#98）波動處理的動能（除以波動、去極端波動）都低於候選、家族關閉；第九代（80，#99～#102）價值：殖利率單獨過門檻但低於候選、益本比反向、相加都拉低；第十代（82，#103～#108）籌碼結構面：放空反向相加 #106 開發期超過候選、驗證期 #108 過門檻低 1.7 pp（第四個），外資持股水準 #103 共同窗口超過候選、登記指標未過，其餘三條關閉；39 次試驗（N 70～108），有效實作 4 次開發期超過候選、乾淨驗證期 0 次；論文 76 篇；法人買賣超全市場表（71）、估值表（78）回補完成，融資融券／借券與外資持股／發行股數表（81）回補完成（2026-10-18 03:24／05:16）

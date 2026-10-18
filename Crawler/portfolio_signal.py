@@ -694,6 +694,135 @@ def signal_ep(mkt: Market, d: pd.Timestamp) -> pd.Series:
     return 1.0 / pe
 
 
+# ── 第十批（Iteration 82）：籌碼結構面——融資融券／借券（market_margin_daily）與外資持股／發行股數（market_foreign_holding_daily，Iteration 81）──
+
+MARGIN_COLS = ('margin_balance', 'sbl_balance')
+HOLDING_COLS = ('shares_issued', 'foreign_ratio')
+MARGIN_SIGNALS = ('nsir', 'momsx', 'ndmargin')
+MOMSX_SIR_CUT = 0.75     # momsx 排除 SIR 在全市場（有 mom 又有 sir 的股票）這個分位以上的；登記時原本是「排除 SIR > 0」，但候選池內 SIR = 0 只有 1%（sir-rows-82），跑之前改的
+HOLDING_SIGNALS = ('nsir', 'momsx', 'ndmargin', 'fhold', 'momlt')
+
+
+def needs_margin(signal: str) -> bool:
+    return any(p in signal.split('+') for p in MARGIN_SIGNALS)
+
+
+def needs_holding(signal: str) -> bool:
+    return any(p in signal.split('+') for p in HOLDING_SIGNALS)
+
+
+def _load_wide(table: str, cols: tuple, start: date, end: date, extra_days: int) -> dict:
+    since = start - timedelta(days=extra_days)
+    with get_conn() as conn:
+        df = pd.read_sql(f"SELECT stock_id, trade_date, {', '.join(cols)} FROM {table} WHERE trade_date BETWEEN %s AND %s",
+                         conn, params=(since, end))
+    df['trade_date'] = pd.to_datetime(df['trade_date'])
+    return {c: df.pivot(index='trade_date', columns='stock_id', values=c).sort_index().astype(float) for c in cols}
+
+
+def load_margin(start: date, end: date, extra_days: int = 60) -> dict:
+    """market_margin_daily → {'margin_balance': 寬表, 'sbl_balance': 寬表}（股）。沒有信用交易資格的股票不在表裡 → 缺值。"""
+    return _load_wide('market_margin_daily', MARGIN_COLS, start, end, extra_days)
+
+
+def load_holding(start: date, end: date, extra_days: int = 60) -> dict:
+    """market_foreign_holding_daily → {'shares_issued': 寬表, 'foreign_ratio': 寬表}。"""
+    return _load_wide('market_foreign_holding_daily', HOLDING_COLS, start, end, extra_days)
+
+
+def _wide_on(mkt: Market, attr: str, col: str, d: pd.Timestamp, max_lag: int = VAL_MAX_LAG) -> pd.Series:
+    """訊號日 d 的那一列（缺就往前沿用最多 max_lag 個交易日）；沒掛表回空。盤後統計、訊號在 d 收盤、次日開盤成交。"""
+    tbl = getattr(mkt, attr, None)
+    if not tbl or col not in tbl:
+        return pd.Series(dtype=float)
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right'))
+    if i == 0:
+        return pd.Series(dtype=float)
+    lo = pd.Timestamp(mkt.days[max(i - 1 - max_lag, 0)])
+    sub = tbl[col].loc[lo:d]
+    if sub.empty:
+        return pd.Series(dtype=float)
+    return sub.ffill().iloc[-1].dropna()
+
+
+def _wide_lag(mkt: Market, attr: str, col: str, d: pd.Timestamp, n: int) -> pd.Series:
+    """d 往前 n 個交易日那一天的列（同樣沿用規則）。歷史不足回空。"""
+    i = int(np.searchsorted(mkt.days, np.datetime64(d), side='right')) - 1
+    if i - n < 0:
+        return pd.Series(dtype=float)
+    return _wide_on(mkt, attr, col, pd.Timestamp(mkt.days[i - n]))
+
+
+def signal_sir(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """借券賣出餘額 ÷ 發行股數（%）；TEJ SIR（P67）用市值比，分子分母同乘股價後相同。要兩張表都有值。"""
+    sbl = _wide_on(mkt, 'margin', 'sbl_balance', d)
+    issued = _wide_on(mkt, 'holding', 'shares_issued', d)
+    both = sbl.index.intersection(issued.index)
+    issued = issued.reindex(both)
+    return (sbl.reindex(both) / issued.where(issued > 0) * 100).dropna()
+
+
+def signal_nsir(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """負的 SIR：被放空少的排前面（P66、P67：中大型股 SIR 高 → 之後報酬低）。"""
+    return -signal_sir(mkt, d)
+
+
+def signal_momsx(mkt: Market, d: pd.Timestamp, cut: float = MOMSX_SIR_CUT) -> pd.Series:
+    """`mom`，但 SIR 在全市場（有 mom 又有 sir 的股票）前 (1 − cut) 的股票不給值；SIR 缺值（沒有信用交易資格）的也不給。
+    TEJ P68 是「排除 SIR > 0」，那在全市場留四分之一，但流動性前 300 的池裡 SIR = 0 只有 1%（`sir-rows-82`），照抄會把池清空，
+    所以改成和 `momx` 同一種全市場分位切法（Iteration 82 登記檔附錄，跑之前改、沒看報酬）。"""
+    m = signal_mom(mkt, d)
+    if m.empty:
+        return m
+    sir = signal_sir(mkt, d).reindex(m.index)
+    both = sir.notna()
+    if both.sum() == 0:
+        return pd.Series(dtype=float)
+    thr = sir[both].quantile(cut)
+    return m[both & (sir <= thr)]
+
+
+def signal_ndmargin(mkt: Market, d: pd.Timestamp, n: int = 21) -> pd.Series:
+    """負的融資餘額 21 日變動 ÷ 發行股數（%）：散戶融資增加的排後面（P62 Ting, Lu & Chou 2018：融資買進 → 之後報酬低）。"""
+    now = _wide_on(mkt, 'margin', 'margin_balance', d)
+    before = _wide_lag(mkt, 'margin', 'margin_balance', d, n)
+    issued = _wide_on(mkt, 'holding', 'shares_issued', d)
+    idx = now.index.intersection(before.index).intersection(issued.index)
+    issued = issued.reindex(idx)
+    return (-(now.reindex(idx) - before.reindex(idx)) / issued.where(issued > 0) * 100).dropna()
+
+
+def signal_fhold(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """外資持股比率水準（%；P70 Huang & Shiu 2009：高外資持股股票報酬高）。"""
+    return _wide_on(mkt, 'holding', 'foreign_ratio', d)
+
+
+def signal_tor(mkt: Market, d: pd.Timestamp, n: int = 21) -> pd.Series:
+    """週轉率：最近 n 日平均成交金額 ÷ 市值（收盤 × 發行股數），%／日。`Market` 只有成交金額沒有成交股數，用金額比市值等價。"""
+    sl, _ = _window(mkt, d, n)
+    if sl is None:
+        return pd.Series(dtype=float)
+    tv = mkt.turnover.iloc[sl]
+    avg = tv.mean().where(tv.count() >= int(n * 0.8))
+    close = mkt.close.iloc[sl].iloc[-1]
+    issued = _wide_on(mkt, 'holding', 'shares_issued', d)
+    idx = avg.index.intersection(issued.index)
+    cap = close.reindex(idx) * issued.reindex(idx)
+    return (avg.reindex(idx) / cap.where(cap > 0) * 100).dropna()
+
+
+def signal_momlt(mkt: Market, d: pd.Timestamp) -> pd.Series:
+    """`mom` 限低週轉率：週轉率在全市場（有 mom 值的股票）中位數以上的不給值（P72 台灣版 Lee & Swaminathan：低週轉率贏家較好）。"""
+    m = signal_mom(mkt, d)
+    if m.empty:
+        return m
+    tor = signal_tor(mkt, d).reindex(m.index)
+    both = m.notna() & tor.notna()
+    if both.sum() == 0:
+        return pd.Series(dtype=float)
+    return m[both & (tor <= tor[both].median())]
+
+
 def market_state_up(mkt: Market, d: pd.Timestamp, lookback_days: int = 252) -> Optional[bool]:
     """
     市場狀態（Cooper, Gutierrez & Hameed 2004；Du, Huang & Liao 2009 對台股）：0050 過去 lookback_days 個交易日的報酬 ≥ 0 為 UP。
@@ -737,7 +866,7 @@ def needs_bench_history(signal: str) -> bool:
 
 SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m', 'volchg', 'rev_accel', 'rev_streak',
                   'resmom', 'rev_yoy3', 'momrev', 'cont', 'imom', 'mom127', 'ovn1m', 'illiq', 'indmom', 'relmom', 'seas', 'fflow', 'tflow',
-                  'vmom', 'momx', 'dy', 'ep')
+                  'vmom', 'momx', 'dy', 'ep', 'nsir', 'momsx', 'ndmargin', 'fhold', 'momlt')
 
 
 TSMC_WEIGHT_FALLBACK = 0.35       # 估不出來時的固定假設：全市場日線從 2018-01-02 起、迴歸要 200 列，所以 2018-10-26 前都用它（Iteration 67 實測）；之後一律用估計值
@@ -828,6 +957,16 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.
         return signal_dy(mkt, d)
     if signal == 'ep':
         return signal_ep(mkt, d)
+    if signal == 'nsir':
+        return signal_nsir(mkt, d)
+    if signal == 'momsx':
+        return signal_momsx(mkt, d)
+    if signal == 'ndmargin':
+        return signal_ndmargin(mkt, d)
+    if signal == 'fhold':
+        return signal_fhold(mkt, d)
+    if signal == 'momlt':
+        return signal_momlt(mkt, d)
     raise ValueError(f'未知訊號 {signal}')
 
 

@@ -530,3 +530,250 @@ def parse_tpex_valuation(payload: dict) -> list[dict]:
         if row:
             rows.append(row)
     return _check_valuation(rows, f'TPEx peQryDate {trade_date}')
+
+
+# ── 融資融券與借券賣出（兩市，Iteration 81）────────────────────────────────────
+
+TWSE_MI_MARGN = 'https://www.twse.com.tw/rwd/zh/marginTrading/MI_MARGN'      # 融資融券彙總（張）
+TWSE_TWT93U = 'https://www.twse.com.tw/rwd/zh/marginTrading/TWT93U'          # 信用額度總量管制餘額表：融券＋借券賣出（股）
+TPEX_MARGIN = 'https://www.tpex.org.tw/www/zh-tw/margin/balance'              # 上櫃融資融券餘額（張）
+TPEX_SBL = 'https://www.tpex.org.tw/www/zh-tw/margin/sbl'                     # 上櫃信用額度總量管制餘額表（股）
+LOT = 1000                                                                   # 一張 = 1,000 股
+MARGIN_MISMATCH_TOLERANCE = 0.01   # 融資融券表的融券餘額（張）× 1000 與借券表的融券餘額（股）不等的列超過這個比例就當欄位對錯了
+
+
+def fetch_twse_margin(d: date) -> dict:
+    return _get_json(TWSE_MI_MARGN, {'date': d.strftime('%Y%m%d'), 'selectType': 'ALL', 'response': 'json'})
+
+
+def fetch_twse_sbl(d: date) -> dict:
+    return _get_json(TWSE_TWT93U, {'date': d.strftime('%Y%m%d'), 'response': 'json'})
+
+
+def fetch_tpex_margin(d: date) -> dict:
+    return _get_json(TPEX_MARGIN, {'date': d.strftime('%Y/%m/%d'), 'response': 'json'})
+
+
+def fetch_tpex_sbl(d: date) -> dict:
+    return _get_json(TPEX_SBL, {'date': d.strftime('%Y/%m/%d'), 'response': 'json'})
+
+
+def _lots(raw) -> Optional[int]:
+    v = _int(raw)
+    return None if v is None else v * LOT
+
+
+def parse_twse_margin(payload: dict) -> list[dict]:
+    """
+    MI_MARGN（selectType=ALL）第二張表「融資融券彙總」→ 個股列（單位張 → 存股）。16 欄、欄名重複只能按位置：
+    代號、名稱、融資買進／賣出／現金償還／前日餘額／今日餘額／次一營業日限額、融券買進／賣出／現券償還／前日餘額／今日餘額／次一營業日限額、資券互抵、註記。
+    休市日 stat 不是 OK，回 []。
+    """
+    if not isinstance(payload, dict) or str(payload.get('stat', '')).lower() != 'ok':
+        return []
+    trade_date = _ymd(payload.get('date'))
+    tables = payload.get('tables') or []
+    table = next((t for t in tables if '融資融券彙總' in str(t.get('title', ''))), None)
+    if trade_date is None or table is None:
+        return []
+    fields = table.get('fields') or []
+    if len(fields) != 16 or _field_index(fields, '代號') != 0 or fields[6] != '今日餘額' or fields[12] != '今日餘額':
+        raise ExchangeFormatError(f'MI_MARGN {trade_date} 欄位不是預期的 16 欄：{fields}')
+    rows = []
+    for r in table.get('data') or []:
+        sid = str(_cell(r, 0) or '').strip()
+        if not sid:
+            continue
+        mb, ms, mbal, sb, ss, sbal = _lots(r[2]), _lots(r[3]), _lots(r[6]), _lots(r[8]), _lots(r[9]), _lots(r[12])
+        if mbal is None or sbal is None:
+            continue
+        rows.append({'stock_id': sid, 'trade_date': trade_date, 'source': 'twse', 'margin_buy': mb, 'margin_sell': ms, 'margin_balance': mbal,
+                     'short_buy': sb, 'short_sell': ss, 'short_balance': sbal})
+    return rows
+
+
+def parse_twse_sbl(payload: dict) -> list[dict]:
+    """
+    TWT93U「信用額度總量管制餘額表」→ 個股列（單位股）。15 欄、前後兩組欄名重複只能按位置：
+    代號、名稱、融券：前日餘額／賣出／買進／現券／今日餘額／次一營業日限額、借券賣出：前日餘額／當日賣出／當日還券／當日調整／當日餘額／次一營業日可限額、備註。
+    回 {'stock_id', 'short_balance_chk'（融券今日餘額，股，給對位檢查）, 'sbl_sell', 'sbl_balance'}。休市回 []。
+    """
+    if not isinstance(payload, dict) or str(payload.get('stat', '')).lower() != 'ok':
+        return []
+    trade_date = _ymd(payload.get('date'))
+    fields = payload.get('fields') or []
+    if trade_date is None or not fields:
+        return []
+    if len(fields) != 15 or _field_index(fields, '代號') != 0 or fields[6] != '今日餘額' or fields[9] != '當日賣出' or fields[12] != '當日餘額':
+        raise ExchangeFormatError(f'TWT93U {trade_date} 欄位不是預期的 15 欄：{fields}')
+    rows = []
+    for r in payload.get('data') or []:
+        sid = str(_cell(r, 0) or '').strip()
+        if not sid:
+            continue
+        chk, sell, bal = _int(r[6]), _int(r[9]), _int(r[12])
+        if bal is None:
+            continue
+        rows.append({'stock_id': sid, 'trade_date': trade_date, 'short_balance_chk': chk, 'sbl_sell': sell, 'sbl_balance': bal})
+    return rows
+
+
+def parse_tpex_margin(payload: dict) -> list[dict]:
+    """margin/balance「上櫃股票融資融券餘額」→ 個股列（張 → 股）。欄位按名稱：代號、資買、資賣、資餘額、券賣、券買、券餘額。休市 data 空，回 []。"""
+    if not isinstance(payload, dict):
+        return []
+    table = next((t for t in payload.get('tables') or [] if t.get('data')), None)
+    if table is None:
+        return []
+    trade_date = roc_date(table.get('date') or payload.get('date'))
+    fields = table.get('fields') or []
+    if trade_date is None:
+        return []
+    ix = {k: _field_index(fields, *v) for k, v in {'id': ('代號',), 'mb': ('資買',), 'ms': ('資賣',), 'mbal': ('資餘額',),
+                                                   'ss': ('券賣',), 'sb': ('券買',), 'sbal': ('券餘額',)}.items()}
+    missing = [k for k, v in ix.items() if v < 0]
+    if missing:
+        raise ExchangeFormatError(f'櫃買融資融券表 {trade_date} 欄位找不到 {missing}：{fields}')
+    rows = []
+    for r in table['data']:
+        sid = str(_cell(r, ix['id']) or '').strip()
+        if not sid:
+            continue
+        c = lambda k: _lots(_cell(r, ix[k]))   # noqa: E731
+        mbal, sbal = c('mbal'), c('sbal')
+        if mbal is None or sbal is None:
+            continue
+        rows.append({'stock_id': sid, 'trade_date': trade_date, 'source': 'tpex', 'margin_buy': c('mb'), 'margin_sell': c('ms'), 'margin_balance': mbal,
+                     'short_buy': c('sb'), 'short_sell': c('ss'), 'short_balance': sbal})
+    return rows
+
+
+def parse_tpex_sbl(payload: dict) -> list[dict]:
+    """margin/sbl「信用額度總量管制餘額表」（上櫃）→ 個股列（股）。15 欄、同 TWT93U 的版面按位置。休市 data 空，回 []。"""
+    if not isinstance(payload, dict):
+        return []
+    table = next((t for t in payload.get('tables') or [] if t.get('data')), None)
+    if table is None:
+        return []
+    trade_date = roc_date(table.get('date') or payload.get('date'))
+    fields = table.get('fields') or []
+    if trade_date is None:
+        return []
+    if len(fields) != 15 or _field_index(fields, '股票代號', '代號') != 0 or fields[6] != '當日餘額' or fields[9] != '當日賣出' or fields[12] != '當日餘額':
+        raise ExchangeFormatError(f'櫃買借券表 {trade_date} 欄位不是預期的 15 欄：{fields}')
+    rows = []
+    for r in table['data']:
+        sid = str(_cell(r, 0) or '').strip()
+        if not sid:
+            continue
+        chk, sell, bal = _int(r[6]), _int(r[9]), _int(r[12])
+        if bal is None:
+            continue
+        rows.append({'stock_id': sid, 'trade_date': trade_date, 'short_balance_chk': chk, 'sbl_sell': sell, 'sbl_balance': bal})
+    return rows
+
+
+def merge_margin_sbl(margin_rows: list[dict], sbl_rows: list[dict], where: str) -> list[dict]:
+    """把借券表併進融資融券列；用兩張表都有的「融券餘額」當對位檢查（不等的列超過容忍比例就 raise）。借券表沒有的股票借券欄留空。"""
+    sbl = {r['stock_id']: r for r in sbl_rows}
+    bad = 0
+    common = 0
+    for r in margin_rows:
+        s = sbl.get(r['stock_id'])
+        if s is None:
+            r['sbl_sell'], r['sbl_balance'] = None, None
+            continue
+        common += 1
+        if s['short_balance_chk'] is not None and s['short_balance_chk'] != r['short_balance']:
+            bad += 1
+        r['sbl_sell'], r['sbl_balance'] = s['sbl_sell'], s['sbl_balance']
+    if common and bad / common > MARGIN_MISMATCH_TOLERANCE:
+        raise ExchangeFormatError(f'{where}：{bad}/{common} 列兩張表的融券餘額不等，欄位對應可能變了')
+    if bad:
+        logger.warning('[exchange] %s：%d/%d 列兩張表的融券餘額不等（保留融資融券表的值）', where, bad, common)
+    return margin_rows
+
+
+# ── 外資持股與發行股數（兩市，Iteration 81）────────────────────────────────────
+
+TWSE_MI_QFIIS = 'https://www.twse.com.tw/rwd/zh/fund/MI_QFIIS'
+TPEX_QFII = 'https://www.tpex.org.tw/www/zh-tw/insti/qfii'
+
+
+def drop_transfer_duplicates(tw: list[dict], tp: list[dict]) -> list[dict]:
+    """上櫃轉上市當天兩市的檔案都有這檔（2019-12-13 美時 1795、2026-10-15 幸福 8908 的外資持股表就是），證交所那列是首日佔位
+    （持有股數 0 或幾萬股），櫃買那列才是當天的實際值；法人表與融資融券表那天也只在櫃買那邊有列。所以同一代號兩邊都有時，丟證交所列、留櫃買列，
+    三張表一致。回傳去掉重複後的證交所列（櫃買列原樣用）。"""
+    tp_ids = {r['stock_id'] for r in tp}
+    return [r for r in tw if r['stock_id'] not in tp_ids]
+HOLDING_RATIO_TOLERANCE = 0.5      # 持股比率（%）與持有股數 ÷ 發行股數 × 100 差超過這個數的列就當欄位對錯了
+
+
+def fetch_twse_holding(d: date) -> dict:
+    return _get_json(TWSE_MI_QFIIS, {'date': d.strftime('%Y%m%d'), 'selectType': 'ALLBUT0999', 'response': 'json'})
+
+
+def fetch_tpex_holding(d: date) -> dict:
+    return _get_json(TPEX_QFII, {'date': d.strftime('%Y/%m/%d'), 'response': 'json'})
+
+
+def _holding_row(sid: str, trade_date: date, source: str, issued, held, ratio) -> Optional[dict]:
+    issued, held, ratio = _int(issued), _int(held), _num(str(ratio).replace('%', '') if ratio is not None else None)
+    if issued is None or held is None or issued <= 0:
+        return None
+    calc = held / issued * 100
+    if ratio is not None and abs(ratio - calc) > HOLDING_RATIO_TOLERANCE:
+        raise ExchangeFormatError(f'{source} 外資持股 {trade_date} {sid}：比率 {ratio} 與 {held}/{issued} 不符，欄位對應可能變了')
+    return {'stock_id': sid, 'trade_date': trade_date, 'source': source, 'shares_issued': issued, 'foreign_shares': held,
+            'foreign_ratio': round(calc, 2)}
+
+
+def parse_twse_holding(payload: dict) -> list[dict]:
+    """MI_QFIIS（selectType=ALLBUT0999）「外資及陸資投資持股統計」→ 個股列：發行股數、全體外資及陸資持有股數、持股比率（%）。休市回 []。"""
+    if not isinstance(payload, dict) or str(payload.get('stat', '')).lower() != 'ok':
+        return []
+    trade_date = _ymd(payload.get('date'))
+    fields = payload.get('fields') or []
+    if trade_date is None or not fields:
+        return []
+    ix = {k: _field_index(fields, *v) for k, v in {'id': ('證券代號',), 'issued': ('發行股數',), 'held': ('全體外資及陸資持有股數',),
+                                                   'ratio': ('全體外資及陸資持股比率',)}.items()}
+    missing = [k for k, v in ix.items() if v < 0]
+    if missing:
+        raise ExchangeFormatError(f'MI_QFIIS 欄位找不到 {missing}：{fields}')
+    rows = []
+    for r in payload.get('data') or []:
+        sid = str(_cell(r, ix['id']) or '').strip()
+        if not sid:
+            continue
+        row = _holding_row(sid, trade_date, 'twse', _cell(r, ix['issued']), _cell(r, ix['held']), _cell(r, ix['ratio']))
+        if row:
+            rows.append(row)
+    return rows
+
+
+def parse_tpex_holding(payload: dict) -> list[dict]:
+    """insti/qfii「櫃檯買賣股票僑外資及陸資持股比例排行表」→ 個股列：發行股數(A)、持有股數(C)、持股比率(E=C/A)（字串含 %）。休市 data 空，回 []。"""
+    if not isinstance(payload, dict):
+        return []
+    table = next((t for t in payload.get('tables') or [] if t.get('data')), None)
+    if table is None:
+        return []
+    trade_date = roc_date(table.get('date') or payload.get('date'))
+    fields = table.get('fields') or []
+    if trade_date is None:
+        return []
+    ix = {k: _field_index(fields, *v) for k, v in {'id': ('代號',), 'issued': ('發行股數(A)',), 'held': ('僑外資及陸資持有股數(C)',),
+                                                   'ratio': ('僑外資及陸資持股比率(E=C/A)',)}.items()}
+    missing = [k for k, v in ix.items() if v < 0]
+    if missing:
+        raise ExchangeFormatError(f'櫃買外資持股表 {trade_date} 欄位找不到 {missing}：{fields}')
+    rows = []
+    for r in table['data']:
+        sid = str(_cell(r, ix['id']) or '').strip()
+        if not sid:
+            continue
+        row = _holding_row(sid, trade_date, 'tpex', _cell(r, ix['issued']), _cell(r, ix['held']), _cell(r, ix['ratio']))
+        if row:
+            rows.append(row)
+    return rows

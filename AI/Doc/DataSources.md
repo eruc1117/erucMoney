@@ -57,6 +57,8 @@ CNBC／MarketWatch RSS（原文頁為樣板，內文抓不到）。
 | 三大法人買賣超（26 檔追蹤股） | `taiwan_stock_institutional_investors()` | `stock_chip_analysis` |
 | 三大法人買賣超（**全市場**，Iteration 71） | 不走 FinMind：證交所 `fund/T86`（selectType=ALLBUT0999）＋櫃買 `insti/dailyTrade`（type=Daily、sect=EW），一天兩次呼叫；`Crawler/institutional_data.py` | `market_institutional_daily`（2018-01 起；單位股；外資含外資自營商；寫入前驗證合計 = 三法人相加） |
 | 個股估值：本益比、殖利率、股價淨值比（**全市場**，Iteration 78） | 不走 FinMind：證交所 `afterTrading/BWIBBU_d`（selectType=ALL）＋櫃買 `afterTrading/peQryDate`，一天兩次呼叫；`Crawler/valuation_data.py`；每日 18:37 排程 | `market_valuation_daily`（2018-01 起；上市殖利率與兩市本益比是點時（Iteration 80 `val-pit-check-80`）；**櫃買殖利率不是點時**（整年固定、年初就印當年才決議的股利）；本益比虧損印「-」／N/A → NULL；上市有收盤價與財報年/季、上櫃有每股股利） |
+| 融資融券與借券賣出（**全市場**，Iteration 81） | 不走 FinMind：證交所 `marginTrading/MI_MARGN`（融資融券彙總，張）＋`marginTrading/TWT93U`（信用額度總量管制餘額表：融券＋借券賣出，股）；櫃買 `margin/balance`（張）＋`margin/sbl`（股），一天四次呼叫；`Crawler/margin_data.py`；每日 18:39 排程 | `market_margin_daily`（2018-01 起；一律存股；兩表共有的融券餘額逐列對位檢查；沒有信用交易資格的股票不在表裡；借券表沒列的借券欄 NULL） |
+| 外資持股與發行股數（**全市場**，Iteration 81） | 不走 FinMind：證交所 `fund/MI_QFIIS`（外資及陸資投資持股統計）＋櫃買 `insti/qfii`（持股比例排行表），一天兩次呼叫；`Crawler/holding_data.py`；每日 18:41 排程 | `market_foreign_holding_daily`（2018-01 起；發行股數、外資持有股數、持股比率（自己算）；發行股數可算週轉率與市值） |
 | 個股基本資訊 | `taiwan_stock_info()` | `stock_info` |
 
 ### 欄位對照（taiwan_stock_daily → stock_daily_prices）

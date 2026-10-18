@@ -1,0 +1,3 @@
+@@ -696,0 +697,129 @@ def signal_ep(mkt: Market, d: pd.Timestamp) -> pd.Series:
+@@ -740 +869 @@ SINGLE_SIGNALS = ('sue', 'win', 'ar0', 'mom', 'win3', 'lowvol', 'hi52', 'rev1m',
+@@ -830,0 +960,10 @@ def _single(signal: str, mkt: Market, sur: pd.DataFrame, d: pd.Timestamp) -> pd.

@@ -385,6 +385,9 @@ def run(signal: str, segment: str = 'dev', start: Optional[date] = None, end: Op
     mkt.insti = ps.load_institutional(load_start, end) if ps.needs_institutional(signal) else None
     # 估值表（Iteration 80）同上
     mkt.val = ps.load_valuation(load_start, end) if ps.needs_valuation(signal) else None
+    # 融資融券／借券與外資持股／發行股數（Iteration 82）同上
+    mkt.margin = ps.load_margin(load_start, end) if ps.needs_margin(signal) else None
+    mkt.holding = ps.load_holding(load_start, end) if ps.needs_holding(signal) else None
     sim = simulate(mkt, sur, signal, start, end, top_n, buffer, universe_n, excl_limit_pct, tsmc_weight, costs, tranches, weighting)
     bench = mkt.adj[ps.BENCH].dropna()
     met, m_act = metrics(sim['nav'], bench, sim)
