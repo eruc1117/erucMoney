@@ -1,6 +1,6 @@
 # 交接筆記
 
-**更新：** 2026-10-18（Iteration 83 已提交 d1835fa、MOPS 回補 10:39 完成；81、82 已提交 05d3cc0；MoneyScheduler 已於 2026-10-18 10:06 重啟，18:43 追蹤股補齊排程掛上、`_refresh_adj_close` 新流程生效）
+**更新：** 2026-10-18（Iteration 83 已提交 d1835fa、MOPS 回補 10:39 完成、全市場 adj_close 三檔 2,331 列 14:23 重建（未提交）；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
@@ -45,7 +45,7 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
-- （83）Crawler/tracked_sync.py、tests/test_tracked_sync.py（1 項，db）、scheduler.py（`job_tracked_sync` 18:43、`_refresh_adj_close` 只重建）、scrapers/exchange_daily.py（減資檔去重）、rebuild_adj_close.py（減資上限 20）、tests/test_scheduler.py、test_market_data.py（+1）、test_upsert.py（+1）、tests/helpers/db_setup.py；AI/experiments/iter83_compare.py、iter83_freshness.py、iter83_restore_events.py、iter83_evidence.py；Crawler/logs/backfill_prices_iter83.log、backfill_dividend_iter83.log、rebuild_adj_iter83.log、restore_events_iter83.log、backfill_mops_iter83.log；AI/Doc/DataSources.md、DB.md（§2.1）、README.md；AI/Doc/Iterations/Iteration-83.md
+- （83）AI/experiments/iter83_rebuild_adj.py、iter83_rebuild_adj_evidence.py（adj_close 重建）；Crawler/tracked_sync.py、tests/test_tracked_sync.py（1 項，db）、scheduler.py（`job_tracked_sync` 18:43、`_refresh_adj_close` 只重建）、scrapers/exchange_daily.py（減資檔去重）、rebuild_adj_close.py（減資上限 20）、tests/test_scheduler.py、test_market_data.py（+1）、test_upsert.py（+1）、tests/helpers/db_setup.py；AI/experiments/iter83_compare.py、iter83_freshness.py、iter83_restore_events.py、iter83_evidence.py；Crawler/logs/backfill_prices_iter83.log、backfill_dividend_iter83.log、rebuild_adj_iter83.log、restore_events_iter83.log、backfill_mops_iter83.log；AI/Doc/DataSources.md、DB.md（§2.1）、README.md；AI/Doc/Iterations/Iteration-83.md
 - （82）AI/experiments/iter82_hypothesis.md（登記 03:27＋附錄 05:18）、iter82_grid.json、iter82_results.py、iter82_sir_rows.py、iter82_signal_hunks.txt、iter82_dev.log、iter82_valid.log；UnifiedModel/results/portfolio_iter82_chips.md；portfolio_runs #103～#108；Crawler/portfolio_signal.py（`MOMSX_SIR_CUT`、`signal_momsx`）、tests/test_portfolio.py；AI/Doc/Iterations/Iteration-82.md、README、Papers.md（第五節第十代、第六節、P62／P65～P68／P70～P72）
 - （81）Crawler/scrapers/exchange_daily.py（融資融券／借券／外資持股 fetch／parse、`merge_margin_sbl`、`drop_transfer_duplicates`）、margin_data.py（新）、holding_data.py（新）、scheduler.py（18:39、18:41）、tests/test_margin_holding.py（新，4 項）、tests/test_scheduler.py；Server/migrations/030_market_margin.sql、031_market_foreign_holding.sql、tests/db/migrations.test.js（31）；AI/Doc/Papers.md（第十節 P65～P76）、DataSources.md（兩列）、Iterations/Iteration-81.md、README；回補日誌 AI/experiments/iter81_margin_backfill.log、iter81_holding_backfill.log
 - （80）AI/experiments/iter80_hypothesis.md、iter80_grid.json、iter80_results.py、iter80_dev.log、iter80_signal_hunks.txt、iter80_data_queries.py、iter80_pit_check.py；AI/Doc/DataSources.md（估值列）、Server/migrations/029_market_valuation.sql（檔頭註解）、Crawler/valuation_data.py（docstring）；UnifiedModel/results/portfolio_iter80_value.md；portfolio_runs #99～#102；Crawler/portfolio_signal.py（`needs_valuation`、`load_valuation`、`_val_on`、`signal_dy`、`signal_ep`、`DY_MAX`、`VAL_MAX_LAG`）、portfolio_backtest.py（`run` 掛 `mkt.val`）、tests/test_portfolio.py（+1，36 項）；AI/Doc/Papers.md（第五節第九代、第六節、P58～P60）、Iterations/Iteration-80.md、README
@@ -82,6 +82,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
 
 ## 已完成
+- adj_close 重建（83，2026-10-18 14:23）：adj-rebuild-dry-83 過（只讀試算：全市場 2,621 檔、有事件 2,144 檔，會變動的只有 1529 217 列、2364 908 列、3043 1,206 列）；adj-rebuild-83 過（`market_data.rebuild_adj()` 更新 2,331 列；1529 2018-12-12 adj 1.3518 → 12.2864、2364 2021-09-29 1.2635 → 9.9790）；adj-rebuild-evidence-83 過（三檔只在 #54／#58／#62 持股過、都在除權日之後；8913 2018-06-04 208 → 18.11 被下限略過；N 108）
 - 審查（83）：evidence-reviewer-83 三輪 46/5/21 FAIL → 72/3/10 FAIL → 75/0/10 PASS（第一輪：Target.md 20 家、scheduler.log 的 upper limit 全是 pytest 寫的、adj NULL 列數、新鮮度只查 5 檔→改傳 68 檔、2 分 53 秒；第二輪：2603 長榮在 _GENERIC、月調倉 0050 基準、23 passed；未解 10 條是沒另存輸出或網頁／git 來源，紀錄裡已標明）
 - 追蹤股擴大（83）：mops-backfill-83 過（42 檔 16,138 則、user_news +15,681、142.2 分、失敗 0）；finmind-backfill-83 過（42 檔 126 次、08:18～08:21、失敗 0）；sync_stock_info 68 檔（7769、6446 市場別改成 `market_universe` 的 twse）；news_alias +41；backfill_dividend 914 筆、rebuild 233,023 列 → 發現 FinMind「權」列不給參考價 → iter83_restore_events 2018 起除權息 13,469／減資 217／1,929 檔，重建 68 檔 403,572 列；tracked-sync-fill-83 過（行情 +1,838 只有 2327、籌碼 +17,938、外資持股 +9）；tracked-sync-compare-83 過（2018 起 136,507 股票日：收盤／開高低 100%、成交量 97.4%（不同的 3,607 列全是上櫃期間：5483、6446 轉上市前，櫃買檔不含零股盤後）、adj_close 差 ≤ 0.05% 100%；法人 136,550 列 100%；持股 136,676 列 100%）；freshness-83 過（明確傳入 68 檔、落後 0）；iter83-evidence 過（審查補證據：FinMind「權」列 2890／2313 對交易所、2018 以前事件 13,396／179、2014～2016 減資 79、adj NULL 198／198 都是 close ≤ 0、6446 3.00%、全市場 factor ≥ 5 三筆）；events-restore-83 過（2000～2017 除權息 13,376／減資 100＋79；TWTAUU 三年檔同檔同日重複列 → parser 去重；2408 減資九成 factor 9.99 改採用、減資上限 5 → 20）；pytest-tracked-sync-83 23 過；pytest-events-83 39 過；pytest-83 282 過。沒跑：jest、vite build（Node 與前端沒改）。
 - 審查（82）：strategy-critic-82 PASS（方法乾淨；七條措辭——momlt「大型股」無數字、相加對排除基底不同、fhold 後續假設標事後、ndmargin 補共同窗口、sir 中位 265、試驗次數 39、補 backtest.py hunk——都已改）；evidence-reviewer-82 第一輪 49/5/1 FAIL（秒數、節數、中位、次數、單檔名）→ 第二輪 64/2/1 FAIL（progress.md 八節、階段 7 回補中已過期）→ 第三輪 13/0/0 PASS（checks.json 同名覆蓋，記最終結果）。
@@ -117,6 +118,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 回放結論（59）：照單全收 +346%（0050 +189%）；停損 15／25／35% 都輸；限價 ±2% 只差 0.5%／年
 
 ## 決策
+- 2026-10-18（使用者）：**全市場表 adj_close 重建**——減資 factor 上限放寬後 1529、2364、3043 三筆減資 factor ≥ 5 的 `market_daily_prices.adj_close` 依現行事件表重算（先只讀試算確認只動這三檔 2,331 列，再跑 `market_data.rebuild_adj()` 全市場）
 - 2026-10-18（使用者）：**候選不換、都先列出**——`fhold` 不另登記新假設、四個跨段候補（#106／#108、#94／#96、#90／#92、#87／#88）都不升格，留在「未解」；接著「先補更多家的股票資料」→ Iteration 83：追蹤股從 26 檔擴到 0050 成分股全部（新增 42 家）
 - 2026-10-18（82）：`momsx` 在第二批跑之前依列（`sir-rows-82`）改成排除 SIR 全市場前四分之一（原登記「排除 SIR > 0」在池內只剩約 3 檔）；原 sha256 保留、附錄重記，沒看過第二批報酬。`fhold` #103 共同窗口超過候選但登記指標未過：不跑 valid、不改規則，列給使用者決定是否登記新假設。#106 兩項超過 #30 → 依登記跑一次 valid（#108）。
 - 2026-10-18（81）：籌碼結構面兩張表走交易所檔（同 71／78 路線）；融資融券統一存股、借券表沒列的股票借券欄 NULL 不補 0；外資持股比率存自己算的值並與交易所印的對位；migration 030／031 用 `lib/migrate.js` 套用不等 MoneyApi 重啟（同 78 的理由：讓回補今晚就跑）；下一代（82）從放空（借券 SIR）、散戶融資、持股水準／週轉率三組各登記一條、各一跑，登記前先查點時性（發行股數切換日分布）
@@ -145,7 +147,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 2026-10-09：引擎啟動（紙上）、停損 0、限價 ±2%；回放不寫 portfolio_runs；預測用候選回測推常態區間（caveat DSR）
 
 ## 未解
-- **減資 factor 上限放寬動到全市場表（83）**：`load_events` 減資上限 5 → 20 後，2018 起全市場 3 筆減資 factor ≥ 5（1529、2364、3043）的 `market_daily_prices.adj_close` 還是舊值，要不要現在 `market_data.py --rebuild-adj` 重建這三檔（會動到之後回測的輸入，三檔都是小型股）由使用者決定
+- **8913 全銓租賃 2018-06-04 除權息 208 → 18.11 被 `load_events` 略過（83）**：factor 0.087 低於除權息下限 0.2，但市場收盤 208 → 19.90 是真的斷層，它 2018-06-04 以前的 `market_daily_prices.adj_close` 高十倍（該股 `market_type` NULL、2020-01-20 下市，池內大概碰不到）；要不要把除權息下限放寬或改用交易所參考價判定由使用者決定
+- 回測 #54、#58、#62（rev_accel／rev1m 家族 valid）持股過 1529 或 2364：adj_close 重建後若重跑，2364 的動能回看跨過 2021-10-08、排名可能略變；候選與 live 清單不受影響
 - 追蹤股 68 檔後第一個週日（2026-10-25）`job_weekly_forecast` 的執行時間要看；`job_news` 每小時 Yahoo RSS 68 條
 - **跨段候補第四個（82）**：`win3+mom+nsir` #106 dev +9.77%／0.852（候選 +8.64%／0.67）、#108 valid +13.97%／1.062（候選 +15.71%／1.085），兩段追蹤誤差與相對落後都比候選小；和 #94／#96、#90／#92、#87／#88 同型。候選不換（使用者 2026-10-17），列著。
 - **`fhold` #103 的共同窗口**：2018-11-12 起 +10.86%／1.550／TE 7.0%、2019 起 +8.95%／1.278，都高於候選；登記指標（全開發期含候選未進場的 2018-03～10）+6.01%／0.644 未超過，依規則沒跑 valid。要不要登記「`fhold` 對齊候選起點」或「`win3+mom+fhold`」為新假設（會跑 valid、N +1～2），由使用者決定。
@@ -174,7 +177,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 
 ## 下一步
 使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）四個跨段候補（#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選。沒有決定前，下一代從 Papers.md 第六節挑：放空流量（P65，`sbl_sell` 21 日累計，先只看列）。
-使用者要做的：MoneyScheduler 已於 2026-10-18 10:06 重啟（19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa；未 push。
+使用者要做的：三個常駐工作已於 2026-10-18 14:19 全部重啟（MoneyCrawlerApi、MoneyApi 曾於 12:44 被關掉 95 分鐘；MoneyScheduler 19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa（收尾 70e98c4）；未 push。
 仍待：SUE 類訊號公告日過濾、`win3` 農曆年缺陷。
 
 ## 階段

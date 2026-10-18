@@ -70,14 +70,21 @@
 | `pytest-tracked-sync-83` | 23 passed（`test_tracked_sync` 1、`test_scheduler` 13、`test_upsert` 9，含減資九成那項） |
 | `pytest-events-83` | 39 passed（`test_market_data` +1 去重、`test_upsert` +1 減資九成、`test_tracked_sync`） |
 | `pytest-83` | 282 passed |
+| `adj-rebuild-dry-83` | 只讀試算：全市場 2,621 檔重算會變動 3 檔、2,331 列（1529 217、2364 908、3043 1,206） |
+| `adj-rebuild-83` | `market_data.rebuild_adj()` 更新 2,331 列（2,621 檔、2,144 檔有公司行動；14:23～14:24） |
+| `adj-rebuild-evidence-83` | 三檔只在 #54／#58／#62 持股過（除權日之後）；8913 2018-06-04 208 → 19.90 被 factor 下限略過；N 108 |
 
 ## 三、讀法
 
 - 對專案的意思：儀表板個股頁、法人持股、新聞個股標記、每週預測、三模型投票現在涵蓋 0050 全部成分股。月調倉研究不受影響——股票池與訊號只讀全市場表，只有 0050 基準從 `stock_daily_prices` 讀 adj_close（`portfolio_signal.py` 開頭說明），0050 是上市 ETF、本輪沒補到它的列。
 - **公司行動以交易所檔為準**：FinMind 的「息」列和交易所一致，「權」列不給參考價。追蹤股的歷史現在 2003-06 起用交易所事件（上櫃較晚）；更早的只有 FinMind 事件，股票股利沒調。
 - **減資上限放寬會動到全市場表**：`market_data.rebuild_adj` 共用 `load_events`，2018 起全市場有 3 筆減資 factor ≥ 5（1529 2018-12-22 ×9.09、2364 2021-10-08 ×7.90、3043 2022-12-19 ×5.00），
-  這三檔的 `market_daily_prices.adj_close` 現在還是舊值（少調一次），下次它們有新事件或跑 `market_data.py --rebuild-adj` 才會改；改了會動到之後回測的輸入（三檔都是小型股，
-  流動性前 300 的池很少碰到）。要不要現在重建這三檔由使用者決定。追蹤股裡只有 2408 一筆、已重建。
+  這三檔的 `market_daily_prices.adj_close` 在 d1835fa 時還是舊值（少調一次）。**使用者 2026-10-18 決定重建**：先只讀試算（`adj-rebuild-dry-83`）——全市場 2,621 檔（有事件 2,144 檔）依現行事件表重算，
+  會變動的只有這三檔、2,331 列（1529 217、2364 908、3043 1,206，都是除權日以前的列）；再跑 `market_data.rebuild_adj()` 全市場（`adj-rebuild-83`，14:23～14:24）更新 2,331 列，
+  例：1529 2018-12-12 收 2.36 的 adj 1.3518 → 12.2864、2364 2021-09-29 收 3.04 的 adj 1.2635 → 9.9790（除權日當天起不變）。旁證（`adj-rebuild-evidence-83`）：三檔在 `portfolio_positions` 只出現在
+  #54、#58、#62（rev_accel／rev1m 家族 valid，2022-12～2023-08，都在除權日之後；候選與 live 清單都沒有），這三列若重跑，2364 的動能回看會跨過 2021-10-08、排名可能略變，其餘 run 不受影響。
+  同一次 `load_events` 另警告略過 8913 全銓租賃 2018-06-04 除權息 208 → 18.11（factor 0.087，低於除權息下限 0.2；市場收盤 208 → 19.90 是真的斷層；該股 `market_type` NULL、2020-01-20 下市），
+  它 2018-06-04 以前的 adj_close 仍高十倍，留在「未解」。追蹤股裡只有 2408 一筆、已重建。
 - FinMind 匿名額度比文件寫的 30 次／小時寬：126 次在 2 分 53 秒（08:18:48～08:21:41）沒被擋，`job_stock` 每天 130 次 2026-09-22～10-17 的 18 次都成功；
   scheduler.log 裡的 upper limit 全是 pytest 寫的，排程沒撞過額度。現在每天 204 次沒試過；真撞到的日子 18:43 從交易所表補——不會變成「某檔今天沒資料」。
 - 排程負擔：`job_news` 每小時 Yahoo 個股 RSS 26 → 68 條；`job_vote` 68 檔；`job_weekly_forecast` 台股 68 檔 × 10 個 LSTM（`LSTM/serve.py` 只載 `saved_models/cross_stock/{模型}.keras`，是跨股模型、逐股的舊檔不再用；新股是否只要 LOOKBACK 筆行情就能推論，這輪沒驗）。
@@ -90,7 +97,7 @@
 修改：`Crawler/scheduler.py`（`job_tracked_sync` 18:43；`_refresh_adj_close` 不再打 FinMind；啟動訊息）、`Crawler/scrapers/exchange_daily.py`（`parse_twse_capital_reduction` 去重）、
 `Crawler/rebuild_adj_close.py`（減資 factor 上限 20）、`Crawler/tests/test_scheduler.py`、`tests/test_market_data.py`（+1）、`tests/test_upsert.py`（+1）、`Crawler/tests/helpers/db_setup.py`（`market_institutional_daily`／`market_foreign_holding_daily`／`market_valuation_daily`／`market_margin_daily` 四張進 truncate 清單）、
 `AI/Doc/DataSources.md`（追蹤股清單、補齊路線）、`AI/Doc/DB.md`（§2.1 追蹤股清單與加股步驟）、`AI/Doc/README.md`、`progress.md`。
-新增：`Crawler/tracked_sync.py`、`Crawler/tests/test_tracked_sync.py`、`AI/experiments/iter83_compare.py`、`AI/experiments/iter83_freshness.py`、`AI/experiments/iter83_restore_events.py`、`AI/experiments/iter83_evidence.py`、
+新增：`Crawler/tracked_sync.py`、`Crawler/tests/test_tracked_sync.py`、`AI/experiments/iter83_compare.py`、`AI/experiments/iter83_freshness.py`、`AI/experiments/iter83_restore_events.py`、`AI/experiments/iter83_evidence.py`、`AI/experiments/iter83_rebuild_adj.py`（`--dry`／`--run`）、`AI/experiments/iter83_rebuild_adj_evidence.py`、
 `Crawler/logs/backfill_prices_iter83.log`、`backfill_dividend_iter83.log`、`rebuild_adj_iter83.log`、`restore_events_iter83.log`、`backfill_mops_iter83.log`（`*.log` 不進 git）。
-資料：`stock_info` +42 列（68 檔追蹤）、`stock_daily_prices` +234,945 列、`stock_chip_analysis` +160,623 列、`stock_foreign_holding` +208,962 列、`instrument_alias` +41、`stock_info` 7769／6446 的 `market_type` 由 FinMind 的 emerging／tpex 改成 twse（UPDATE 兩列，`iter83-evidence` 只驗現值）、
+資料：`market_daily_prices.adj_close` 2,331 列重算（1529、2364、3043 除權日以前）、`stock_info` +42 列（68 檔追蹤）、`stock_daily_prices` +234,945 列、`stock_chip_analysis` +160,623 列、`stock_foreign_holding` +208,962 列、`instrument_alias` +41、`stock_info` 7769／6446 的 `market_type` 由 FinMind 的 emerging／tpex 改成 twse（UPDATE 兩列，`iter83-evidence` 只驗現值）、
 `stock_dividend_result`／`stock_capital_reduction` 2000 起改為交易所檔的值、`news_crawl_raw` +16,138、`user_news` +15,681（MOPS）。
