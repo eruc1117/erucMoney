@@ -45,7 +45,7 @@ def test_configure_validates_and_pairs_mode_with_broker(clean_db):
 def test_list_to_orders_to_fills(clean_db, monkeypatch):
     db = clean_db
     _setup(db, {'1111': [100, 100, 100, 100, 110], '2222': [50, 50, 50, 50, 45], '2330': [1000] * 5})
-    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id: {'n': 0, 'new': []})
+    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id, today=None: {'n': 0, 'new': []})
     _seed_list(db, date(2026, 10, 13), {'2330': 0.5, '1111': 0.25, '2222': 0.25})
     # 10/13 收盤：清單出來 → 三張買單，限價 = 收盤 × 1.005
     r = te.run_daily(date(2026, 10, 13))
@@ -82,7 +82,7 @@ def test_unfilled_requotes_then_cancels(clean_db, monkeypatch):
     closes = [100, 103, 106.09, 109.27, 112.55]
     _setup(db, {'1111': closes, '2330': [1000] * 5})
     te.configure(rules={'max_attempts': 3})
-    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id: {'n': 0, 'new': []})
+    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id, today=None: {'n': 0, 'new': []})
     _seed_list(db, date(2026, 10, 8), {'1111': 1.0})
     # 把開戶日移到 10/8 讓 10/8 的清單算數
     db.execute("UPDATE portfolio_paper_state SET started_on = '2026-10-08'")
@@ -105,7 +105,7 @@ def test_stop_loss_and_guard(clean_db, monkeypatch):
     db = clean_db
     # 1111 10/13 買進（開盤 99）後 10/14 收 80（−19%）→ 10/14 收盤觸發停損 → 10/15 開盤賣
     _setup(db, {'1111': [100, 100, 100, 80, 70], '2222': [50] * 5, '2330': [1000] * 5})
-    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id: {'n': 0, 'new': []})
+    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id, today=None: {'n': 0, 'new': []})
     db.execute("UPDATE portfolio_paper_state SET started_on = '2026-10-08'")
     _seed_list(db, date(2026, 10, 9), {'1111': 0.5, '2222': 0.5})
     te.run_daily(date(2026, 10, 9)); te.run_daily(date(2026, 10, 13))

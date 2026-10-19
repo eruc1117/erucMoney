@@ -279,9 +279,14 @@ def run_daily(today: Optional[date] = None) -> dict:
         for y, m in ((today.year, today.month), ((today.year if today.month > 1 else today.year - 1), (today.month - 1) or 12)):
             sd = pp.signal_date_for_month(y, m, today)
             if sd and sd >= acct['started_on'] and not pp.list_exists(sd):
-                r = pp.make_list(sd, st['run_id'] or acct['run_id'])
-                out['new_list'] = {'rebalance_date': str(sd), 'n': r['n'], 'new': r['new']}
-                log_event('signal', detail={'rebalance_date': str(sd), 'n': r['n'], 'new': r['new']})
+                r = pp.make_list(sd, st['run_id'] or acct['run_id'], today)
+                if r.get('matched', True):
+                    out['new_list'] = {'rebalance_date': str(sd), 'n': r['n'], 'new': r['new'], 'exec_estimated': r.get('exec_estimated', False)}
+                    log_event('signal', detail={'rebalance_date': str(sd), 'n': r['n'], 'new': r['new'], 'exec_estimated': r.get('exec_estimated', False)})
+                else:
+                    # Iteration 88 之前：current_list 算不到這次調倉會回上個月那份，這裡卻記成「新清單」，紙上帳戶因此從沒拿到 2026-10-12 的清單
+                    out['new_list'] = {'rebalance_date': str(sd), 'pending': True, 'got': r['rebalance_date']}
+                    log_event('error', detail={'where': 'make_list', 'msg': f'訊號日 {sd} 的清單算不出來（current_list 回 {r["rebalance_date"]}）'})
         for rd in lists_without_orders(acct['started_on'], today):
             out['orders'].append(gen_rebalance_orders(rd, st, broker))
         # 4. 停損：今天（或最後一個有行情的日子）收盤檢查

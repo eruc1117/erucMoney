@@ -62,7 +62,7 @@ def test_start_once_then_fill_mark_review(clean_db, monkeypatch):
     # 10/13 的清單：台積電 0.5、1111 0.25、2222 0.25；10/14 開盤成交
     _seed_list(db, date(2026, 10, 13), {'2330': 0.5, '1111': 0.25, '2222': 0.25})
     assert pp.pending_lists(date(2026, 10, 14)) == [date(2026, 10, 13)]
-    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id: {'n': 0, 'new': []})     # 不跑真的回測
+    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id, today=None: {'n': 0, 'new': []})     # 不跑真的回測
     r = pp.run_daily(date(2026, 10, 14))
     assert len(r['filled']) == 1 and r['filled'][0]['exec_date'] == date(2026, 10, 14) and r['filled'][0]['buys'] == 3
     held = pp.holdings()
@@ -127,3 +127,25 @@ def test_live_list_carries_latest_close_for_share_calculator(clean_db):
     assert by['2222']['price'] == 50.0
     assert by['7777']['price'] is None and by['7777']['price_date'] is None
     assert portfolio_api.candidates()['current_list']['rebalance_date'] == '2026-10-13'
+
+
+def test_make_list_mismatch_is_not_a_new_list_and_next_weekday(clean_db, monkeypatch):
+    """Iteration 88：current_list 若回的不是要的訊號日（成交日還沒行情時以前就會回上個月那份），run_daily 不能記成新清單；
+    成交日估計只避週末。"""
+    import portfolio_backtest as pb
+    assert pb.next_weekday(date(2026, 10, 9)) == date(2026, 10, 12) and pb.next_weekday(date(2026, 10, 12)) == date(2026, 10, 13)
+    db = clean_db
+    _seed_market(db, {'1111': [100] * 5, '2330': [1000] * 5})
+    pp.start(capital=1_000_000, run_id=None, started_on=date(2026, 10, 9))
+    seen = {}
+    def stale(rd, run_id, today=None):
+        seen['args'] = (rd, today)
+        return {'rebalance_date': '2026-09-11', 'exec_date': '2026-09-14', 'n': 21, 'new': [], 'matched': False, 'exec_estimated': False}
+    monkeypatch.setattr(pp, 'make_list', stale)
+    r = pp.run_daily(date(2026, 10, 14))
+    assert seen['args'] == (date(2026, 10, 13), date(2026, 10, 14))                      # as_of 是今天、不是訊號日
+    assert r['new_list'] == {'rebalance_date': '2026-10-13', 'pending': True, 'got': '2026-09-11'}
+    assert not pp.list_exists(date(2026, 10, 13))
+    monkeypatch.setattr(pp, 'make_list', lambda rd, run_id, today=None: {'rebalance_date': str(rd), 'exec_date': '2026-10-14', 'n': 3, 'new': ['1111'], 'matched': True, 'exec_estimated': True})
+    r2 = pp.run_daily(date(2026, 10, 14))
+    assert r2['new_list'] == {'rebalance_date': '2026-10-13', 'n': 3, 'new': ['1111'], 'exec_estimated': True}

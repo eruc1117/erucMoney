@@ -175,7 +175,9 @@ def simulate(mkt: ps.Market, sur: pd.DataFrame, signal: str, start: date, end: d
     nav = pd.Series(dict(nav)).sort_index()
     return {'nav': nav, 'positions': pd.DataFrame(positions), 'trades': trades, 'cost_total': cost_total,
             'traded_total': traded_total, 'n_rebalances': len(schedule) - len(skipped), 'skipped': skipped, 'schedule': schedule,
-            'tsmc_log': tsmc_log}
+            'tsmc_log': tsmc_log,
+            # 期末狀態：current_list 在訊號日當天（成交日還沒行情）要接著算下一次的目標持股（Iteration 88）
+            'units': dict(units), 'holdings_order': list(holdings_order), 'tranche_queue': [list(b) for b in tranche_queue]}
 
 
 # ── 指標 ──────────────────────────────────────────────────────────────────────
@@ -299,11 +301,44 @@ def attach_series(run_id: int) -> dict:
             'drift': round(drift, 6)}
 
 
+def next_weekday(d: date) -> date:
+    """估成交日：d 之後第一個平日。trading_calendar 沒有未來的假日，所以只避週末；紙上交易真正成交用的是「清單日之後第一個有行情的日子」，不靠這個估計。"""
+    d = d + timedelta(days=1)
+    while d.weekday() >= 5:
+        d += timedelta(days=1)
+    return d
+
+
+def _pending_targets(mkt: ps.Market, sur: pd.DataFrame, signal: str, s: pd.Timestamp, sim: dict, top_n: int, buffer: int, universe_n: int,
+                     excl_limit_pct: float, tsmc_weight, tranches: int, weighting: str) -> Optional[pd.DataFrame]:
+    """訊號日 s 當天的目標持股（成交日還沒行情、simulate 處理不到這次調倉時用）：和 simulate 迴圈裡調倉那一段同一套——
+    池、分數、台積電權重、分批到期的那批——只是不成交、不改狀態。分數不足（訊號不足的月份）回 None。"""
+    ids = ps.eligible(mkt, s, universe_n, excl_limit_pct)
+    scores = ps.scores_on(signal, mkt, sur, s, ids)
+    if len(scores) < (top_n if tranches == 1 else max(1, top_n // tranches)):
+        return None
+    liq_s = mkt.liq.loc[s] if weighting == 'liq' else None
+    if tsmc_weight == 'est':
+        w_tsmc = ps.estimate_tsmc_weight(mkt, s)
+        w_tsmc = ps.TSMC_WEIGHT_FALLBACK if w_tsmc is None else w_tsmc
+    else:
+        w_tsmc = tsmc_weight
+    units, holdings_order, queue = sim['units'], sim['holdings_order'], sim['tranche_queue']
+    if tranches > 1:
+        release = queue[0] if len(queue) >= tranches else []
+        held_now = [sid for sid in holdings_order if sid in units]
+        return ps.build_targets(scores, held_now, top_n, buffer, w_tsmc, weighting, liq_s, tranche_new=max(1, top_n // tranches), release=release)
+    return ps.build_targets(scores, holdings_order, top_n, buffer, w_tsmc, weighting, liq_s)
+
+
 def current_list(run_id: int, as_of: Optional[date] = None) -> dict:
     """
     用候選那一列的參數，從它的 period_start 一路算到 as_of（預設今天），只取最後一次調倉的目標持股寫進 portfolio_live_list
     （同一訊號日重算就覆蓋，不同月份各自保留；紙上交易每月的清單都在這張表）。
     保留期（2024-10 起）的淨值與指標在這裡**不算、不存、不印**——這個函式的輸出只有名單。
+    訊號日當天（成交日還沒行情）：simulate 的排程要成交日在資料裡，處理不到這次調倉，所以接著用 _pending_targets 算目標持股、
+    成交日先估下一個平日（exec_estimated=True）；成交日行情進來後再算會走正常路徑、覆蓋成真正的成交日。
+    Iteration 88 之前這裡只有正常路徑，紙上交易在訊號日傍晚算清單永遠拿到上個月那份，2026-10-12 的清單因此沒算出來。
     """
     as_of = as_of or date.today()
     with get_conn() as conn:
@@ -320,12 +355,25 @@ def current_list(run_id: int, as_of: Optional[date] = None) -> dict:
                    params.get('excl_limit_pct', 0.10), params.get('tsmc_weight'), params.get('costs', COSTS),
                    params.get('tranches', 1), params.get('weighting', 'equal'))
     pos = sim['positions']
-    if not len(pos):
-        raise RuntimeError('沒有任何調倉')
-    last = pos['rebalance_date'].max()
-    cur_rows = pos[pos['rebalance_date'] == last]
-    prev_dates = sorted(pos['rebalance_date'].unique())
-    prev = set(pos[pos['rebalance_date'] == prev_dates[-2]]['stock_id']) if len(prev_dates) > 1 else set()
+    processed = set(pos['rebalance_date']) if len(pos) else set()
+    s = mkt.first_day_on_or_after(date(as_of.year, as_of.month, 11))
+    pending = None
+    if s is not None and s.date() <= as_of and s.month == as_of.month and s.date() not in processed and mkt.next_day(s) is None:
+        pending = _pending_targets(mkt, sur, signal, s, sim, params.get('top_n', 20), params.get('buffer', 40), params.get('universe_n', 300),
+                                   params.get('excl_limit_pct', 0.10), params.get('tsmc_weight'), params.get('tranches', 1), params.get('weighting', 'equal'))
+    exec_estimated = pending is not None and len(pending) > 0
+    if exec_estimated:
+        last = s.date()
+        cur_rows = pending.assign(rebalance_date=last, exec_date=next_weekday(last))
+        prev_dates = sorted(processed)
+        prev = set(pos[pos['rebalance_date'] == prev_dates[-1]]['stock_id']) if prev_dates else set()
+    else:
+        if not len(pos):
+            raise RuntimeError('沒有任何調倉')
+        last = pos['rebalance_date'].max()
+        cur_rows = pos[pos['rebalance_date'] == last]
+        prev_dates = sorted(pos['rebalance_date'].unique())
+        prev = set(pos[pos['rebalance_date'] == prev_dates[-2]]['stock_id']) if len(prev_dates) > 1 else set()
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT stock_id, stock_name FROM market_universe")
@@ -340,7 +388,7 @@ def current_list(run_id: int, as_of: Optional[date] = None) -> dict:
                             for r in cur_rows.itertuples(index=False)])
         conn.commit()
     return {'run_id': run_id, 'rebalance_date': str(last), 'exec_date': str(cur_rows['exec_date'].iloc[0]), 'n': int(len(cur_rows)),
-            'new': sorted(set(cur_rows['stock_id']) - prev)}
+            'new': sorted(set(cur_rows['stock_id']) - prev), 'exec_estimated': exec_estimated}
 
 
 def tag_run(run_id: int, tag: Optional[str]) -> None:

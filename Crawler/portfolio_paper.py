@@ -138,9 +138,13 @@ def list_exists(rebalance_date: date) -> bool:
             return cur.fetchone() is not None
 
 
-def make_list(rebalance_date: date, run_id: int) -> dict:
+def make_list(rebalance_date: date, run_id: int, today: Optional[date] = None) -> dict:
+    """算訊號日的清單。as_of 用 today 而不是訊號日：成交日的行情到了就是正常路徑；訊號日當天由 current_list 用收盤算目標、成交日先估。
+    回傳多 matched：算出來的清單日是不是要的那天——不是的話（例如 current_list 算不出這次調倉）呼叫端不能當成新清單（Iteration 88 之前就是這樣誤判）。"""
     import portfolio_backtest as pb
-    return pb.current_list(run_id, as_of=rebalance_date)
+    r = pb.current_list(run_id, as_of=today or rebalance_date)
+    r['matched'] = r['rebalance_date'] == str(rebalance_date)
+    return r
 
 
 def load_list(rebalance_date: date) -> list:
@@ -302,9 +306,13 @@ def run_daily(today: Optional[date] = None) -> dict:
     for y, m in ((today.year, today.month), ((today.year if today.month > 1 else today.year - 1), (today.month - 1) or 12)):
         sd = signal_date_for_month(y, m, today)
         if sd and sd >= st['started_on'] and not list_exists(sd):
-            r = make_list(sd, st['run_id'])
-            out['new_list'] = {'rebalance_date': str(sd), 'n': r['n'], 'new': r['new']}
-            logger.info('[paper] 訊號日 %s 清單 %d 檔（新進 %s）', sd, r['n'], r['new'])
+            r = make_list(sd, st['run_id'], today)
+            if r.get('matched', True):
+                out['new_list'] = {'rebalance_date': str(sd), 'n': r['n'], 'new': r['new'], 'exec_estimated': r.get('exec_estimated', False)}
+                logger.info('[paper] 訊號日 %s 清單 %d 檔（新進 %s%s）', sd, r['n'], r['new'], '；成交日先估' if r.get('exec_estimated') else '')
+            else:
+                out['new_list'] = {'rebalance_date': str(sd), 'pending': True, 'got': r['rebalance_date']}
+                logger.warning('[paper] 訊號日 %s 的清單算不出來（current_list 回的是 %s），明天再試', sd, r['rebalance_date'])
     return out
 
 
