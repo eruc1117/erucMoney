@@ -1,10 +1,10 @@
 # 交接筆記
 
-**更新：** 2026-10-19（Iteration 88 未提交：紙上交易清單缺陷修好、10 月清單補上、21 張買單 pending；Iteration 87 已提交 3d4129e：交易模擬匯入／匯出；Iteration 86 已提交 6148a5f：正式策略頁實單列改讀 API 段別名；Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
+**更新：** 2026-10-19（Iteration 88 已提交 dbcfd74：紙上交易清單缺陷修好、10 月清單補上、21 張買單 pending；Iteration 87 已提交 3d4129e：交易模擬匯入／匯出；Iteration 86 已提交 6148a5f：正式策略頁實單列改讀 API 段別名；Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 88（未提交，2026-10-19；另一個 session 同時在做 87 交易模擬匯入／匯出）：查正式策略本月清單時發現模擬帳戶開戶（10-09）後從沒拿到清單——訊號日傍晚算清單時成交日還沒行情，`current_list` 回 9 月那份、引擎 10-15～10-19 四次記成「新清單 2026-10-12」；改 `portfolio_backtest`（`simulate` 回傳期末狀態、`_pending_targets`、`current_list` 訊號日路徑、`next_weekday`）、`portfolio_paper.make_list`（as_of 用 today、回 `matched`）、兩個 `run_daily`（不符不當新清單）；真實資料驗證訊號日路徑對正常路徑 21 檔逐檔相同（`live-list-88`）、對 #68 的持股也全同（`positions-check-88`）；補跑引擎產生 21 張買單（`engine-run-88`，10-13 開盤補成交）。N 114 不動。紀錄 `AI/Doc/Iterations/Iteration-88.md`。**要重啟 MoneyScheduler 與 MoneyCrawlerApi**。
+Iteration 88（已提交 dbcfd74，2026-10-19；另一個 session 同時在做 87 交易模擬匯入／匯出）：查正式策略本月清單時發現模擬帳戶開戶（10-09）後從沒拿到清單——訊號日傍晚算清單時成交日還沒行情，`current_list` 回 9 月那份、引擎 10-15～10-19 四次記成「新清單 2026-10-12」；改 `portfolio_backtest`（`simulate` 回傳期末狀態、`_pending_targets`、`current_list` 訊號日路徑、`next_weekday`）、`portfolio_paper.make_list`（as_of 用 today、回 `matched`）、兩個 `run_daily`（不符不當新清單）；真實資料驗證訊號日路徑對正常路徑 21 檔逐檔相同（`live-list-88`）、對 #68 的持股也全同（`positions-check-88`）；補跑引擎產生 21 張買單（`engine-run-88`，10-13 開盤補成交）。N 114 不動。紀錄 `AI/Doc/Iterations/Iteration-88.md`。**要重啟 MoneyScheduler 與 MoneyCrawlerApi**。
 **號碼協調：Iteration 87 = 交易模擬匯入／匯出（本段，`AI/Doc/Iterations/Iteration-87.md` 已存在）；另一個 session 並行的 live list 實驗（`AI/experiments/iter87_livelist.py`、`trading_engine.py`、`portfolio_paper.py`、`pytest-87`）寫迭代檔時請用 88。**
 Iteration 87（已提交 3d4129e、已 push；meeting_front_end 已提交 7cd6b53、已 push；純前端、不用重啟）：使用者「交易模擬 提供一個輸入輸出功能，先提供模板確認輸入輸出的檔案格式及內容」→ 先出 `AI/UserDoc/TradingSimIO.md` ＋ 六個範本檔，使用者答五問（設定用表單、打包 zip、CSV 帶 BOM、檔名不帶股票／模式、side 用 buy／sell）後實作：`Screen/src/lib/simIO.js`（匯入 CSV／規則 JSON／結果 JSON、匯出結果 JSON＋三個 CSV、自寫 STORE zip）、TradingSim「匯入」「匯出（zip）」、RuleBuilder 匯出與 `imported`；`node --test` 8 項、Expand-Archive 解壓、vite／mfe build、eslint、jsdom 冒煙都過；瀏覽器驗了兩種匯入（本機沒有行事曆後端，跑模擬與匯出按鈕等上線再驗）。審查見「已完成」。
 （以下為 86）
@@ -205,7 +205,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
-使用者要做的（88）：**重啟 MoneyScheduler 與 MoneyCrawlerApi**（portfolio_backtest／portfolio_paper／trading_engine 改了；沒重啟前排程器仍是舊碼，但 10-12 清單已存在、不會再誤報），並 commit Iteration 88（只加 88 的檔案，不碰 87 的）。
+使用者要做的（88）：MoneyScheduler 與 MoneyCrawlerApi 已於 2026-10-19 23:40 重啟（新碼生效）；Iteration 88 已提交 dbcfd74 並 push。
 使用者 commit／push 兩個 repo（Iteration 87，不用重啟；meeting_front_end 要先允許），上線後在 erucmoney.com 的交易模擬頁跑一次並按「匯出（zip）」驗。
 使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）六個跨段候補（新：#110／#113 驗證期差 −0.47 pp、#112／#114 差 −0.93 pp 但含池差；舊：#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選；（c）8913 除權息下限要不要放寬。沒有決定前，下一代候選：現金腿（P10／P12／P43，要先改引擎能持現金）、當沖比率表（P80，先建表不算 N）。
 使用者要做的：Iteration 86 的 MoneyCrawlerApi 已於 2026-10-18 15:55 重啟（/portfolio/official 直連與經 Node 都帶 segment_label／tag_label）；已提交 6148a5f 並 push；meeting_front_end 同步兩檔已提交並 push；MoneyCalendarApi（行事曆 API :5000）已於 2026-10-18 15:34 重啟（2026-10-15 03:32 起被關掉、calendar-api 502）；三個常駐工作已於 2026-10-18 14:19 全部重啟（MoneyCrawlerApi、MoneyApi 曾於 12:44 被關掉 95 分鐘；MoneyScheduler 19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa（收尾 70e98c4）；未 push。
