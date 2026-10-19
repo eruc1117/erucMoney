@@ -4,14 +4,16 @@
 //   自訂指令：你自己寫「哪天買賣哪檔多少」，設期間與資金，用實際日線跑完，給收益對 0050
 //     條件規則（Iteration 61）：「條件 → 買／賣」模組化輸入，逐日判斷、觸發隔天開盤成交（RuleBuilder）
 //     簡易模式：用表單一筆一筆加、或套模板（買進持有／定期定額／進出一次），文字自動產生；進階模式直接寫文字
+//     匯入／匯出（Iteration 87）：匯入指令 CSV、規則 JSON 或之前匯出的結果 JSON；跑完可匯出 zip（結果 JSON＋成交／淨值／指標 CSV）——格式見 AI/UserDoc/TradingSimIO.md
 //   歷史回放：候選策略的月清單套上引擎規則（限價、重掛、停損、守門），和「照單全收」對照（Iteration 59 的面板）
 // 統一前端（erucmoney.com）放在「預測」群組，匿名可用；儀表板這邊登入後也看得到。
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
 import { getSimReplay, runSim, runRules, getTrackedStocks, getSimPresets, compareSimPresets } from '../services/api'
 import ReplayPanel from '../components/ReplayPanel'
 import RuleBuilder from '../components/RuleBuilder'
 import SourceBanner from '../components/SourceBanner'
+import { parseImport, exportSim, instructionsFromParsed } from '../lib/simIO'
 
 const TAB_KEY = 'sim_tab'
 const TEXT_KEY = 'sim_text'
@@ -164,6 +166,9 @@ function InstructionsTab() {
   const [r, setR] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')                       // 匯入結果（幾筆、略過哪些列）
+  const [imported, setImported] = useState(null)                 // 匯入的規則，交給 RuleBuilder（{rules, nonce}）
+  const fileRef = useRef(null)
   useEffect(() => { getTrackedStocks().then(({ data }) => setStocks(Array.isArray(data) ? data : (data?.items ?? []))) }, [])
   useEffect(() => { writeLS(ROWS_KEY, JSON.stringify(rows)) }, [rows])
   const effectiveText = useMemo(() => (mode === 'simple' ? rowsToText(rows) : text), [mode, rows, text])
@@ -182,6 +187,29 @@ function InstructionsTab() {
     if (m === 'text' && mode === 'simple' && rows.length) setText(rowsToText(rows))   // 簡易 → 進階：把產生的文字帶過去
     setMode(m); writeLS(MODE_KEY, m)
   }
+  async function onImportFile(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const p = parseImport(file.name, await file.text())
+    setError(''); setNotice('')
+    if (p.error) { setError(`匯入失敗：${p.error}`); return }
+    if (p.settings) { const next = { ...form, ...p.settings }; setForm(next); writeLS(FORM_KEY, JSON.stringify(next)) }
+    const wantRules = p.kind === 'rules' || (p.kind === 'result' && p.mode === 'rules')
+    if (wantRules) {
+      setImported({ rules: p.rules, nonce: Date.now() })
+      switchMode('rules')
+      setNotice(`已匯入 ${p.rules.length} 條規則${p.settings ? '，期間／資金／資料來源已依檔案設定' : ''}。`)
+      return
+    }
+    setRows(p.rows); setR(null)
+    switchMode('simple')
+    const skipped = p.errors?.length ? `；略過 ${p.errors.length} 列：${p.errors.slice(0, 5).map(x => `第 ${x.line} 列（${x.reason}）`).join('、')}${p.errors.length > 5 ? '…' : ''}` : ''
+    setNotice(`已匯入 ${p.rows.length} 筆指令${p.settings ? '，期間／資金／資料來源已依檔案設定' : ''}${skipped}。`)
+  }
+  function doExport() {
+    exportSim({ mode: 'instructions', settings: form, result: r, input: { instructions: instructionsFromParsed(r.parsed, mode === 'simple' ? rows.filter(rowOk) : []), rules: null } })   // 後端的 line 是 rowsToText 過濾後的序號，note 要用同一份過濾後的列對回
+  }
   const m = r?.metrics
   return (
     <>
@@ -194,9 +222,13 @@ function InstructionsTab() {
         {form.source === 'synthetic' ? <div className="ctrl-group"><div className="ctrl-label">種子</div><input type="number" className="ctrl-select" style={{ width: 80, textAlign: 'right' }} min={0} max={1000000000} step={1} value={form.seed ?? 1} onChange={e => setForm({ ...form, seed: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} /></div> : null}
         {mode !== 'rules' ? <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button> : null}
         {mode === 'rules' ? null : mode === 'text' ? <><button className="btn-secondary" onClick={() => setText(EXAMPLE)}>放範例</button><button className="btn-secondary" onClick={() => setText('')}>清空</button></> : <button className="btn-secondary" onClick={() => setRows([])}>清空清單</button>}
+        <input ref={fileRef} type="file" accept=".csv,.json,text/csv,application/json" style={{ display: 'none' }} onChange={onImportFile} />
+        <button className="btn-secondary" title="指令 CSV、規則 JSON，或之前匯出的結果 JSON（會還原輸入與設定）" onClick={() => fileRef.current?.click()}>匯入</button>
+        {r && mode !== 'rules' ? <button className="btn-secondary" title="zip：結果 JSON＋成交／淨值／指標 CSV" onClick={doExport}>匯出（zip）</button> : null}
       </div>
+      {notice ? <div className="note-box" style={{ margin: '0 1.25rem .4rem' }}>{notice}</div> : null}
       <div style={{ padding: '.4rem 1.25rem 1rem' }}>
-        {mode === 'rules' ? <RuleBuilder form={form} stocks={stocks} runRules={runRules} getPresets={getSimPresets} comparePresets={compareSimPresets} /> : mode === 'simple' ? <SimpleBuilder rows={rows} setRows={setRows} form={form} stocks={stocks} /> : (
+        {mode === 'rules' ? <RuleBuilder form={form} stocks={stocks} runRules={runRules} getPresets={getSimPresets} comparePresets={compareSimPresets} imported={imported} /> : mode === 'simple' ? <SimpleBuilder rows={rows} setRows={setRows} form={form} stocks={stocks} /> : (
           <>
             <textarea className="form-textarea" rows={9} value={text} onChange={e => setText(e.target.value)} spellCheck={false}
                       style={{ width: '100%', fontFamily: 'ui-monospace, Consolas, monospace', fontSize: '.86rem', lineHeight: 1.6 }} />

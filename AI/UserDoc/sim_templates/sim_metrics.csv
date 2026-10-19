@@ -1,0 +1,16 @@
+﻿key,label,value
+start,起日,2024-01-02
+end,迄日,2024-09-30
+capital,資金,1000000
+total_return,總報酬,0.0123
+bench_return,0050 含息報酬,0.3012
+active_return,主動報酬,-0.222
+ann_active,年化主動報酬,-0.2876
+mdd_port,最大回撤,-0.0081
+mdd_bench,0050 最大回撤,-0.162
+monthly_win_rate,月勝率,0.25
+realized_pnl,已實現損益,2572.19
+costs,費用合計,37.81
+final_value,期末總值,1012300
+n_trades,成交筆數,2
+n_skipped,略過筆數,1

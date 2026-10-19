@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ReactApexChart from 'react-apexcharts'
 import SourceBanner from './SourceBanner'
+import { exportSim } from '../lib/simIO'
 
 const RULES_KEY = 'sim_rules'
 const money = v => (v == null ? '–' : Number(v).toLocaleString('zh-TW', { maximumFractionDigits: 0 }))
@@ -162,7 +163,7 @@ function CompareTable({ c, presets, onApply }) {
 
 const RESULT_LABEL = { triggered: ['yellow', '觸發'], filled: ['green', '成交'], unfilled: ['yellow', '未成交'], rejected: ['red', '拒絕'], skipped: ['', '略過'] }
 
-export default function RuleBuilder({ form, stocks, runRules, getPresets, comparePresets }) {
+export default function RuleBuilder({ form, stocks, runRules, getPresets, comparePresets, imported }) {
   const [rules, setRules] = useState(() => readJSON(RULES_KEY, null) || [])
   const [tplStock, setTplStock] = useState('2330')
   const [presets, setPresets] = useState([])
@@ -185,6 +186,7 @@ export default function RuleBuilder({ form, stocks, runRules, getPresets, compar
     })
     return () => { on = false }
   }, [tplStock, form.start, form.capital, getPresets])
+  useEffect(() => { if (imported?.rules) { setRules(imported.rules); setR(null); setCmp(null); setError('') } }, [imported])   // 頁面匯入的規則（Iteration 87）
   const update = (i, nr) => setRules(rules.map((x, j) => (j === i ? nr : x)))
 
   async function run() {
@@ -218,6 +220,7 @@ export default function RuleBuilder({ form, stocks, runRules, getPresets, compar
         <button className="btn-secondary" onClick={() => setRules([])}>清空</button>
         <button className="btn-primary" disabled={busy} onClick={run}>{busy ? '模擬中…' : '跑模擬'}</button>
         <button className="btn-secondary" disabled={cmpBusy || !presets.length} title="把全部範本套在「套在哪檔」那檔、同一期間與資金各跑一次，列成一張表" onClick={compare}>{cmpBusy ? '比較中…' : '比較全部策略'}</button>
+        {r ? <button className="btn-secondary" title="zip：結果 JSON（含這組規則與設定）＋成交／淨值／指標 CSV" onClick={() => exportSim({ mode: 'rules', settings: form, result: r, input: { instructions: null, rules } })}>匯出（zip）</button> : null}
         <Sub>條件每天收盤判斷、隔天開盤成交；每月固定日／指定日期當天開盤。「最多次數」空白 = 不限；「沒持股才買」避免每天加碼。範本的買進金額依上面的資金換算；範本是常見做法的定義，不是推薦。</Sub>
       </div>
       {rules.length ? rules.map((x, i) => <RuleRow key={i} r={x} onChange={nr => update(i, nr)} onRemove={() => setRules(rules.filter((_, j) => j !== i))} />) : <Empty>還沒有規則。套個模板或加一條。</Empty>}

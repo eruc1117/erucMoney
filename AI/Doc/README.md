@@ -62,6 +62,8 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-88.md](./Iterations/Iteration-88.md) | **紙上交易從沒拿到 2026-10-12 的清單**：訊號日傍晚成交日還沒行情，`current_list` 回上個月那份、引擎記成新清單；改成訊號日當天用 `_pending_targets` 算目標持股、成交日先估（真實資料驗證與正常路徑 21 檔逐檔相同），10 月清單補上、引擎產生 21 張買單；N 不動 |
+| [Iteration-87.md](./Iterations/Iteration-87.md) | **交易模擬加匯入／匯出**：匯入指令 CSV、規則 JSON 或之前匯出的結果 JSON（還原輸入與設定）；跑完下載 zip（結果 JSON＋成交／淨值／指標 CSV，BOM、CRLF）；格式先出範本給使用者確認（`AI/UserDoc/TradingSimIO.md`）；`lib/simIO.js` 純函式、zip 自己寫（STORE）、`node --test` 8 項；純前端、不用重啟 |
 | [Iteration-86.md](./Iterations/Iteration-86.md) | 正式策略頁的實單列（#68）改用 API 給的段別名：段別與標記的中文統一放 `portfolio_api`（`SEGMENT_LABEL`／`TAG_LABEL`），`/portfolio/official` 的每段與 `/portfolio/runs` 的每列都帶 `segment_label`／`tag_label`，正式策略頁與贏過大盤清單不再各自寫死；純顯示、N 不動 |
 | [Iteration-85.md](./Iterations/Iteration-85.md) | **第十一代：放空流量（借券賣出 ÷ 成交金額）相加 `win3+mom+nsblf` #110 開發期 +11.57%／0.906 超過候選、#113 驗證期 +15.24%／1.048 低候選 0.5 pp（歷來最接近）；產業領先股相加 #112 +10.27%／0.834、#114 valid +14.78%／1.05 低 0.9 pp（與候選最不像：持股交集 9／20）；兩條單獨訊號都反向、關閉**（N 108 → 114）；文獻第五批 P77～P80 |
 | [Iteration-84.md](./Iterations/Iteration-84.md) | 資料更新後月調倉重算：候選 #30／#38／#44、四個跨段候補八列、持有過被重算股票的 #54／#58／#62 共 14 列，用日誌參數原樣重算（不計 N）持股名單全同、指標 112 格有 111 格相同（一格 0.01 pp 捨入）；追蹤股擴大不進月調倉（股票池只讀全市場表；0050 基準除外，已驗差 0.0005%）——候選不換、N 108、保留期未開 |

@@ -1,9 +1,13 @@
 # 交接筆記
 
-**更新：** 2026-10-18（Iteration 86 已提交 6148a5f：正式策略頁實單列改讀 API 段別名；Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
+**更新：** 2026-10-19（Iteration 88 未提交：紙上交易清單缺陷修好、10 月清單補上、21 張買單 pending；Iteration 87 未提交：交易模擬匯入／匯出；Iteration 86 已提交 6148a5f：正式策略頁實單列改讀 API 段別名；Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
+Iteration 88（未提交，2026-10-19；另一個 session 同時在做 87 交易模擬匯入／匯出）：查正式策略本月清單時發現模擬帳戶開戶（10-09）後從沒拿到清單——訊號日傍晚算清單時成交日還沒行情，`current_list` 回 9 月那份、引擎每天記成「新清單 2026-10-12」；改 `portfolio_backtest`（`simulate` 回傳期末狀態、`_pending_targets`、`current_list` 訊號日路徑、`next_weekday`）、`portfolio_paper.make_list`（as_of 用 today、回 `matched`）、兩個 `run_daily`（不符不當新清單）；真實資料驗證訊號日路徑對正常路徑 21 檔逐檔相同、對 #68 的持股也全同（`live-list-88`）；補跑引擎產生 21 張買單（`engine-run-88`，10-13 開盤補成交）。N 114 不動。紀錄 `AI/Doc/Iterations/Iteration-88.md`。**要重啟 MoneyScheduler 與 MoneyCrawlerApi**。
+**號碼協調：Iteration 87 = 交易模擬匯入／匯出（本段，`AI/Doc/Iterations/Iteration-87.md` 已存在）；另一個 session 並行的 live list 實驗（`AI/experiments/iter87_livelist.py`、`trading_engine.py`、`portfolio_paper.py`、`pytest-87`）寫迭代檔時請用 88。**
+Iteration 87（未提交，純前端、不用重啟）：使用者「交易模擬 提供一個輸入輸出功能，先提供模板確認輸入輸出的檔案格式及內容」→ 先出 `AI/UserDoc/TradingSimIO.md` ＋ 六個範本檔，使用者答五問（設定用表單、打包 zip、CSV 帶 BOM、檔名不帶股票／模式、side 用 buy／sell）後實作：`Screen/src/lib/simIO.js`（匯入 CSV／規則 JSON／結果 JSON、匯出結果 JSON＋三個 CSV、自寫 STORE zip）、TradingSim「匯入」「匯出（zip）」、RuleBuilder 匯出與 `imported`；`node --test` 8 項、Expand-Archive 解壓、vite／mfe build、eslint、jsdom 冒煙都過；瀏覽器驗了兩種匯入（本機沒有行事曆後端，跑模擬與匯出按鈕等上線再驗）。審查見「已完成」。
+（以下為 86）
 Iteration 86（已提交 6148a5f）：使用者「實單加到正式策略中」→「不要寫死的方式，用 API 動態顯示」→ 段別與標記的中文統一放 `Crawler/portfolio_api.py`（`SEGMENT_LABEL`、新 `SEGMENT_LABEL_FULL`、`TAG_LABEL`、`tag_label()`），`/portfolio/runs` 每列多 `tag_label`、`/portfolio/official` 的 `segments` 每段多 `segment`／`segment_label`／`tag`／`tag_label`；正式策略頁與贏過大盤清單改讀 API（live 列顯示「實單」、印 run 編號與標記）；兩頁同步 meeting_front_end；fastapi-mock 補欄位；`test_portfolio_official` +6 斷言。純顯示、N 114 不動。紀錄 `AI/Doc/Iterations/Iteration-86.md`。**要重啟 MoneyCrawlerApi**。
 （以下為 85）
 Iteration 85（已提交 5f9f4ad）：使用者「継續找不同種的月調倉方案」→ 文獻第五批 4 篇（Papers.md 第十一節 P77～P80）＋第十一代四條（`AI/experiments/iter85_hypothesis.md` 15:11 登記、15:12 起跑；跑前只看列 `iter85-rows`）：`nsblf` 單獨 #109 −2.10%（關閉）、`win3+mom+nsblf` #110 **+11.57%／0.906** → valid #113 **+15.24%／1.048**（候選 #38 +15.71%／1.085，低 0.47 pp、歷來最接近）、`indlead` 單獨 #111 −1.36%（關閉）、`win3+mom+indlead` #112 **+10.27%／0.834** → valid #114 +14.78%／1.05（低 0.93 pp、與候選重疊最低：持股交集 9／20）。N 108 → 114；候選不換；保留期未開。結果檔 `UnifiedModel/results/portfolio_iter85_shortflow_indlead.md`、紀錄 `AI/Doc/Iterations/Iteration-85.md`。審查見「已完成」。
@@ -51,6 +55,8 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
+- （88）Crawler/portfolio_backtest.py、portfolio_paper.py、trading_engine.py、tests/test_portfolio_paper.py（+1）、tests/test_trading_engine.py；AI/experiments/iter88_livelist.py；AI/Doc/Iterations/Iteration-88.md、README；資料：portfolio_live_list 2026-10-12 21 列、trading_orders 21 張 pending
+- （87）Screen/src/lib/simIO.js、tests/simio.test.mjs、tests/fixtures/sim_sample.mjs、pages/TradingSim.jsx、components/RuleBuilder.jsx；meeting_front_end 同三檔（lib 新目錄）；AI/experiments/iter87_templates.mjs；AI/UserDoc/TradingSimIO.md、sim_templates/（6 檔，四個匯出範本由程式產生）；AI/Doc/Iterations/Iteration-87.md、README
 - （86）Crawler/portfolio_api.py、portfolio_official.py、tests/test_portfolio_official.py；Screen/src/pages/OfficialStrategy.jsx、components/BeatMarketList.jsx（meeting_front_end 同步兩檔）；Server/tests/helpers/fastapi-mock.js；AI/experiments/segment_counts.py；AI/Doc/Iterations/Iteration-86.md、README
 - （85）AI/experiments/iter85_hypothesis.md、iter85_rows.py、iter85_run.py、iter85_results.py、iter85_nosearch.py、iter85_dev.log、iter85_valid.log；UnifiedModel/results/portfolio_iter85_shortflow_indlead.md、portfolio_109～114_*.md；portfolio_runs #109～#114；Crawler/portfolio_signal.py（`signal_sblf`／`nsblf`／`indlead`、`MARGIN_COLS`）、tests/test_portfolio.py（+1）；AI/Doc/Papers.md（第五節第十一代、第六節、第十一節 P77～P80）、Iterations/Iteration-85.md、README
 - （84）AI/experiments/iter84_hypothesis.md（登記 14:38＋附錄）、iter84_inputs.py、iter84_recompute.py、iter84_mdd38.py、iter84_calendar.py；UnifiedModel/results/portfolio_iter84_data_refresh.md；Crawler/logs/iter84_recompute.log（不進 git）；AI/Doc/Iterations/Iteration-84.md、README
@@ -91,6 +97,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - AI/Doc/Iterations/Iteration-64.md、AI/Doc/README.md、Server/README.md
 
 ## 已完成
+- 紙上交易清單缺陷（88）：pytest-88 51 過、pytest-88-full 284 過；live-list-88 過（訊號日路徑＝正常路徑 21 檔、估成交日 10-13 ＝ 真成交日）；engine-run-88 過（21 張買單 pending、2,002 股）。沒跑：jest、vite build（沒改）。evidence-reviewer-88 見 checks.json。
+- 匯入／匯出（87）：simio-test-87 8 過、simio-zip-87 過（4 檔、BOM、format）、templates-gen-87、fe-sync-87（三檔逐 byte 相同）、vite-build-87、mfe-build-87、mfe-eslint-87、smoke-tradingsim-87、browser-import-87（手動）過（checks.json 2026-10-19）；evidence-reviewer-87 第一輪 55/8/7 FAIL → 修八處後第二輪 36/2/4 FAIL（兩條措辭已改；四條 unresolved 是 repo 補不了的：使用者原話、瀏覽器實測無截圖、PORT=3005、mfe 部署耗時）→ 第三輪 14/0/3 PASS（Iteration-87.md 曾被並行 session 蓋掉、已重寫後確認）
 - 實單標籤走 API（86）：pytest-86 3 過（test_portfolio_official 含新斷言）；vite-build-86、mfe-build-86 過；pytest-86-full 283 過、jest-unit-86 44 過；status() 實測 live → 實單／official-live → 正式策略・實單。沒跑：jest 全套（Node 路由沒改）。
 - 第十一代（85）：iter85-prereg-sha256／mtime（15:11:54，跑前）；iter85-rows 過（池內借券賣出流量 ＝0 只 0.3～2.4%、產業 ≥ 5 檔涵蓋 80～87%）；pytest-portfolio-85 38 過；iter85-dev 過（#109～#112）；iter85-valid-nsblf（#113）、iter85-valid-indlead（#114）過；iter85-nosearch 過（#109 之前無 sblf／indlead 列）；iter85-results 過（ρ(nsblf, nsir) 0.36、ρ(nsblf, mom) 0.38、ρ(indlead, mom) −0.01；前 20 重疊 14／20 與 9／20）。pytest-85 283 過。沒跑：jest、vite build（Node 與前端沒改）。
 - 審查（85）：strategy-critic-85 PASS（無前視、valid 各一次且規則事前、N 記對、同結構同成本；必改兩條：45 次試驗、indlead 池縮小的混淆，已改）；evidence-reviewer-85 三輪 57/1/5 → 25/1/2 → 7/0/0 PASS（留兩條 unresolved：第一次 pytest 輸出、WebSearch 摘要未另存）。
@@ -132,6 +140,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 回放結論（59）：照單全收 +346%（0050 +189%）；停損 15／25／35% 都輸；限價 ±2% 只差 0.5%／年
 
 ## 決策
+- 2026-10-19（87）：匯入只進頁面狀態、不開上傳端點（跑模擬仍走原本端點與上限）；結果 JSON 當「可重跑的存檔」（含 input 原樣與 settings）；zip 自己寫 STORE 不加套件；CSV 帶 BOM＋CRLF 給 Excel；指令 CSV 不放設定（使用者答「可以」）
 - 2026-10-18（85）：第十一代只用借券賣出（法人）當放空流量、融券不加（P67，看列時定）；領先股 ＝ 產業內 60 日成交金額前 3 檔、窗口 21 日（登記時定，不試 1／5 檔與 63 日）；兩條相加開發期都超過 #30 → 各跑一次 valid；單獨兩條反向 → 家族關閉；候選不換，#110／#113 與 #112／#114 列為第五、六個跨段候補
 - 2026-10-18（84）：「重新分析」做成**原樣重算已登記的 run、不計 N**（同 `attach_series` 慣例：同一組參數沒有新的選擇自由度），不跑新訊號、不開保留期；若審查者認為該計 N，改記為新列、結論不變。追蹤股擴大不進月調倉，要讓新資料進研究得走全市場表路線（71／78／81 那樣）
 - 2026-10-18（使用者）：**全市場表 adj_close 重建**——減資 factor 上限放寬後 1529、2364、3043 三筆減資 factor ≥ 5 的 `market_daily_prices.adj_close` 依現行事件表重算（先只讀試算確認只動這三檔 2,331 列，再跑 `market_data.rebuild_adj()` 全市場）
@@ -163,6 +172,9 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 2026-10-09：引擎啟動（紙上）、停損 0、限價 ±2%；回放不寫 portfolio_runs；預測用候選回測推常態區間（caveat DSR）
 
 ## 未解
+- （88）訊號日估的成交日只避週末不避假日（`trading_calendar` 沒有未來日期）；只影響頁面顯示，實際成交日由紙上交易用「清單日之後第一個有行情的日子」決定。`_pending_targets` 與 `simulate` 迴圈的調倉段是兩份相同邏輯，改一邊要改另一邊（`live-list-88` 這類真實資料對照要留著）
+- （88）模擬帳戶因這個缺陷晚了一週才建倉：買單 order_date 10-12、引擎下次跑以 10-13 開盤補成交，帳面從 10-13 起算持有；凱基實單未接
+- 匯入／匯出沒做：拖放、歷史回放分頁的匯出、存到伺服器；本機 meeting_front_end dev 沒有行事曆後端可打，跑模擬與匯出按鈕要上線後在 erucmoney.com 驗
 - **8913 全銓租賃 2018-06-04 除權息 208 → 18.11 被 `load_events` 略過（83）**：factor 0.087 低於除權息下限 0.2，但市場收盤 208 → 19.90 是真的斷層，它 2018-06-04 以前的 `market_daily_prices.adj_close` 高十倍（該股 `market_type` NULL、2020-01-20 下市，池內大概碰不到）；要不要把除權息下限放寬或改用交易所參考價判定由使用者決定
 - 回測 #54、#58、#62（rev_accel／rev1m 家族 valid）持股過 1529 或 2364：adj_close 重建後若重跑，2364 的動能回看跨過 2021-10-08、排名可能略變；候選與 live 清單不受影響
 - 追蹤股 68 檔後第一個週日（2026-10-25）`job_weekly_forecast` 的執行時間要看；`job_news` 每小時 Yahoo RSS 68 條
@@ -193,6 +205,8 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
+使用者要做的（88）：**重啟 MoneyScheduler 與 MoneyCrawlerApi**（portfolio_backtest／portfolio_paper／trading_engine 改了；沒重啟前排程器仍是舊碼，但 10-12 清單已存在、不會再誤報），並 commit Iteration 88（只加 88 的檔案，不碰 87 的）。
+使用者 commit／push 兩個 repo（Iteration 87，不用重啟；meeting_front_end 要先允許），上線後在 erucmoney.com 的交易模擬頁跑一次並按「匯出（zip）」驗。
 使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）六個跨段候補（新：#110／#113 驗證期差 −0.47 pp、#112／#114 差 −0.93 pp 但含池差；舊：#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選；（c）8913 除權息下限要不要放寬。沒有決定前，下一代候選：現金腿（P10／P12／P43，要先改引擎能持現金）、當沖比率表（P80，先建表不算 N）。
 使用者要做的：Iteration 86 的 MoneyCrawlerApi 已於 2026-10-18 15:55 重啟（/portfolio/official 直連與經 Node 都帶 segment_label／tag_label）；已提交 6148a5f 並 push；meeting_front_end 同步兩檔已提交並 push；MoneyCalendarApi（行事曆 API :5000）已於 2026-10-18 15:34 重啟（2026-10-15 03:32 起被關掉、calendar-api 502）；三個常駐工作已於 2026-10-18 14:19 全部重啟（MoneyCrawlerApi、MoneyApi 曾於 12:44 被關掉 95 分鐘；MoneyScheduler 19 個排程、含 18:43 追蹤股補齊）；Iteration 83 已提交 d1835fa（收尾 70e98c4）；未 push。
 仍待：SUE 類訊號公告日過濾、`win3` 農曆年缺陷。
