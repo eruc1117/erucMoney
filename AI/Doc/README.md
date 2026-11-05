@@ -62,6 +62,7 @@
 | [Iteration-36.md](./Iterations/Iteration-36.md) | 遺留待辦清理：外資真實持股進巢狀走查——**四模型 12 折只被選中 1 折、M3 −0.37pp，不進模型**；持股%標示資料日期；排程器常駐化（工作排程器 + 啟動補跑 + 檔案日誌）；IMPR-001 執行與結案、DA 算法修正；補寫 Iteration 25~27 |
 | [Iteration-37.md](./Iterations/Iteration-37.md) | 每週自動預測：每週日 08:00 排程用全部模型對全部股票預測下一週與下下週，存表直接顯示（新頁「週預測」）；錯過自動補跑 |
 | [Iteration-38.md](./Iterations/Iteration-38.md) | 新聞資料回填與結構化（進行中）：鉅亨網 API 三年回填（tw_stock / us_stock / headline）、排程器啟動補新聞空洞；後續：別名表、去重、日級對齊、歷史特徵、美股新聞、LLM 抽取 |
+| [Iteration-89.md](./Iterations/Iteration-89.md) | **每個頁簽都有使用說明模式**：頂欄一顆「使用說明」開關（存 localStorage `ui.help`），開著時每頁上方顯示那一頁的「做什麼／怎麼用／怎麼看／注意」，換頁簽跟著換；兩個前端 27 個頁簽共用一份內容（`Screen/src/lib/helpContent.js`，285 條）；`node --test` 4 項擋「有頁簽沒說明」、jsdom 冒煙 22 個頁簽、Playwright 版面檢查（深淺色各 22 頁；頂欄七種寬度的標題高度和加開關之前相同，1900px 以下開關只顯示「？」）都過；審查第一輪抓到 8 條說明與頁面不符、已改；純前端、不用重啟 |
 | [Iteration-88.md](./Iterations/Iteration-88.md) | **紙上交易從沒拿到 2026-10-12 的清單**：訊號日傍晚成交日還沒行情，`current_list` 回上個月那份、引擎記成新清單；改成訊號日當天用 `_pending_targets` 算目標持股、成交日先估（真實資料驗證與正常路徑 21 檔逐檔相同），10 月清單補上、引擎產生 21 張買單；N 不動 |
 | [Iteration-87.md](./Iterations/Iteration-87.md) | **交易模擬加匯入／匯出**：匯入指令 CSV、規則 JSON 或之前匯出的結果 JSON（還原輸入與設定）；跑完下載 zip（結果 JSON＋成交／淨值／指標 CSV，BOM、CRLF）；格式先出範本給使用者確認（`AI/UserDoc/TradingSimIO.md`）；`lib/simIO.js` 純函式、zip 自己寫（STORE）、`node --test` 8 項；純前端、不用重啟 |
 | [Iteration-86.md](./Iterations/Iteration-86.md) | 正式策略頁的實單列（#68）改用 API 給的段別名：段別與標記的中文統一放 `portfolio_api`（`SEGMENT_LABEL`／`TAG_LABEL`），`/portfolio/official` 的每段與 `/portfolio/runs` 的每列都帶 `segment_label`／`tag_label`，正式策略頁與贏過大盤清單不再各自寫死；純顯示、N 不動 |

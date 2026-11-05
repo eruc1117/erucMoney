@@ -213,6 +213,7 @@ body {
   border: none; background: none; cursor: pointer;
   color: var(--dim); font-size: .8rem; font-weight: 600;
   padding: .28rem .6rem; border-radius: 999px; line-height: 1;
+  white-space: nowrap;   /* 頂欄擠的時候（標題長的頁簽）讓標題去折行，按鈕上的字不折 */
   transition: background .15s, color .15s;
 }
 .ui-toggle button:hover  { color: var(--text); }
@@ -588,6 +589,26 @@ body {
 ============================================================ */
 .apexcharts-canvas foreignObject { display: none; }
 .apexcharts-tooltip { box-shadow: var(--shadow) !important; }
+
+/* ============================================================
+   使用說明模式（Iteration 89）
+   左邊一條藍線：和頁面本身的卡片分得開，一眼知道這塊是說明不是資料。
+============================================================ */
+.help-panel { border-left: 3px solid var(--blue); }
+.help-what  { padding: .9rem 1.25rem .2rem; font-size: .95rem; line-height: 1.75; color: var(--text); }
+.help-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+              gap: .4rem 1.8rem; padding: .5rem 1.25rem 1.1rem; }
+.help-sec h4 { font-size: .78rem; font-weight: 700; color: var(--blue); letter-spacing: .06em;
+               margin: .6rem 0 .3rem; line-height: 1.4; }
+.help-sec ol, .help-sec ul { margin: 0; padding-left: 1.25rem; }
+.help-sec li { font-size: .86rem; line-height: 1.75; color: var(--text); margin: 0 0 .15rem; }
+.help-sec li::marker { color: var(--dim); }
+/* 頂欄窄的時候開關只留「？」、右側各塊的間距收一點：多一顆開關佔掉的寬度要還回去，
+   標題長的頁簽才不會比原本多折一行（滑鼠停留的提示與 aria-label 仍寫著用途） */
+@media (max-width: 1900px) {
+  .topbar .help-label { display: none; }
+  .topbar-right { gap: .6rem; }
+}
 
 /* ============================================================
    RESPONSIVE

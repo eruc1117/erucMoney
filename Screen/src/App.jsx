@@ -8,6 +8,7 @@ import { getMe } from './services/api'
 const HANDOFF = takeTokenFromHash()
 import Sidebar        from './components/Sidebar'
 import Topbar         from './components/Topbar'
+import PageHelp, { useHelpMode } from './components/PageHelp'
 import Overview       from './pages/Overview'
 import BudgetSearch   from './pages/BudgetSearch'
 import StockAnalysis  from './pages/StockAnalysis'
@@ -59,6 +60,8 @@ export default function App() {
   const [page, setPage]   = useState('overview')
   const [stock, setStock] = useState('')
   const [user, setUser]   = useState(getUser())
+  // 使用說明模式：開著時每個頁簽上方顯示該頁的說明，換頁簽跟著換（Iteration 89）
+  const [help, toggleHelp] = useHelpMode()
 
   // 登入／登出（含 401 自動登出）都經 auth.js 廣播；沒登入就只顯示登入頁
   useEffect(() => onAuthChange(setUser), [])
@@ -82,8 +85,10 @@ export default function App() {
     <div className="app">
       <Sidebar currentPage={page} onNavigate={setPage} />
       <div className="main">
-        <Topbar title={PAGE_TITLES[page]} user={user} onAccount={() => setPage('account')} />
+        <Topbar title={PAGE_TITLES[page]} user={user} onAccount={() => setPage('account')}
+                help={help} onToggleHelp={toggleHelp} />
         <main className="content">
+          {help && <PageHelp pageKey={page} title={PAGE_TITLES[page]} onClose={toggleHelp} />}
           {page === 'account'    && <Account />}
           {page === 'overview'   && <Overview onSelectStock={goToStock} />}
           {page === 'budget'     && <BudgetSearch  onSelectStock={goToStock} />}

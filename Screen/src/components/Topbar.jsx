@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTheme } from '../theme'
+import { HelpToggle } from './PageHelp'
 
 // 外觀設定：主題與字級。兩者都存在 localStorage，重開仍在。
 // 放在頂欄而不是設定頁，是因為調字級這件事需要當場看到結果才知道合不合適。
@@ -32,7 +33,7 @@ function isMarketOpen() {
   return mins >= 9 * 60 && mins < 13 * 60 + 30
 }
 
-export default function Topbar({ title, user, onAccount }) {
+export default function Topbar({ title, user, onAccount, help, onToggleHelp }) {
   const [time, setTime] = useState('')
   const [open, setOpen] = useState(false)
 
@@ -68,6 +69,7 @@ export default function Topbar({ title, user, onAccount }) {
         </div>
         <div className="time-display">{time}</div>
         <div className="idx-divider" />
+        <HelpToggle on={help} onToggle={onToggleHelp} />
         <UiSettings />
         {user && (
           <div className="ui-toggle" title="帳號">
