@@ -1,10 +1,10 @@
 # 交接筆記
 
-**更新：** 2026-11-05（Iteration 89 未提交：每個頁簽的使用說明模式，兩個前端 27 個頁簽共用一份內容，純前端不用重啟；Iteration 88 已提交 dbcfd74：紙上交易清單缺陷修好、10 月清單補上、21 張買單 pending；Iteration 87 已提交 3d4129e：交易模擬匯入／匯出；Iteration 86 已提交 6148a5f：正式策略頁實單列改讀 API 段別名；Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
+**更新：** 2026-11-05（Iteration 89 已提交 ad209f5、已 push，meeting_front_end 已提交 0c97a38、已 push：每個頁簽的使用說明模式，兩個前端 27 個頁簽共用一份內容，純前端不用重啟；Iteration 88 已提交 dbcfd74：紙上交易清單缺陷修好、10 月清單補上、21 張買單 pending；Iteration 87 已提交 3d4129e：交易模擬匯入／匯出；Iteration 86 已提交 6148a5f：正式策略頁實單列改讀 API 段別名；Iteration 85 已提交 5f9f4ad：放空流量相加 #110／#113 驗證期低候選 0.5 pp、產業領先股相加 #112／#114 低 0.9 pp，N 114；Iteration 84 已提交 6d3b8e3：資料更新後重算 14 列持股全同；Iteration 83 已提交 d1835fa、80a00da；81、82 已提交 05d3cc0；三個常駐工作已於 2026-10-18 14:19 全部重啟——MoneyCrawlerApi 與 MoneyApi 在 12:44 被關掉（結束碼 0xC000013A，主控台視窗關閉），:8000／:3001 停了 95 分鐘；MoneyScheduler 19 個排程、18:43 追蹤股補齊掛上）
 （格式見 `.claude/rules/iterations.md`；儀表板「工作進度」頁讀這個檔。只寫有證據的事。）
 
 ## 任務
-Iteration 89（未提交，2026-11-05；純前端、不用重啟）：使用者「每一個頁簽都加上該頁簽的使用說明模式」→ 頂欄一顆「使用說明」開關（`useHelpMode`，localStorage `ui.help`，預設關），開著時每個頁簽內容區最上方顯示那一頁的「做什麼／怎麼用／怎麼看／注意」，換頁簽跟著換；元件 `Screen/src/components/PageHelp.jsx`、內容 `Screen/src/lib/helpContent.js`（27 個頁簽 key、285 條）兩個前端逐 byte 相同（Screen 側欄 22 個＋統一前端管理模式 5 個）；Screen 接在 `App.jsx`／`Topbar.jsx`，統一前端接在 `StockApp.jsx` 標題列；頂欄七種寬度量過、標題高度和加開關之前相同（1900px 以下開關只顯示「？」）。說明內容依四個唯讀 subagent 對各頁的回報寫成，主 session 沒有逐頁重讀。紀錄 `AI/Doc/Iterations/Iteration-89.md`。
+Iteration 89（已提交 ad209f5、已 push；meeting_front_end 已提交 0c97a38、已 push；2026-11-05；純前端、不用重啟）：使用者「每一個頁簽都加上該頁簽的使用說明模式」→ 頂欄一顆「使用說明」開關（`useHelpMode`，localStorage `ui.help`，預設關），開著時每個頁簽內容區最上方顯示那一頁的「做什麼／怎麼用／怎麼看／注意」，換頁簽跟著換；元件 `Screen/src/components/PageHelp.jsx`、內容 `Screen/src/lib/helpContent.js`（27 個頁簽 key、285 條）兩個前端逐 byte 相同（Screen 側欄 22 個＋統一前端管理模式 5 個）；Screen 接在 `App.jsx`／`Topbar.jsx`，統一前端接在 `StockApp.jsx` 標題列；頂欄七種寬度量過、標題高度和加開關之前相同（1900px 以下開關只顯示「？」）。說明內容依四個唯讀 subagent 對各頁的回報寫成，主 session 沒有逐頁重讀。紀錄 `AI/Doc/Iterations/Iteration-89.md`。
 （以下為 88）
 Iteration 88（已提交 dbcfd74，2026-10-19；另一個 session 同時在做 87 交易模擬匯入／匯出）：查正式策略本月清單時發現模擬帳戶開戶（10-09）後從沒拿到清單——訊號日傍晚算清單時成交日還沒行情，`current_list` 回 9 月那份、引擎 10-15～10-19 四次記成「新清單 2026-10-12」；改 `portfolio_backtest`（`simulate` 回傳期末狀態、`_pending_targets`、`current_list` 訊號日路徑、`next_weekday`）、`portfolio_paper.make_list`（as_of 用 today、回 `matched`）、兩個 `run_daily`（不符不當新清單）；真實資料驗證訊號日路徑對正常路徑 21 檔逐檔相同（`live-list-88`）、對 #68 的持股也全同（`positions-check-88`）；補跑引擎產生 21 張買單（`engine-run-88`，10-13 開盤補成交）。N 114 不動。紀錄 `AI/Doc/Iterations/Iteration-88.md`。**要重啟 MoneyScheduler 與 MoneyCrawlerApi**。
 **號碼協調：Iteration 87 = 交易模擬匯入／匯出（本段，`AI/Doc/Iterations/Iteration-87.md` 已存在）；另一個 session 並行的 live list 實驗（`AI/experiments/iter87_livelist.py`、`trading_engine.py`、`portfolio_paper.py`、`pytest-87`）寫迭代檔時請用 88。**
@@ -57,7 +57,7 @@ Iteration 65：月調倉頁與正式策略頁的淨值曲線加含息大盤（TA
 Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 重算）；保留期重跑 #69——**年化主動 −6.1%、輸給 0050**。引擎已啟動（紙上、停損 0、限價 ±2%）
 
 ## 產出
-- （89）Screen/src/components/PageHelp.jsx、lib/helpContent.js（新）、App.jsx、components/Topbar.jsx、index.css；Screen/tests/help.test.mjs、help-smoke.mjs、help-ui.mjs（新）；AI/experiments/iter89_fesync.mjs、iter89_mfe_shot.mjs；meeting_front_end/src/stock：StockApp.jsx、StockApp.test.jsx（+1）、stock-overrides.css、stock.css（腳本產生）、components/PageHelp.jsx、lib/helpContent.js（未提交）；AI/Doc/Iterations/Iteration-89.md、README
+- （89）Screen/src/components/PageHelp.jsx、lib/helpContent.js（新）、App.jsx、components/Topbar.jsx、index.css；Screen/tests/help.test.mjs、help-smoke.mjs、help-ui.mjs（新）；AI/experiments/iter89_fesync.mjs、iter89_mfe_shot.mjs；meeting_front_end/src/stock：StockApp.jsx、StockApp.test.jsx（+1）、stock-overrides.css、stock.css（腳本產生）、components/PageHelp.jsx、lib/helpContent.js（已提交 0c97a38）；AI/Doc/Iterations/Iteration-89.md、README
 - （88）Crawler/portfolio_backtest.py、portfolio_paper.py、trading_engine.py、tests/test_portfolio_paper.py（+1）、tests/test_trading_engine.py；AI/experiments/iter88_livelist.py、iter88_positions_check.py；AI/Doc/Iterations/Iteration-88.md、README；資料：portfolio_live_list 2026-10-12 21 列、trading_orders 21 張 pending
 - （87）Screen/src/lib/simIO.js、tests/simio.test.mjs、tests/fixtures/sim_sample.mjs、pages/TradingSim.jsx、components/RuleBuilder.jsx；meeting_front_end 同三檔（lib 新目錄）；AI/experiments/iter87_templates.mjs；AI/UserDoc/TradingSimIO.md、sim_templates/（6 檔，四個匯出範本由程式產生）；AI/Doc/Iterations/Iteration-87.md、README
 - （86）Crawler/portfolio_api.py、portfolio_official.py、tests/test_portfolio_official.py；Screen/src/pages/OfficialStrategy.jsx、components/BeatMarketList.jsx（meeting_front_end 同步兩檔）；Server/tests/helpers/fastapi-mock.js；AI/experiments/segment_counts.py；AI/Doc/Iterations/Iteration-86.md、README
@@ -211,7 +211,7 @@ Iteration 64：候選 #44 升為正式策略（新頁、live #68 每日 18:50 �
 - 同一工作區兩個 session 會互相覆寫 progress.md——同時開要先分工目錄
 
 ## 下一步
-使用者 commit／push 兩個 repo（Iteration 89，純前端、不用重啟；`meeting_front_end` 是另一個 repo），上線後在 stock.erucmoney.com 與 erucmoney.com/stock 各按一次「使用說明」看一頁。
+Iteration 89 兩個 repo 已於 2026-11-05 提交並 push（ad209f5、0c97a38；純前端、不用重啟）；使用者在 stock.erucmoney.com 與 erucmoney.com/stock 各按一次「使用說明」看一頁。
 使用者要做的（88）：MoneyScheduler 與 MoneyCrawlerApi 已於 2026-10-19 23:40 重啟（新碼生效）；Iteration 88 已提交 dbcfd74 並 push。
 使用者 commit／push 兩個 repo（Iteration 87，不用重啟；meeting_front_end 要先允許），上線後在 erucmoney.com 的交易模擬頁跑一次並按「匯出（zip）」驗。
 使用者決定：（a）`fhold` 要不要登記新假設（對齊候選起點或 `win3+mom+fhold`）；（b）六個跨段候補（新：#110／#113 驗證期差 −0.47 pp、#112／#114 差 −0.93 pp 但含池差；舊：#106／#108、#94／#96、#90／#92、#87／#88）要不要換候選；（c）8913 除權息下限要不要放寬。沒有決定前，下一代候選：現金腿（P10／P12／P43，要先改引擎能持現金）、當沖比率表（P80，先建表不算 N）。
